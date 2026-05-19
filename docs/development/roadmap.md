@@ -1,8 +1,14 @@
 # BannerManor — Roadmap
 
-> Milestone plan through v1.0. State lives in [`state.md`](state.md);
-> this file is the sequencing — what ships, in what order, against
-> what dependency gates.
+> Forward-only. Shipped milestones live in [`../../CHANGELOG.md`](../../CHANGELOG.md);
+> this file is the sequencing of what's still ahead — what ships next,
+> in what order, against what dependency gates. State lives in
+> [`state.md`](state.md).
+
+**Currently shipped**: v0.2.0 (M1 + M2 — first render path + CYML font
+format). See CHANGELOG for the details.
+
+**Next**: M3 — broaden the default font set.
 
 ## v1.0 criteria
 
@@ -10,14 +16,15 @@ The BannerManor v1.0 contract: figlet feature parity for the
 non-color path, plus optional color via darshana. Stable CYML font
 format. Frozen CLI flag surface.
 
+- [x] Render pipeline + 1 KB input cap (M1, v0.2.0)
+- [x] CYML font format schema documented and frozen (M2, v0.2.0)
 - [ ] CLI flag surface frozen — `--font`, `--width`, `--align`,
       `--pad`, `--color`, `--list-fonts`, `--help`, `--version`
-- [ ] CYML font format schema documented and frozen
 - [ ] `fonts/` ships 3–5 opinionated defaults with full ASCII
       coverage
 - [ ] Optional .flf read path for legacy figlet fonts
 - [ ] Test coverage: every flag + every default font + malformed-
-      font-file path; 100+ assertions
+      font-file path; 100+ assertions (current: 1334)
 - [ ] Benchmarks captured in `docs/benchmarks.md` for render
       throughput on a representative banner
 - [ ] CHANGELOG complete from v0.1.0 onward
@@ -26,34 +33,9 @@ format. Frozen CLI flag surface.
 
 ## Milestones
 
-### M0 — Scaffold (v0.1.0) — ✅ shipped 2026-05-19
-
-- `cyrius init` scaffold landed
-- `./build/bnrmr` prints scaffold version and exits
-- Doc-tree per [first-party-documentation.md](https://github.com/MacCracken/agnosticos/blob/main/docs/development/planning/first-party-documentation.md)
-
-### M1 — First render: hardcoded block-letter font (v0.2.0) — ✅ shipped 2026-05-19
-
-Prove the render pipeline end-to-end with a single in-source font.
-
-- One hardcoded block-letter font, ASCII A–Z + 0–9 + space
-- `bnrmr "hello"` produces correctly-rendered output to stdout
-- Input length cap (1 KB)
-- Tests: every character of the font + bounds case
-- **Dep gate**: stdlib only
-- **Acceptance**: `bnrmr "AGNOS"` renders cleanly.
-
-### M2 — CYML font format spec + parser (v0.2.0, bundled with M1) — ✅ shipped 2026-05-19
-
-Extract the hardcoded font into the planned CYML schema.
-
-- ADR: `docs/adr/0001-cyml-font-format.md` — schema + rationale vs .flf
-- `fonts/block.cyml` — extracted from M1's hardcoded font
-- Loader reads `fonts/<name>.cyml`; `--font block` is the default
-- Tests: parse happy path + malformed schema + missing character
-- **Dep gate**: stdlib `lib/cyml.cyr`
-- **Acceptance**: `bnrmr --font block "hello"` produces the same
-  output as M1.
+Milestone numbers preserve the historical sequence (M1 / M2 shipped
+in v0.2.0; see CHANGELOG). Versions are targets, not commitments —
+ship-when-ready.
 
 ### M3 — Ship default font set (v0.3.0)
 
@@ -64,7 +46,7 @@ Curate 3–5 opinionated fonts that look good. Resist scope creep.
 - Each font: full ASCII coverage, attribution in font header
 - `bnrmr --list-fonts` prints available fonts + preview line
 - Guide: `docs/guides/fonts.md` — authoring a new CYML font
-- **Dep gate**: M2
+- **Dep gate**: M2 (CYML loader + schema, shipped in v0.2.0)
 - **Acceptance**: every shipped font renders "AGNOS" cleanly.
 
 ### M4 — Layout flags (v0.4.0)
