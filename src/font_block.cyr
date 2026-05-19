@@ -1,0 +1,342 @@
+# font_block.cyr — hardcoded "block" font (M1).
+#
+# 5 rows tall × 5 cols wide per glyph; ASCII A-Z, 0-9, space.
+# Each glyph row is a 5-byte string returned by block_row(glyph, row).
+# The renderer writes one row of every glyph, then a newline; repeats
+# for every row.
+#
+# This file is the temporary in-source font for M1. M2 extracts the
+# same data verbatim into `fonts/block.cyml` and the loader in
+# `src/font.cyr` reads that file instead. The row-string shape is
+# chosen so the extraction is a near-trivial transform.
+
+enum BlockFont {
+    WIDTH = 5;
+    HEIGHT = 5;
+    GAP = 1;          # spaces inserted between adjacent glyphs
+    GLYPH_COUNT = 37;
+}
+
+# Returns the glyph index for char c, or -1 if c is not covered.
+# Coverage: ' ' = 0, '0'..'9' = 1..10, 'A'..'Z' = 11..36.
+# Lowercase ASCII is upcased before lookup so `bnrmr "hi"` works.
+fn block_glyph_index(c): i64 {
+    if (c == 32) { return 0; }                       # ' '
+    if (c >= 48) { if (c <= 57)  { return c - 47; } } # '0'..'9' -> 1..10
+    if (c >= 65) { if (c <= 90)  { return c - 54; } } # 'A'..'Z' -> 11..36
+    if (c >= 97) { if (c <= 122) { return c - 86; } } # 'a'..'z' -> 11..36
+    return 0 - 1;
+}
+
+# Return a pointer to the 5-byte row string for (glyph_idx, row).
+# row is 0..4. Falls back to the space glyph on out-of-range index;
+# clamps an out-of-range row to the nearest valid row.
+fn block_row(glyph_idx, row): i64 {
+    var i = glyph_idx;
+    var r = row;
+    if (i < 0) { i = 0; }
+    if (i >= 37) { i = 0; }
+    if (r < 0) { r = 0; }
+    if (r >= 5) { r = 4; }
+
+    # space (idx 0)
+    if (i == 0) {
+        if (r == 0) { return "     "; }
+        if (r == 1) { return "     "; }
+        if (r == 2) { return "     "; }
+        if (r == 3) { return "     "; }
+        return "     ";
+    }
+
+    # 0
+    if (i == 1) {
+        if (r == 0) { return " ### "; }
+        if (r == 1) { return "#  ##"; }
+        if (r == 2) { return "# # #"; }
+        if (r == 3) { return "##  #"; }
+        return " ### ";
+    }
+    # 1
+    if (i == 2) {
+        if (r == 0) { return "  #  "; }
+        if (r == 1) { return " ##  "; }
+        if (r == 2) { return "  #  "; }
+        if (r == 3) { return "  #  "; }
+        return " ### ";
+    }
+    # 2
+    if (i == 3) {
+        if (r == 0) { return " ### "; }
+        if (r == 1) { return "#   #"; }
+        if (r == 2) { return "   # "; }
+        if (r == 3) { return "  #  "; }
+        return "#####";
+    }
+    # 3
+    if (i == 4) {
+        if (r == 0) { return " ### "; }
+        if (r == 1) { return "#   #"; }
+        if (r == 2) { return "  ## "; }
+        if (r == 3) { return "#   #"; }
+        return " ### ";
+    }
+    # 4
+    if (i == 5) {
+        if (r == 0) { return "#  # "; }
+        if (r == 1) { return "#  # "; }
+        if (r == 2) { return "#####"; }
+        if (r == 3) { return "   # "; }
+        return "   # ";
+    }
+    # 5
+    if (i == 6) {
+        if (r == 0) { return "#####"; }
+        if (r == 1) { return "#    "; }
+        if (r == 2) { return "#### "; }
+        if (r == 3) { return "    #"; }
+        return "#### ";
+    }
+    # 6
+    if (i == 7) {
+        if (r == 0) { return " ### "; }
+        if (r == 1) { return "#    "; }
+        if (r == 2) { return "#### "; }
+        if (r == 3) { return "#   #"; }
+        return " ### ";
+    }
+    # 7
+    if (i == 8) {
+        if (r == 0) { return "#####"; }
+        if (r == 1) { return "   # "; }
+        if (r == 2) { return "  #  "; }
+        if (r == 3) { return " #   "; }
+        return " #   ";
+    }
+    # 8
+    if (i == 9) {
+        if (r == 0) { return " ### "; }
+        if (r == 1) { return "#   #"; }
+        if (r == 2) { return " ### "; }
+        if (r == 3) { return "#   #"; }
+        return " ### ";
+    }
+    # 9
+    if (i == 10) {
+        if (r == 0) { return " ### "; }
+        if (r == 1) { return "#   #"; }
+        if (r == 2) { return " ####"; }
+        if (r == 3) { return "    #"; }
+        return " ### ";
+    }
+
+    # A
+    if (i == 11) {
+        if (r == 0) { return " ### "; }
+        if (r == 1) { return "#   #"; }
+        if (r == 2) { return "#####"; }
+        if (r == 3) { return "#   #"; }
+        return "#   #";
+    }
+    # B
+    if (i == 12) {
+        if (r == 0) { return "#### "; }
+        if (r == 1) { return "#   #"; }
+        if (r == 2) { return "#### "; }
+        if (r == 3) { return "#   #"; }
+        return "#### ";
+    }
+    # C
+    if (i == 13) {
+        if (r == 0) { return " ####"; }
+        if (r == 1) { return "#    "; }
+        if (r == 2) { return "#    "; }
+        if (r == 3) { return "#    "; }
+        return " ####";
+    }
+    # D
+    if (i == 14) {
+        if (r == 0) { return "#### "; }
+        if (r == 1) { return "#   #"; }
+        if (r == 2) { return "#   #"; }
+        if (r == 3) { return "#   #"; }
+        return "#### ";
+    }
+    # E
+    if (i == 15) {
+        if (r == 0) { return "#####"; }
+        if (r == 1) { return "#    "; }
+        if (r == 2) { return "#### "; }
+        if (r == 3) { return "#    "; }
+        return "#####";
+    }
+    # F
+    if (i == 16) {
+        if (r == 0) { return "#####"; }
+        if (r == 1) { return "#    "; }
+        if (r == 2) { return "#### "; }
+        if (r == 3) { return "#    "; }
+        return "#    ";
+    }
+    # G
+    if (i == 17) {
+        if (r == 0) { return " ####"; }
+        if (r == 1) { return "#    "; }
+        if (r == 2) { return "#  ##"; }
+        if (r == 3) { return "#   #"; }
+        return " ####";
+    }
+    # H
+    if (i == 18) {
+        if (r == 0) { return "#   #"; }
+        if (r == 1) { return "#   #"; }
+        if (r == 2) { return "#####"; }
+        if (r == 3) { return "#   #"; }
+        return "#   #";
+    }
+    # I
+    if (i == 19) {
+        if (r == 0) { return "#####"; }
+        if (r == 1) { return "  #  "; }
+        if (r == 2) { return "  #  "; }
+        if (r == 3) { return "  #  "; }
+        return "#####";
+    }
+    # J
+    if (i == 20) {
+        if (r == 0) { return "#####"; }
+        if (r == 1) { return "   # "; }
+        if (r == 2) { return "   # "; }
+        if (r == 3) { return "#  # "; }
+        return " ##  ";
+    }
+    # K
+    if (i == 21) {
+        if (r == 0) { return "#   #"; }
+        if (r == 1) { return "#  # "; }
+        if (r == 2) { return "###  "; }
+        if (r == 3) { return "#  # "; }
+        return "#   #";
+    }
+    # L
+    if (i == 22) {
+        if (r == 0) { return "#    "; }
+        if (r == 1) { return "#    "; }
+        if (r == 2) { return "#    "; }
+        if (r == 3) { return "#    "; }
+        return "#####";
+    }
+    # M
+    if (i == 23) {
+        if (r == 0) { return "#   #"; }
+        if (r == 1) { return "## ##"; }
+        if (r == 2) { return "# # #"; }
+        if (r == 3) { return "#   #"; }
+        return "#   #";
+    }
+    # N
+    if (i == 24) {
+        if (r == 0) { return "#   #"; }
+        if (r == 1) { return "##  #"; }
+        if (r == 2) { return "# # #"; }
+        if (r == 3) { return "#  ##"; }
+        return "#   #";
+    }
+    # O
+    if (i == 25) {
+        if (r == 0) { return " ### "; }
+        if (r == 1) { return "#   #"; }
+        if (r == 2) { return "#   #"; }
+        if (r == 3) { return "#   #"; }
+        return " ### ";
+    }
+    # P
+    if (i == 26) {
+        if (r == 0) { return "#### "; }
+        if (r == 1) { return "#   #"; }
+        if (r == 2) { return "#### "; }
+        if (r == 3) { return "#    "; }
+        return "#    ";
+    }
+    # Q
+    if (i == 27) {
+        if (r == 0) { return " ### "; }
+        if (r == 1) { return "#   #"; }
+        if (r == 2) { return "#   #"; }
+        if (r == 3) { return "#  # "; }
+        return " ## #";
+    }
+    # R
+    if (i == 28) {
+        if (r == 0) { return "#### "; }
+        if (r == 1) { return "#   #"; }
+        if (r == 2) { return "#### "; }
+        if (r == 3) { return "#  # "; }
+        return "#   #";
+    }
+    # S
+    if (i == 29) {
+        if (r == 0) { return " ####"; }
+        if (r == 1) { return "#    "; }
+        if (r == 2) { return " ### "; }
+        if (r == 3) { return "    #"; }
+        return "#### ";
+    }
+    # T
+    if (i == 30) {
+        if (r == 0) { return "#####"; }
+        if (r == 1) { return "  #  "; }
+        if (r == 2) { return "  #  "; }
+        if (r == 3) { return "  #  "; }
+        return "  #  ";
+    }
+    # U
+    if (i == 31) {
+        if (r == 0) { return "#   #"; }
+        if (r == 1) { return "#   #"; }
+        if (r == 2) { return "#   #"; }
+        if (r == 3) { return "#   #"; }
+        return " ### ";
+    }
+    # V
+    if (i == 32) {
+        if (r == 0) { return "#   #"; }
+        if (r == 1) { return "#   #"; }
+        if (r == 2) { return "#   #"; }
+        if (r == 3) { return " # # "; }
+        return "  #  ";
+    }
+    # W
+    if (i == 33) {
+        if (r == 0) { return "#   #"; }
+        if (r == 1) { return "#   #"; }
+        if (r == 2) { return "# # #"; }
+        if (r == 3) { return "## ##"; }
+        return "#   #";
+    }
+    # X
+    if (i == 34) {
+        if (r == 0) { return "#   #"; }
+        if (r == 1) { return " # # "; }
+        if (r == 2) { return "  #  "; }
+        if (r == 3) { return " # # "; }
+        return "#   #";
+    }
+    # Y
+    if (i == 35) {
+        if (r == 0) { return "#   #"; }
+        if (r == 1) { return " # # "; }
+        if (r == 2) { return "  #  "; }
+        if (r == 3) { return "  #  "; }
+        return "  #  ";
+    }
+    # Z
+    if (i == 36) {
+        if (r == 0) { return "#####"; }
+        if (r == 1) { return "   # "; }
+        if (r == 2) { return "  #  "; }
+        if (r == 3) { return " #   "; }
+        return "#####";
+    }
+
+    return "     ";
+}

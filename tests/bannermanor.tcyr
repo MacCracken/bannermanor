@@ -1,11 +1,105 @@
-# bannermanor test suite
-# Stdlib auto-included via cyrius.cyml
+# bannermanor test suite — M1 coverage.
+#
+# Verifies the block-font index lookup covers exactly the expected
+# ASCII range (' ', '0'..'9', 'A'..'Z'), that lowercase folds to the
+# same glyph as uppercase, that out-of-coverage chars return -1, and
+# that the renderer rejects oversized input.
+# Stdlib auto-included via cyrius.cyml.
 
-fn main() {
-    alloc_init();
+include "src/render.cyr"
+
+# Smoke
+fn t_smoke() {
     test_group("smoke");
     assert(1, "true is true");
     assert_eq(1 + 1, 2, "math works");
+}
+
+# block_glyph_index — coverage
+fn t_glyph_index_space() {
+    test_group("block_glyph_index / space");
+    assert_eq(block_glyph_index(32), 0, "space -> 0");
+}
+
+fn t_glyph_index_digits() {
+    test_group("block_glyph_index / digits");
+    var c = 48;     # '0'
+    var expect = 1;
+    while (c <= 57) {
+        assert_eq(block_glyph_index(c), expect, "digit lookup");
+        c = c + 1;
+        expect = expect + 1;
+    }
+}
+
+fn t_glyph_index_upper() {
+    test_group("block_glyph_index / upper");
+    var c = 65;     # 'A'
+    var expect = 11;
+    while (c <= 90) {
+        assert_eq(block_glyph_index(c), expect, "uppercase lookup");
+        c = c + 1;
+        expect = expect + 1;
+    }
+}
+
+fn t_glyph_index_lower_folds() {
+    test_group("block_glyph_index / lowercase folds to upper");
+    var c = 97;     # 'a'
+    var upper = 65;
+    while (c <= 122) {
+        assert_eq(block_glyph_index(c), block_glyph_index(upper), "fold");
+        c = c + 1;
+        upper = upper + 1;
+    }
+}
+
+fn t_glyph_index_unsupported() {
+    test_group("block_glyph_index / unsupported");
+    assert_eq(block_glyph_index(33),  0 - 1, "'!' -> -1");
+    assert_eq(block_glyph_index(64),  0 - 1, "'@' -> -1");
+    assert_eq(block_glyph_index(91),  0 - 1, "'[' -> -1");
+    assert_eq(block_glyph_index(96),  0 - 1, "'`' -> -1");
+    assert_eq(block_glyph_index(123), 0 - 1, "'{' -> -1");
+    assert_eq(block_glyph_index(0),   0 - 1, "NUL -> -1");
+    assert_eq(block_glyph_index(127), 0 - 1, "DEL -> -1");
+}
+
+# block_row — every glyph index has a 5-byte row string for every row
+fn t_block_row_shape() {
+    test_group("block_row / shape");
+    var i = 0;
+    while (i < 37) {
+        var r = 0;
+        while (r < 5) {
+            var p = block_row(i, r);
+            assert_eq(strlen(p), 5, "row is 5 bytes");
+            r = r + 1;
+        }
+        i = i + 1;
+    }
+}
+
+# render_block — bounds-check path (does not actually render: the
+# input-length guard fires before any glyph is written).
+fn t_render_bounds() {
+    test_group("render_block / bounds");
+    var big[1];
+    assert_eq(render_block(&big, 0 - 1),  0 - 1, "negative len -> -1");
+    assert_eq(render_block(&big, 1025),   0 - 1, "over-cap -> -1");
+    assert_eq(render_block(&big, 9999),   0 - 1, "way-over-cap -> -1");
+}
+
+fn main() {
+    alloc_init();
+    t_smoke();
+    t_glyph_index_space();
+    t_glyph_index_digits();
+    t_glyph_index_upper();
+    t_glyph_index_lower_folds();
+    t_glyph_index_unsupported();
+    t_block_row_shape();
+    t_render_bounds();
     return assert_summary();
 }
 

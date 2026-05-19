@@ -1,14 +1,90 @@
 # bannermanor / bnrmr — main entry point.
 #
-# Scaffold stage: prints version and exits. Real CLI (text input,
-# font selection from CYML font dir, optional color via darshana,
-# alignment / width / padding flags) lands once development begins.
+# M1: concat argv[1..] with spaces, render with the hardcoded block
+# font, exit. No flags yet beyond --version / --help (M4 adds the
+# real flag surface). Lowercase ASCII is upcased by the font layer;
+# unsupported chars fall through to the space glyph.
 #
-# Stdlib auto-included via cyrius.cyml [deps].stdlib.
+# Stdlib (string, args, alloc, io) auto-included via cyrius.cyml.
 
-fn main() {
+include "src/render.cyr"
+
+# Concatenate argv[1..argc-1] into `out`, separated by single spaces.
+# Returns the total length written, or -1 if the concatenated input
+# would exceed out_cap (silent truncation would be worse than refusal —
+# the cap is the M1 input-length contract).
+fn join_argv(out, out_cap): i64 {
+    var ac = argc();
+    var n: i64 = 0;
+    var i = 1;
+    while (i < ac) {
+        var arg = argv(i);
+        var alen = strlen(arg);
+        if (n > 0) {
+            if (n + 1 > out_cap) { return 0 - 1; }
+            store8(out + n, 32);
+            n = n + 1;
+        }
+        if (n + alen > out_cap) { return 0 - 1; }
+        memcpy(out + n, arg, alen);
+        n = n + alen;
+        i = i + 1;
+    }
+    return n;
+}
+
+fn streq_lit(s, lit): i64 {
+    var sl = strlen(s);
+    var ll = strlen(lit);
+    if (sl != ll) { return 0; }
+    return memeq(s, lit, sl);
+}
+
+fn print_usage(): i64 {
+    println("bnrmr — figlet-equivalent ASCII-art banner generator");
+    println("");
+    println("Usage:");
+    println("  bnrmr TEXT...        render TEXT as a banner");
+    println("  bnrmr --version      print version and exit");
+    println("  bnrmr --help         print this help and exit");
+    println("");
+    println("Coverage (M1): A-Z, 0-9, space. Lowercase is upcased.");
+    println("Other characters render as blank glyphs for now.");
+    return 0;
+}
+
+fn main(): i64 {
     alloc_init();
-    println("bnrmr v0.1.0 — scaffold (bannermanor)");
+    args_init();
+
+    var ac = argc();
+    if (ac <= 1) {
+        print_usage();
+        return 0;
+    }
+
+    var first = argv(1);
+    if (streq_lit(first, "--version") == 1) {
+        println("bnrmr 0.1.0");
+        return 0;
+    }
+    if (streq_lit(first, "--help") == 1) {
+        print_usage();
+        return 0;
+    }
+
+    var buf[1024];
+    var n = join_argv(&buf, 1024);
+    if (n < 0) {
+        println("bnrmr: input too long (max 1024 bytes)");
+        return 1;
+    }
+    if (n == 0) {
+        print_usage();
+        return 0;
+    }
+
+    render_block(&buf, n);
     return 0;
 }
 
