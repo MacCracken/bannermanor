@@ -1,0 +1,16 @@
+# bannermanor / bnrmr — main entry point.
+#
+# Scaffold stage: prints version and exits. Real CLI (text input,
+# font selection from CYML font dir, optional color via darshana,
+# alignment / width / padding flags) lands once development begins.
+#
+# Stdlib auto-included via cyrius.cyml [deps].stdlib.
+
+fn main() {
+    alloc_init();
+    println("bnrmr v0.1.0 — scaffold (bannermanor)");
+    return 0;
+}
+
+var r = main();
+syscall(SYS_EXIT, r);
