@@ -32,7 +32,7 @@ format. Frozen CLI flag surface.
 - `./build/bnrmr` prints scaffold version and exits
 - Doc-tree per [first-party-documentation.md](https://github.com/MacCracken/agnosticos/blob/main/docs/development/planning/first-party-documentation.md)
 
-### M1 — First render: hardcoded block-letter font (v0.2.0)
+### M1 — First render: hardcoded block-letter font (v0.2.0) — ✅ shipped 2026-05-19
 
 Prove the render pipeline end-to-end with a single in-source font.
 
@@ -43,7 +43,7 @@ Prove the render pipeline end-to-end with a single in-source font.
 - **Dep gate**: stdlib only
 - **Acceptance**: `bnrmr "AGNOS"` renders cleanly.
 
-### M2 — CYML font format spec + parser (v0.3.0)
+### M2 — CYML font format spec + parser (v0.2.0, bundled with M1) — ✅ shipped 2026-05-19
 
 Extract the hardcoded font into the planned CYML schema.
 
@@ -55,7 +55,7 @@ Extract the hardcoded font into the planned CYML schema.
 - **Acceptance**: `bnrmr --font block "hello"` produces the same
   output as M1.
 
-### M3 — Ship default font set (v0.4.0)
+### M3 — Ship default font set (v0.3.0)
 
 Curate 3–5 opinionated fonts that look good. Resist scope creep.
 
@@ -67,7 +67,7 @@ Curate 3–5 opinionated fonts that look good. Resist scope creep.
 - **Dep gate**: M2
 - **Acceptance**: every shipped font renders "AGNOS" cleanly.
 
-### M4 — Layout flags (v0.5.0)
+### M4 — Layout flags (v0.4.0)
 
 - `--align left|center|right` — banner alignment within terminal width
 - `--width N` — wrap or truncate at N columns (0 = unlimited)
@@ -77,7 +77,7 @@ Curate 3–5 opinionated fonts that look good. Resist scope creep.
 - **Acceptance**: `bnrmr --align center --width 80 "hi"` centers
   in 80 cols.
 
-### M5 — Color via darshana (v0.6.0)
+### M5 — Color via darshana (v0.5.0)
 
 - `--color <name>` — ANSI-256 colorize the banner via darshana primitives
 - `--color rainbow` — per-row color cycle
@@ -86,7 +86,7 @@ Curate 3–5 opinionated fonts that look good. Resist scope creep.
 - **Acceptance**: `bnrmr --color cyan "AGNOS"` renders colored on
   TTY, plain on pipe.
 
-### M6 — Legacy .flf read path (v0.7.0)
+### M6 — Legacy .flf read path (v0.6.0)
 
 Optional figlet-font-format adapter for users with existing
 figlet font libraries.
@@ -99,7 +99,7 @@ figlet font libraries.
 - **Acceptance**: a standard `.flf` font renders identically to
   the canonical figlet `figlet` binary on the same input.
 
-### M7 — Harden + dogfood (v0.9.0)
+### M7 — Harden + dogfood (v0.9.0; gap before v1.0 is intentional)
 
 - BannerManor used in the maintainer's MOTD for one release cycle
 - All real-world bugs / font-rendering surprises filed in

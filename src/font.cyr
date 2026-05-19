@@ -1,0 +1,350 @@
+# font.cyr — Font struct + CYML font loader.
+#
+# Used by render.cyr; both the embedded default (src/font_block.cyr)
+# and on-disk fonts (fonts/<name>.cyml) produce the same Font* shape.
+#
+# Schema: docs/adr/0001-cyml-font-format.md.
+# Multi-entry CYML: file-level [font] header (TOML), one entry per glyph
+# with `char = "X"` in the entry's TOML header and a body of HEIGHT
+# rows × WIDTH bytes using `.` (background) and `#` (stroke).
+
+include "lib/cyml.cyr"
+include "lib/string.cyr"
+
+# Font struct layout (48 bytes):
+#    0: width      (i64) cols per glyph
+#    8: height     (i64) rows per glyph
+#   16: gap        (i64) spaces between adjacent glyphs
+#   24: count      (i64) number of glyphs in this font
+#   32: rows_ptr   (i64) flat row buffer, count*height*width bytes
+#   40: charmap    (i64) 128-byte table: charmap[c] = glyph_idx+1, 0 = unsupported
+
+enum FontField {
+    F_WIDTH = 0;
+    F_HEIGHT = 8;
+    F_GAP = 16;
+    F_COUNT = 24;
+    F_ROWS = 32;
+    F_CHARMAP = 40;
+    F_SIZE = 48;
+}
+
+enum FontLimits {
+    MAX_FILE_BYTES = 65536;     # 64 KB cap on font files (ADR 0001)
+    MAX_WIDTH = 64;
+    MAX_HEIGHT = 32;
+    MAX_GLYPHS = 256;           # capped by lib/cyml.cyr parser
+    SUPPORTED_SCHEMA = 1;
+}
+
+# ---- accessors ----
+
+fn font_width(f): i64  { return load64(f); }
+fn font_height(f): i64 { return load64(f + 8); }
+fn font_gap(f): i64    { return load64(f + 16); }
+fn font_count(f): i64  { return load64(f + 24); }
+
+# Return glyph_idx for char c, or -1. Lowercase ASCII folds to upper.
+fn font_glyph_index(f, c): i64 {
+    if (c < 0) { return 0 - 1; }
+    if (c >= 128) { return 0 - 1; }
+    var cc = c;
+    if (cc >= 97) { if (cc <= 122) { cc = cc - 32; } }
+    var v = load8(load64(f + 40) + cc);
+    if (v == 0) { return 0 - 1; }
+    return v - 1;
+}
+
+# Pointer to the `width` bytes for (glyph_idx, row).
+fn font_row(f, idx, row): i64 {
+    var w = load64(f);
+    var h = load64(f + 8);
+    return load64(f + 32) + (idx * h + row) * w;
+}
+
+# ---- font construction (used by both file loader and embedded path) ----
+
+# Allocate a zero-filled Font with reserved rows + charmap storage.
+# Returns Font* or 0 on OOM.
+fn font_new(width, height, gap, count): i64 {
+    var f = alloc(48);
+    if (f == 0) { return 0; }
+    var rows_bytes = count * height * width;
+    var rows = alloc(rows_bytes);
+    if (rows == 0) { return 0; }
+    var charmap = alloc(128);
+    if (charmap == 0) { return 0; }
+    memset(rows, 32, rows_bytes);
+    memset(charmap, 0, 128);
+    store64(f, width);
+    store64(f + 8, height);
+    store64(f + 16, gap);
+    store64(f + 24, count);
+    store64(f + 32, rows);
+    store64(f + 40, charmap);
+    return f;
+}
+
+# Register glyph idx for char c. Returns 0 on success, -1 if c is out
+# of range (0..127) or already mapped to another glyph.
+fn font_set_char(f, idx, c): i64 {
+    if (c < 0) { return 0 - 1; }
+    if (c >= 128) { return 0 - 1; }
+    var charmap = load64(f + 40);
+    if (load8(charmap + c) != 0) { return 0 - 1; }   # duplicate
+    store8(charmap + c, idx + 1);
+    return 0;
+}
+
+# Write a single row of `width` bytes into glyph idx. Returns 0.
+fn font_set_row(f, idx, row, src): i64 {
+    var w = load64(f);
+    var dst = font_row(f, idx, row);
+    memcpy(dst, src, w);
+    return 0;
+}
+
+# ---- CYML loader ----
+
+# Walk a TOML-style header buffer line by line looking for `key = N`.
+# Returns N or -1 if not found / not an integer.
+fn _font_get_int(hdr, hlen, key, key_len): i64 {
+    var i = 0;
+    var found = 0 - 1;
+    while (i < hlen && found < 0) {
+        # skip leading ws on this line
+        var ls = 1;
+        while (i < hlen && ls == 1) {
+            var c = load8(hdr + i);
+            if (c == 32) { i = i + 1; }
+            else { if (c == 9) { i = i + 1; }
+            else { ls = 0; } }
+        }
+        # try key match
+        if (i + key_len < hlen) {
+            if (memeq(hdr + i, key, key_len) == 1) {
+                # next char should be ws or '='
+                var nc = load8(hdr + i + key_len);
+                if (nc == 32 || nc == 9 || nc == 61) {
+                    var p = i + key_len;
+                    var sk = 1;
+                    while (p < hlen && sk == 1) {
+                        var c = load8(hdr + p);
+                        if (c == 32) { p = p + 1; }
+                        else { if (c == 9) { p = p + 1; }
+                        else { sk = 0; } }
+                    }
+                    if (p < hlen) {
+                        if (load8(hdr + p) == 61) {
+                            p = p + 1;
+                            var sk2 = 1;
+                            while (p < hlen && sk2 == 1) {
+                                var c = load8(hdr + p);
+                                if (c == 32) { p = p + 1; }
+                                else { if (c == 9) { p = p + 1; }
+                                else { sk2 = 0; } }
+                            }
+                            var n = 0;
+                            var any = 0;
+                            var d = 1;
+                            while (p < hlen && d == 1) {
+                                var c = load8(hdr + p);
+                                if (c >= 48) {
+                                    if (c <= 57) {
+                                        n = n * 10 + (c - 48);
+                                        any = 1;
+                                        p = p + 1;
+                                    } else { d = 0; }
+                                } else { d = 0; }
+                            }
+                            if (any == 1) { found = n; }
+                        }
+                    }
+                }
+            }
+        }
+        # advance to next line
+        var le = 1;
+        while (i < hlen && le == 1) {
+            var c = load8(hdr + i);
+            i = i + 1;
+            if (c == 10) { le = 0; }
+        }
+    }
+    return found;
+}
+
+# Find `char = "X"` in an entry header, return X (0..127) or -1.
+fn _font_get_char(hdr, hlen): i64 {
+    var i = 0;
+    var found = 0 - 1;
+    while (i < hlen && found < 0) {
+        # skip leading ws
+        var ls = 1;
+        while (i < hlen && ls == 1) {
+            var c = load8(hdr + i);
+            if (c == 32) { i = i + 1; }
+            else { if (c == 9) { i = i + 1; }
+            else { ls = 0; } }
+        }
+        # match "char"
+        if (i + 4 < hlen) {
+            if (memeq(hdr + i, "char", 4) == 1) {
+                var nc = load8(hdr + i + 4);
+                if (nc == 32 || nc == 9 || nc == 61) {
+                    var p = i + 4;
+                    var sk = 1;
+                    while (p < hlen && sk == 1) {
+                        var c = load8(hdr + p);
+                        if (c == 32) { p = p + 1; }
+                        else { if (c == 9) { p = p + 1; }
+                        else { sk = 0; } }
+                    }
+                    if (p < hlen) {
+                        if (load8(hdr + p) == 61) {
+                            p = p + 1;
+                            var sk2 = 1;
+                            while (p < hlen && sk2 == 1) {
+                                var c = load8(hdr + p);
+                                if (c == 32) { p = p + 1; }
+                                else { if (c == 9) { p = p + 1; }
+                                else { sk2 = 0; } }
+                            }
+                            # expect "X"
+                            if (p + 2 < hlen) {
+                                if (load8(hdr + p) == 34) {
+                                    var ch = load8(hdr + p + 1);
+                                    if (load8(hdr + p + 2) == 34) {
+                                        if (ch >= 0) { if (ch < 128) { found = ch; } }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        # advance line
+        var le = 1;
+        while (i < hlen && le == 1) {
+            var c = load8(hdr + i);
+            i = i + 1;
+            if (c == 10) { le = 0; }
+        }
+    }
+    return found;
+}
+
+# Decode an entry body (after _cyml_trim) into row bytes.
+# Expected shape: height rows of exactly width chars, each '.' or '#',
+# separated by \n. '.' maps to space (32), '#' stays #.
+# Writes into `dst` (height*width bytes). Returns 0 on success, -1 on shape error.
+fn _font_decode_body(body, blen, width, height, dst): i64 {
+    var pos = 0;
+    var row = 0;
+    while (row < height) {
+        if (pos + width > blen) { return 0 - 1; }
+        var col = 0;
+        while (col < width) {
+            var c = load8(body + pos + col);
+            if (c == 46) {              # '.'
+                store8(dst + row * width + col, 32);
+            } else {
+                if (c == 35) {          # '#'
+                    store8(dst + row * width + col, 35);
+                } else {
+                    return 0 - 1;
+                }
+            }
+            col = col + 1;
+        }
+        pos = pos + width;
+        if (row + 1 < height) {
+            if (pos >= blen) { return 0 - 1; }
+            if (load8(body + pos) != 10) { return 0 - 1; }
+            pos = pos + 1;
+        } else {
+            # Last row — body may end here, or have trailing \n (cyml_trim
+            # actually strips that, so EOF is expected).
+            if (pos < blen) {
+                if (load8(body + pos) != 10) { return 0 - 1; }
+            }
+        }
+        row = row + 1;
+    }
+    return 0;
+}
+
+# Load a font from a CYML file path. Returns Font* on success, 0 on error.
+# Errors are bounded — file size, schema, geometry, body shape are all validated.
+fn font_load_file(path): i64 {
+    # Read up to MAX_FILE_BYTES (64 KB)
+    var fd = syscall(2, path, 0, 0);
+    if (fd < 0) { return 0; }
+    var buf = alloc(65536);
+    if (buf == 0) { syscall(3, fd); return 0; }
+    var total = 0;
+    var rgo = 1;
+    while (rgo == 1) {
+        var n = syscall(0, fd, buf + total, 65536 - total);
+        if (n <= 0) { rgo = 0; }
+        else {
+            total = total + n;
+            if (total >= 65536) { rgo = 0; }
+        }
+    }
+    syscall(3, fd);
+    if (total <= 0) { return 0; }
+    if (total >= 65536) { return 0; }       # over cap (no trailing room)
+
+    # Parse via lib/cyml.cyr
+    var doc = cyml_parse(buf, total);
+    if (doc == 0) { return 0; }
+
+    # File header: schema, width, height, gap
+    var fhdr = cyml_doc_header(doc);
+    var fhlen = cyml_doc_header_len(doc);
+    var schema = _font_get_int(fhdr, fhlen, "schema", 6);
+    var width = _font_get_int(fhdr, fhlen, "width", 5);
+    var height = _font_get_int(fhdr, fhlen, "height", 6);
+    var gap = _font_get_int(fhdr, fhlen, "gap", 3);
+    if (schema != 1) { return 0; }
+    if (width <= 0) { return 0; }
+    if (width > 64) { return 0; }
+    if (height <= 0) { return 0; }
+    if (height > 32) { return 0; }
+    if (gap < 0) { return 0; }
+    if (gap > 16) { return 0; }
+
+    var count = cyml_doc_entry_count(doc);
+    if (count <= 0) { return 0; }
+    if (count > 256) { return 0; }
+
+    var f = font_new(width, height, gap, count);
+    if (f == 0) { return 0; }
+
+    var ei = 0;
+    var err = 0;
+    while (ei < count && err == 0) {
+        var e = cyml_doc_entry(doc, ei);
+        var ehdr = cyml_entry_header(e);
+        var ehlen = cyml_entry_header_len(e);
+        var ebody = cyml_entry_body(e);
+        var eblen = cyml_entry_body_len(e);
+
+        var ch = _font_get_char(ehdr, ehlen);
+        if (ch < 0) { err = 1; }
+        else {
+            if (font_set_char(f, ei, ch) < 0) { err = 1; }
+            else {
+                var dst = font_row(f, ei, 0);
+                if (_font_decode_body(ebody, eblen, width, height, dst) < 0) {
+                    err = 1;
+                }
+            }
+        }
+        ei = ei + 1;
+    }
+    if (err == 1) { return 0; }
+    return f;
+}

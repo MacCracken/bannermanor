@@ -12,4 +12,4 @@ test = "src/test.cyr"
 output = "bnrmr"
 
 [deps]
-stdlib = ["string", "fmt", "alloc", "io", "vec", "str", "syscalls", "assert", "bench", "args"]
+stdlib = ["string", "fmt", "alloc", "io", "vec", "str", "syscalls", "assert", "bench", "args", "cyml", "result"]

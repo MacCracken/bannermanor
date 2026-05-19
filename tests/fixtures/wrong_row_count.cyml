@@ -1,0 +1,16 @@
+# Malformed fixture: header says height = 5 but body has only 3 rows.
+# Loader must reject.
+
+[font]
+schema = 1
+name = "wrong_row_count"
+width = 5
+height = 5
+gap = 1
+
+[[entries]]
+char = "A"
+---
+.###.
+#...#
+#####

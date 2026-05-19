@@ -1,0 +1,17 @@
+# Malformed fixture: schema version is not 1. Loader must reject.
+
+[font]
+schema = 99
+name = "bad_schema"
+width = 5
+height = 5
+gap = 1
+
+[[entries]]
+char = "A"
+---
+.###.
+#...#
+#####
+#...#
+#...#

@@ -1,105 +1,209 @@
-# bannermanor test suite — M1 coverage.
+# bannermanor test suite — M1 + M2 coverage.
 #
-# Verifies the block-font index lookup covers exactly the expected
-# ASCII range (' ', '0'..'9', 'A'..'Z'), that lowercase folds to the
-# same glyph as uppercase, that out-of-coverage chars return -1, and
-# that the renderer rejects oversized input.
-# Stdlib auto-included via cyrius.cyml.
+# Covers:
+#   - block_font_embed builds a Font with the expected geometry
+#   - font_glyph_index covers space, digits, upper, lowercase folding,
+#     and rejects unsupported chars
+#   - every glyph row is exactly `width` bytes containing only space/'#'
+#   - render rejects oversized input
+#   - font_load_file parses fonts/block.cyml and matches the embedded
+#     font byte-for-byte (M2 acceptance)
+#   - font_load_file rejects malformed fixtures (bad schema, bad body
+#     byte, wrong row count) and missing files
 
 include "src/render.cyr"
+include "src/font_block.cyr"
 
-# Smoke
+# ---- smoke ----
+
 fn t_smoke() {
     test_group("smoke");
     assert(1, "true is true");
     assert_eq(1 + 1, 2, "math works");
 }
 
-# block_glyph_index — coverage
-fn t_glyph_index_space() {
-    test_group("block_glyph_index / space");
-    assert_eq(block_glyph_index(32), 0, "space -> 0");
+# ---- embedded font geometry ----
+
+fn t_embedded_geometry() {
+    test_group("block_font_embed / geometry");
+    var f = block_font_embed();
+    assert(f != 0, "embedded font built");
+    assert_eq(font_width(f),  5,  "width = 5");
+    assert_eq(font_height(f), 5,  "height = 5");
+    assert_eq(font_gap(f),    1,  "gap = 1");
+    assert_eq(font_count(f),  37, "count = 37");
 }
 
-fn t_glyph_index_digits() {
-    test_group("block_glyph_index / digits");
-    var c = 48;     # '0'
-    var expect = 1;
+# ---- glyph index coverage ----
+
+fn t_glyph_space() {
+    test_group("font_glyph_index / space");
+    var f = block_font_embed();
+    assert(font_glyph_index(f, 32) >= 0, "space resolves to a glyph");
+}
+
+fn t_glyph_digits() {
+    test_group("font_glyph_index / digits");
+    var f = block_font_embed();
+    var c = 48;
     while (c <= 57) {
-        assert_eq(block_glyph_index(c), expect, "digit lookup");
+        assert(font_glyph_index(f, c) >= 0, "digit resolves");
         c = c + 1;
-        expect = expect + 1;
     }
 }
 
-fn t_glyph_index_upper() {
-    test_group("block_glyph_index / upper");
-    var c = 65;     # 'A'
-    var expect = 11;
+fn t_glyph_upper() {
+    test_group("font_glyph_index / upper");
+    var f = block_font_embed();
+    var c = 65;
     while (c <= 90) {
-        assert_eq(block_glyph_index(c), expect, "uppercase lookup");
+        assert(font_glyph_index(f, c) >= 0, "upper resolves");
         c = c + 1;
-        expect = expect + 1;
     }
 }
 
-fn t_glyph_index_lower_folds() {
-    test_group("block_glyph_index / lowercase folds to upper");
-    var c = 97;     # 'a'
-    var upper = 65;
+fn t_glyph_lower_folds() {
+    test_group("font_glyph_index / lowercase folds to upper");
+    var f = block_font_embed();
+    var c = 97;
+    var u = 65;
     while (c <= 122) {
-        assert_eq(block_glyph_index(c), block_glyph_index(upper), "fold");
+        assert_eq(font_glyph_index(f, c), font_glyph_index(f, u), "fold");
         c = c + 1;
-        upper = upper + 1;
+        u = u + 1;
     }
 }
 
-fn t_glyph_index_unsupported() {
-    test_group("block_glyph_index / unsupported");
-    assert_eq(block_glyph_index(33),  0 - 1, "'!' -> -1");
-    assert_eq(block_glyph_index(64),  0 - 1, "'@' -> -1");
-    assert_eq(block_glyph_index(91),  0 - 1, "'[' -> -1");
-    assert_eq(block_glyph_index(96),  0 - 1, "'`' -> -1");
-    assert_eq(block_glyph_index(123), 0 - 1, "'{' -> -1");
-    assert_eq(block_glyph_index(0),   0 - 1, "NUL -> -1");
-    assert_eq(block_glyph_index(127), 0 - 1, "DEL -> -1");
+fn t_glyph_unsupported() {
+    test_group("font_glyph_index / unsupported");
+    var f = block_font_embed();
+    assert_eq(font_glyph_index(f, 33),  0 - 1, "'!' -> -1");
+    assert_eq(font_glyph_index(f, 64),  0 - 1, "'@' -> -1");
+    assert_eq(font_glyph_index(f, 91),  0 - 1, "'[' -> -1");
+    assert_eq(font_glyph_index(f, 96),  0 - 1, "'`' -> -1");
+    assert_eq(font_glyph_index(f, 123), 0 - 1, "'{' -> -1");
+    assert_eq(font_glyph_index(f, 0),   0 - 1, "NUL -> -1");
+    assert_eq(font_glyph_index(f, 127), 0 - 1, "DEL -> -1");
+    assert_eq(font_glyph_index(f, 200), 0 - 1, "high byte -> -1");
 }
 
-# block_row — every glyph index has a 5-byte row string for every row
-fn t_block_row_shape() {
-    test_group("block_row / shape");
+# ---- row shape ----
+
+fn t_row_shape() {
+    test_group("font_row / shape");
+    var f = block_font_embed();
+    var w = font_width(f);
+    var h = font_height(f);
+    var count = font_count(f);
     var i = 0;
-    while (i < 37) {
+    while (i < count) {
         var r = 0;
-        while (r < 5) {
-            var p = block_row(i, r);
-            assert_eq(strlen(p), 5, "row is 5 bytes");
+        while (r < h) {
+            var p = font_row(f, i, r);
+            var col = 0;
+            while (col < w) {
+                var c = load8(p + col);
+                # Each byte must be space (32) or '#' (35).
+                var ok = 0;
+                if (c == 32) { ok = 1; }
+                if (c == 35) { ok = 1; }
+                assert_eq(ok, 1, "row byte is space or '#'");
+                col = col + 1;
+            }
             r = r + 1;
         }
         i = i + 1;
     }
 }
 
-# render_block — bounds-check path (does not actually render: the
-# input-length guard fires before any glyph is written).
+# ---- render bounds ----
+
 fn t_render_bounds() {
-    test_group("render_block / bounds");
+    test_group("render / bounds");
+    var f = block_font_embed();
     var big[1];
-    assert_eq(render_block(&big, 0 - 1),  0 - 1, "negative len -> -1");
-    assert_eq(render_block(&big, 1025),   0 - 1, "over-cap -> -1");
-    assert_eq(render_block(&big, 9999),   0 - 1, "way-over-cap -> -1");
+    assert_eq(render(f, &big, 0 - 1),  0 - 1, "negative len -> -1");
+    assert_eq(render(f, &big, 1025),   0 - 1, "over-cap -> -1");
+    assert_eq(render(f, &big, 9999),   0 - 1, "way-over-cap -> -1");
+    assert_eq(render(0, &big, 5),      0 - 2, "null font -> -2");
+}
+
+# ---- CYML loader (M2) ----
+
+fn t_load_block_cyml() {
+    test_group("font_load_file / fonts/block.cyml");
+    var f = font_load_file("fonts/block.cyml");
+    assert(f != 0, "loaded");
+    assert_eq(font_width(f),  5,  "width");
+    assert_eq(font_height(f), 5,  "height");
+    assert_eq(font_gap(f),    1,  "gap");
+    assert_eq(font_count(f),  37, "count");
+}
+
+# M2 acceptance: the loaded font must agree with the embedded font on
+# every char's glyph index AND every glyph's row bytes — i.e. the file
+# and the in-source data are interchangeable.
+fn t_loaded_matches_embedded() {
+    test_group("M2 acceptance / loaded == embedded");
+    var emb = block_font_embed();
+    var ldr = font_load_file("fonts/block.cyml");
+    assert(ldr != 0, "loaded");
+    assert_eq(font_width(ldr),  font_width(emb),  "width matches");
+    assert_eq(font_height(ldr), font_height(emb), "height matches");
+    assert_eq(font_gap(ldr),    font_gap(emb),    "gap matches");
+    assert_eq(font_count(ldr),  font_count(emb),  "count matches");
+
+    # Every ASCII char must map to the same glyph index in both fonts.
+    var c = 0;
+    while (c < 128) {
+        assert_eq(font_glyph_index(ldr, c), font_glyph_index(emb, c),
+                  "glyph index per char matches");
+        c = c + 1;
+    }
+
+    # Every glyph's rows must be byte-identical.
+    var w = font_width(emb);
+    var h = font_height(emb);
+    var idx = 0;
+    while (idx < 37) {
+        var r = 0;
+        while (r < h) {
+            var ep = font_row(emb, idx, r);
+            var lp = font_row(ldr, idx, r);
+            assert_eq(memeq(ep, lp, w), 1, "row bytes match");
+            r = r + 1;
+        }
+        idx = idx + 1;
+    }
+}
+
+fn t_load_missing() {
+    test_group("font_load_file / missing");
+    assert_eq(font_load_file("fonts/__does_not_exist__.cyml"), 0, "missing -> 0");
+}
+
+fn t_load_malformed() {
+    test_group("font_load_file / malformed");
+    assert_eq(font_load_file("tests/fixtures/bad_schema.cyml"),     0, "bad schema -> 0");
+    assert_eq(font_load_file("tests/fixtures/bad_body_byte.cyml"),  0, "bad body byte -> 0");
+    assert_eq(font_load_file("tests/fixtures/wrong_row_count.cyml"), 0, "wrong row count -> 0");
 }
 
 fn main() {
     alloc_init();
     t_smoke();
-    t_glyph_index_space();
-    t_glyph_index_digits();
-    t_glyph_index_upper();
-    t_glyph_index_lower_folds();
-    t_glyph_index_unsupported();
-    t_block_row_shape();
+    t_embedded_geometry();
+    t_glyph_space();
+    t_glyph_digits();
+    t_glyph_upper();
+    t_glyph_lower_folds();
+    t_glyph_unsupported();
+    t_row_shape();
     t_render_bounds();
+    t_load_block_cyml();
+    t_loaded_matches_embedded();
+    t_load_missing();
+    t_load_malformed();
     return assert_summary();
 }
 

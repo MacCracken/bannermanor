@@ -1,45 +1,51 @@
-# render.cyr — M1 banner composer.
+# render.cyr — banner composer.
 #
-# Renders one input string with the hardcoded "block" font:
+# Reads font geometry + glyph rows from a Font* (see src/font.cyr).
+# Same code path serves the embedded default and any --font-loaded file.
+#
+# Algorithm:
 #   for each row 0..H-1:
 #     for each input char:
-#       look up glyph row-string, write 5 bytes
-#       write GAP spaces between glyphs
+#       look up glyph index (lowercase folds; unsupported -> space)
+#       write font_row(font, idx, row), `width` bytes
+#       write `gap` spaces between adjacent glyphs
 #     write '\n'
-#
-# Unsupported characters fall through to the space glyph rather than
-# erroring — keeps `bnrmr "hi!"` rendering "hi " instead of refusing.
-# When we ship --strict in a later milestone we can promote this to
-# an error path.
 
-include "lib/string.cyr"
-include "src/font_block.cyr"
+include "src/font.cyr"
 
-# Max input bytes accepted by the renderer.
 enum RenderLimits {
-    MAX_INPUT = 1024;       # M1 acceptance criterion
+    MAX_INPUT = 1024;       # M1 contract; kept through M2
 }
 
-# Render the first `len` bytes of `text` as a block-font banner on
-# stdout. Returns 0 on success, -1 if input is over the cap.
-fn render_block(text, len): i64 {
+# Render `text[0..len-1]` with `font` to stdout. Returns 0 on success,
+# -1 if input is over the 1 KB cap or len is negative, -2 if font is null.
+fn render(font, text, len): i64 {
     if (len < 0) { return 0 - 1; }
     if (len > 1024) { return 0 - 1; }
+    if (font == 0) { return 0 - 2; }
 
-    var h = 5;
-    var w = 5;
+    var w = font_width(font);
+    var h = font_height(font);
+    var g = font_gap(font);
+    # Glyph index for ' ' — used as the fall-through for unsupported chars.
+    var space_idx = font_glyph_index(font, 32);
+    if (space_idx < 0) { space_idx = 0; }
 
     var r = 0;
     while (r < h) {
         var i = 0;
         while (i < len) {
             var c = load8(text + i);
-            var gi = block_glyph_index(c);
-            if (gi < 0) { gi = 0; }     # unsupported -> space glyph
-            var row_ptr = block_row(gi, r);
-            syscall(1, 1, row_ptr, w);
+            var gi = font_glyph_index(font, c);
+            if (gi < 0) { gi = space_idx; }
+            syscall(1, 1, font_row(font, gi, r), w);
             if (i + 1 < len) {
-                syscall(1, 1, " ", 1);  # GAP = 1 space between glyphs
+                # gap spaces between glyphs
+                var gn = 0;
+                while (gn < g) {
+                    syscall(1, 1, " ", 1);
+                    gn = gn + 1;
+                }
             }
             i = i + 1;
         }

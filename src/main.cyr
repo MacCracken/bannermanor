@@ -1,22 +1,77 @@
 # bannermanor / bnrmr — main entry point.
 #
-# M1: concat argv[1..] with spaces, render with the hardcoded block
-# font, exit. No flags yet beyond --version / --help (M4 adds the
-# real flag surface). Lowercase ASCII is upcased by the font layer;
-# unsupported chars fall through to the space glyph.
+# M2: argv parsing supports `--font NAME` (resolves to fonts/NAME.cyml
+# relative to cwd). With no flag, the embedded block font is used so
+# `bnrmr "hello"` works with zero config files on disk.
 #
-# Stdlib (string, args, alloc, io) auto-included via cyrius.cyml.
+# Full flag surface (--align, --width, --pad, --color, --list-fonts)
+# lands in M4 / M5; this milestone just adds --font.
+#
+# Stdlib (string, args, alloc, io, cyml) auto-included via cyrius.cyml.
 
 include "src/render.cyr"
+include "src/font_block.cyr"
 
-# Concatenate argv[1..argc-1] into `out`, separated by single spaces.
-# Returns the total length written, or -1 if the concatenated input
-# would exceed out_cap (silent truncation would be worse than refusal —
-# the cap is the M1 input-length contract).
-fn join_argv(out, out_cap): i64 {
+enum MainLimits {
+    BUF_CAP = 1024;
+    FONT_NAME_CAP = 64;
+}
+
+fn streq_lit(s, lit): i64 {
+    var sl = strlen(s);
+    var ll = strlen(lit);
+    if (sl != ll) { return 0; }
+    return memeq(s, lit, sl);
+}
+
+# Build "fonts/<name>.cyml" into out, null-terminated. Returns 0 if
+# the name is empty, too long, or contains a byte that we won't allow
+# (path separators, dots, control chars — keeps --font scoped to
+# `fonts/` regardless of caller intent).
+fn build_font_path(out, out_cap, name): i64 {
+    var nlen = strlen(name);
+    if (nlen <= 0) { return 0; }
+    if (nlen > 64) { return 0; }
+    var i = 0;
+    while (i < nlen) {
+        var c = load8(name + i);
+        if (c == 47)  { return 0; }   # '/'
+        if (c == 92)  { return 0; }   # '\'
+        if (c == 46)  { return 0; }   # '.'
+        if (c < 32)   { return 0; }
+        if (c == 127) { return 0; }
+        i = i + 1;
+    }
+    # "fonts/" + name + ".cyml" + NUL = 6 + nlen + 5 + 1
+    var need = 12 + nlen;
+    if (need > out_cap) { return 0; }
+    memcpy(out + 0, "fonts/", 6);
+    memcpy(out + 6, name, nlen);
+    memcpy(out + 6 + nlen, ".cyml", 5);
+    store8(out + 11 + nlen, 0);
+    return 11 + nlen;
+}
+
+fn print_usage(): i64 {
+    println("bnrmr — figlet-equivalent ASCII-art banner generator");
+    println("");
+    println("Usage:");
+    println("  bnrmr TEXT...           render TEXT with the default font");
+    println("  bnrmr --font NAME TEXT  render TEXT with fonts/NAME.cyml");
+    println("  bnrmr --version         print version and exit");
+    println("  bnrmr --help            print this help and exit");
+    println("");
+    println("Coverage (M2): A-Z, 0-9, space. Lowercase is upcased.");
+    println("Other characters render as blank glyphs.");
+    return 0;
+}
+
+# Concatenate argv[start..argc-1] into out, separated by single spaces.
+# Returns total bytes written, or -1 if it would overflow out_cap.
+fn join_argv_from(out, out_cap, start): i64 {
     var ac = argc();
     var n: i64 = 0;
-    var i = 1;
+    var i = start;
     while (i < ac) {
         var arg = argv(i);
         var alen = strlen(arg);
@@ -33,26 +88,6 @@ fn join_argv(out, out_cap): i64 {
     return n;
 }
 
-fn streq_lit(s, lit): i64 {
-    var sl = strlen(s);
-    var ll = strlen(lit);
-    if (sl != ll) { return 0; }
-    return memeq(s, lit, sl);
-}
-
-fn print_usage(): i64 {
-    println("bnrmr — figlet-equivalent ASCII-art banner generator");
-    println("");
-    println("Usage:");
-    println("  bnrmr TEXT...        render TEXT as a banner");
-    println("  bnrmr --version      print version and exit");
-    println("  bnrmr --help         print this help and exit");
-    println("");
-    println("Coverage (M1): A-Z, 0-9, space. Lowercase is upcased.");
-    println("Other characters render as blank glyphs for now.");
-    return 0;
-}
-
 fn main(): i64 {
     alloc_init();
     args_init();
@@ -65,7 +100,7 @@ fn main(): i64 {
 
     var first = argv(1);
     if (streq_lit(first, "--version") == 1) {
-        println("bnrmr 0.1.0");
+        println("bnrmr 0.2.0");
         return 0;
     }
     if (streq_lit(first, "--help") == 1) {
@@ -73,8 +108,42 @@ fn main(): i64 {
         return 0;
     }
 
+    # Resolve font: default to embedded, or load via --font NAME.
+    var font = 0;
+    var text_start = 1;
+    if (streq_lit(first, "--font") == 1) {
+        if (ac < 3) {
+            println("bnrmr: --font requires a font name");
+            return 1;
+        }
+        var fname = argv(2);
+        var pathbuf[80];
+        var plen = build_font_path(&pathbuf, 80, fname);
+        if (plen <= 0) {
+            println("bnrmr: invalid font name");
+            return 1;
+        }
+        font = font_load_file(&pathbuf);
+        if (font == 0) {
+            println("bnrmr: failed to load font (missing or malformed)");
+            return 1;
+        }
+        text_start = 3;
+    } else {
+        font = block_font_embed();
+        if (font == 0) {
+            println("bnrmr: failed to build embedded font");
+            return 1;
+        }
+    }
+
+    if (text_start >= ac) {
+        print_usage();
+        return 0;
+    }
+
     var buf[1024];
-    var n = join_argv(&buf, 1024);
+    var n = join_argv_from(&buf, 1024, text_start);
     if (n < 0) {
         println("bnrmr: input too long (max 1024 bytes)");
         return 1;
@@ -84,7 +153,7 @@ fn main(): i64 {
         return 0;
     }
 
-    render_block(&buf, n);
+    render(font, &buf, n);
     return 0;
 }
 

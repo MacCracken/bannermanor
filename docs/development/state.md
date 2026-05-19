@@ -5,7 +5,10 @@
 
 ## Version
 
-**0.1.0** — scaffolded 2026-05-19 via `cyrius init bannermanor`. No releases yet.
+**0.2.0** — tagged 2026-05-19. First post-scaffold release; bundles
+M1 (first render path, hardcoded block font, 1 KB input cap, flags
+`--version`/`--help`) and M2 (CYML font format, `fonts/block.cyml`,
+`--font NAME` flag, loader with validation).
 
 ## Toolchain
 
@@ -19,32 +22,46 @@ Single-shot CLI: text in, banner bytes out, exit.
 ## Source
 
 - `src/main.cyr` — entry point; concatenates argv, enforces 1 KB
-  input cap, dispatches to the renderer. Flags: `--version`, `--help`.
-- `src/render.cyr` — M1 render pipeline (block font, fixed 5×5 grid,
-  1-space inter-glyph gap, hard input cap).
-- `src/font_block.cyr` — M1 hardcoded block font (ASCII space, 0–9,
-  A–Z; lowercase folds). Slated for extraction to `fonts/block.cyml`
-  at M2 — see roadmap M2 acceptance.
+  input cap, dispatches to the renderer. Flags: `--version`,
+  `--help`, `--font NAME` (resolves to `fonts/NAME.cyml` relative
+  to cwd).
+- `src/render.cyr` — generic render pipeline. Takes a `Font*`; same
+  code path serves the embedded default and any CYML-loaded font.
+- `src/font.cyr` — `Font` struct + CYML loader (`font_load_file`).
+  Validates file size, schema version, geometry bounds, and body
+  shape; rejects malformed input rather than degrading.
+- `src/font_block.cyr` — embedded "block" font. `block_font_embed()`
+  builds a `Font*` from inline glyph data; this is the default used
+  when no `--font` flag is passed (CLAUDE.md self-contained rule).
+  Mirrors `fonts/block.cyml` byte-for-byte — drift checked in tests.
 
 Planned by milestone:
 
-- `src/font.cyr` — CYML font parser (M2)
 - `src/layout.cyr` — alignment / width / padding (M4)
 - `src/color.cyr` — darshana ANSI routing (M5)
 - `src/flf.cyr` — legacy figlet font adapter (M6)
 
 ## Fonts
 
-_None shipped to `fonts/` yet._ M1 carries the block font in-tree at
-`src/font_block.cyr`; M2 promotes it to `fonts/block.cyml` as the
-first canonical CYML font. M3 broadens to 3–5 fonts total.
+In-tree (`fonts/`):
+
+- `fonts/block.cyml` — block font (5×5), schema 1. Coverage: space,
+  `0`–`9`, `A`–`Z`. Author: BannerManor; license: GPL-3.0-only.
+
+M3 broadens to 3–5 fonts total. Schema and loader contract are
+documented in [`docs/adr/0001-cyml-font-format.md`](../adr/0001-cyml-font-format.md).
 
 ## Tests
 
-- `tests/bannermanor.tcyr` — 260 assertions covering: block_glyph_index
-  (space / digits / uppercase / lowercase folding / unsupported chars),
-  row-shape invariant for every glyph, renderer bounds (negative len,
-  over-cap, way-over-cap). Runs clean.
+- `tests/bannermanor.tcyr` — 1334 assertions covering: embedded font
+  geometry, glyph-index lookup (space / digits / uppercase /
+  lowercase folding / unsupported), row-shape invariant, renderer
+  bounds, CYML loader happy path + missing-file path + malformed
+  fixtures (bad schema, bad body byte, wrong row count), and the M2
+  acceptance check (loaded `fonts/block.cyml` is byte-identical to
+  the embedded font on every char and every row). Runs clean.
+- `tests/fixtures/` — malformed-font fixtures consumed by the loader
+  rejection tests.
 - `tests/bannermanor.bcyr` — benchmark stub
 - `tests/bannermanor.fcyr` — fuzz stub
 
@@ -52,9 +69,9 @@ first canonical CYML font. M3 broadens to 3–5 fonts total.
 
 Direct (declared in `cyrius.cyml`):
 
-- stdlib — string, fmt, alloc, io, vec, str, syscalls, assert, bench, args
+- stdlib — string, fmt, alloc, io, vec, str, syscalls, assert, bench,
+  args, cyml, result
 
-M2 adds `lib/cyml.cyr` for font parsing (already in stdlib path).
 M5 adds `[deps.darshana]` for ANSI color primitives.
 
 ## Consumers
@@ -68,10 +85,5 @@ _None yet._ BannerManor is end-user-facing; consumers will be:
 
 ## Next
 
-M1 work landed on the working tree (render pipeline + block font +
-input cap + tests + flags). Pending before v0.2.0 tag: user-driven
-commit, VERSION bump, and CHANGELOG header rename from `[Unreleased]`
-to `[0.2.0]`. After tag: M2 — CYML font format ADR + parser, and
-extraction of `src/font_block.cyr` into `fonts/block.cyml`.
-
-See [`roadmap.md`](roadmap.md) for the full M2–M8 sequence.
+M3 — broaden `fonts/` to 3–5 opinionated defaults + `--list-fonts`.
+Targets v0.3.0. See [`roadmap.md`](roadmap.md) for the full sequence.
