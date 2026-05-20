@@ -5,10 +5,11 @@
 > in what order, against what dependency gates. State lives in
 > [`state.md`](state.md).
 
-**Currently shipped**: v0.2.0 (M1 + M2 — first render path + CYML font
-format). See CHANGELOG for the details.
+**Currently shipped**: v0.5.0 — M1–M5 (render pipeline, CYML font
+format, default font set, layout flags, color). See CHANGELOG for
+the per-release details.
 
-**Next**: M3 — broaden the default font set.
+**Next**: M6 — legacy `.flf` read adapter.
 
 ## v1.0 criteria
 
@@ -16,57 +17,31 @@ The BannerManor v1.0 contract: figlet feature parity for the
 non-color path, plus optional color via darshana. Stable CYML font
 format. Frozen CLI flag surface.
 
-- [x] Render pipeline + 1 KB input cap (M1, v0.2.0)
-- [x] CYML font format schema documented and frozen (M2, v0.2.0)
-- [ ] CLI flag surface frozen — `--font`, `--width`, `--align`,
-      `--pad`, `--color`, `--list-fonts`, `--help`, `--version`
-- [ ] `fonts/` ships 3–5 opinionated defaults with full ASCII
-      coverage
-- [ ] Optional .flf read path for legacy figlet fonts
-- [ ] Test coverage: every flag + every default font + malformed-
-      font-file path; 100+ assertions (current: 1334)
+- [x] Render pipeline + 1 KB input cap (shipped v0.2.0)
+- [x] CYML font format schema documented and frozen (shipped v0.2.0)
+- [x] `fonts/` ships 3+ opinionated defaults with full printable-ASCII
+      coverage (shipped v0.3.0 — block, slim, big)
+- [x] CLI layout flags: `--align`, `--width`, `--pad` (shipped v0.4.0)
+- [x] Color via darshana: `--color NAME`, `--color rainbow`, TTY
+      auto-suppression (shipped v0.5.0)
+- [ ] CLI flag surface frozen — current set is `--font`, `--width`,
+      `--align`, `--pad`, `--color`, `--list-fonts`, `--help`,
+      `--version` (plus `-f`/`-w`/`-h` short forms). M8 freeze.
+- [ ] Optional .flf read path for legacy figlet fonts (M6)
 - [ ] Benchmarks captured in `docs/benchmarks.md` for render
-      throughput on a representative banner
-- [ ] CHANGELOG complete from v0.1.0 onward
+      throughput on a representative banner (M7)
+- [ ] Maintainer dogfood: BannerManor used in the maintainer's MOTD
+      for one release cycle, real-world bugs filed in
+      `docs/development/issues/` and resolved (M7)
 - [ ] Security audit pass (`docs/audit/YYYY-MM-DD-audit.md`) — input
-      length cap, font-file bounds, output buffer sizing
+      length cap, font-file bounds, output buffer sizing (M7)
+- [ ] CHANGELOG complete from v0.1.0 onward (currently yes; keep so)
 
 ## Milestones
 
 Milestone numbers preserve the historical sequence (M1 / M2 shipped
-in v0.2.0; see CHANGELOG). Versions are targets, not commitments —
-ship-when-ready.
-
-### M3 — Ship default font set (v0.3.0)
-
-Curate 3–5 opinionated fonts that look good. Resist scope creep.
-
-- `fonts/block.cyml`, `fonts/slim.cyml`, `fonts/big.cyml`,
-  `fonts/script.cyml` (final list determined during M3 work)
-- Each font: full ASCII coverage, attribution in font header
-- `bnrmr --list-fonts` prints available fonts + preview line
-- Guide: `docs/guides/fonts.md` — authoring a new CYML font
-- **Dep gate**: M2 (CYML loader + schema, shipped in v0.2.0)
-- **Acceptance**: every shipped font renders "AGNOS" cleanly.
-
-### M4 — Layout flags (v0.4.0)
-
-- `--align left|center|right` — banner alignment within terminal width
-- `--width N` — wrap or truncate at N columns (0 = unlimited)
-- `--pad N` — N rows of vertical padding above + below
-- Tests: every flag combo
-- **Dep gate**: stdlib `lib/args.cyr` + terminal-width detection
-- **Acceptance**: `bnrmr --align center --width 80 "hi"` centers
-  in 80 cols.
-
-### M5 — Color via darshana (v0.5.0)
-
-- `--color <name>` — ANSI-256 colorize the banner via darshana primitives
-- `--color rainbow` — per-row color cycle
-- Auto-detect TTY; suppress colors when stdout isn't a terminal
-- **Dep gate**: darshana ≥ 0.3.0 in `[deps.darshana]`
-- **Acceptance**: `bnrmr --color cyan "AGNOS"` renders colored on
-  TTY, plain on pipe.
+in v0.2.0; M3 in v0.3.0; M4 in v0.4.0; M5 in v0.5.0 — see CHANGELOG).
+Versions are targets, not commitments — ship-when-ready.
 
 ### M6 — Legacy .flf read path (v0.6.0)
 
@@ -77,7 +52,9 @@ figlet font libraries.
 - Read-only — no .flf write path, no .flf authoring docs
 - Bounded parsing (refuse files > 1 MB; refuse malformed headers)
 - Tests on a small set of public-domain figlet fonts
-- **Dep gate**: M3 — the CYML path is the canonical format; .flf is the adapter
+- **Dep gate**: none beyond what's already shipped — the CYML loader
+  + Font struct from M2 are the model; .flf is a parallel input path
+  that produces the same `Font*`.
 - **Acceptance**: a standard `.flf` font renders identically to
   the canonical figlet `figlet` binary on the same input.
 
@@ -86,7 +63,8 @@ figlet font libraries.
 - BannerManor used in the maintainer's MOTD for one release cycle
 - All real-world bugs / font-rendering surprises filed in
   `docs/development/issues/` and resolved
-- P(-1) hardening pass complete — security audit doc filed
+- P(-1) hardening pass complete — security audit doc filed at
+  `docs/audit/YYYY-MM-DD-audit.md`
 - 3-point benchmark trend in `docs/benchmarks.md`
 
 ### M8 — v1.0.0
@@ -111,5 +89,5 @@ The list keeps future contributors from adding to v1.0 by accident.
 
 ## Cross-references
 
-- [`state.md`](state.md) — live status (available fonts, sizes)
-- [`../../CHANGELOG.md`](../../CHANGELOG.md) — release history
+- [`state.md`](state.md) — live status (current version, available fonts, sizes)
+- [`../../CHANGELOG.md`](../../CHANGELOG.md) — release history (shipped milestones)
