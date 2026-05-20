@@ -4,6 +4,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-05-20
+
+Closes M5 — color. `--color NAME` lands with the 16 ANSI named
+foregrounds plus a `rainbow` per-row cycle. SGR primitives are
+sourced from darshana 0.3.5 — no inline ANSI in bnrmr.
+
 ### Added — M5 (color via darshana)
 - `bnrmr --color NAME` — colorize the banner. Accepts the 8 base ANSI
   colors (`black`, `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`,
@@ -36,6 +42,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `lib/darshana.cyr` — vendored from `darshana@0.3.5` via `cyrius
   deps`. Provides `tty_sgr`, `tty_sgr_reset`, and the 16
   `TTY_FG_*` SGR constants.
+- `VERSION` and the `--version` string bumped to `0.5.0`.
 
 ## [0.4.0] — 2026-05-20
 

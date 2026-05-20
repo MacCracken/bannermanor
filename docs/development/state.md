@@ -23,13 +23,13 @@ thin neutral-options wrapper so the M1 byte-identity contract
 holds. `--width N` smaller than one glyph renders nothing —
 documented in `--help` and the layout-module comments.
 
-**Unreleased** — M5 (color via darshana) done. Ships `--color NAME`
-covering the 16 ANSI named foreground colors + `rainbow` (per-row
-6-color cycle). SGR sequences route through darshana 0.3.5's new
-`tty_sgr` / `tty_sgr_reset` primitives — no inline ANSI in bnrmr.
-Stdout TTY detection via TIOCGWINSZ: piped output gets plain bytes,
-TTY output gets color. New `src/color.cyr` module; `render_layout`
-gained a 7th `color` parameter.
+**0.5.0** — tagged 2026-05-20. Closes M5 (color via darshana).
+Ships `--color NAME` covering the 16 ANSI named foreground colors
++ `rainbow` (per-row 6-color cycle). SGR sequences route through
+darshana 0.3.5's `tty_sgr` / `tty_sgr_reset` primitives — no inline
+ANSI in bnrmr. Stdout TTY detection via TIOCGWINSZ: piped output
+gets plain bytes, TTY output gets color. New `src/color.cyr`
+module; `render_layout` gained a 7th `color` parameter.
 
 **0.2.0** — tagged 2026-05-19. First post-scaffold release; bundles
 M1 (first render path, hardcoded block font, 1 KB input cap, flags

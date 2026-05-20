@@ -273,7 +273,7 @@ fn main(): i64 {
         return 0;
     }
     if (flags_get_bool(fs, f_version) == 1) {
-        println("bnrmr 0.4.0");
+        println("bnrmr 0.5.0");
         return 0;
     }
     if (flags_get_bool(fs, f_list) == 1) {
