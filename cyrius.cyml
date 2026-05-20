@@ -15,10 +15,8 @@ output = "bnrmr"
 stdlib = ["string", "fmt", "alloc", "io", "vec", "str", "syscalls", "assert", "bench", "args", "cyml", "result", "flags"]
 
 [deps.darshana]
-# Path-based during development so we can iterate on darshana 0.3.5
-# (SGR helpers) in the same session. Switch to git+tag at release-cut
-# time once 0.3.5 is pushed:
-#   git = "https://github.com/MacCracken/darshana.git"
-#   tag = "0.3.5"
-path = "../darshana"
+# SGR primitives (tty_sgr, tty_sgr_reset, TTY_FG_*) for --color.
+# Pinned at the version that first shipped the SGR surface.
+git = "https://github.com/MacCracken/darshana.git"
+tag = "0.3.5"
 modules = ["dist/darshana.cyr"]
