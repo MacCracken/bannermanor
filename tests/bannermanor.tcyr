@@ -189,6 +189,38 @@ fn t_load_malformed() {
     assert_eq(font_load_file("tests/fixtures/wrong_row_count.cyml"), 0, "wrong row count -> 0");
 }
 
+# ---- header loader (M3, --list-fonts) ----
+
+fn t_header_load_block() {
+    test_group("font_header_load / fonts/block.cyml");
+    var h = font_header_load("fonts/block.cyml");
+    assert(h != 0, "header loaded");
+    assert_eq(font_hdr_width(h),  5, "header width = 5");
+    assert_eq(font_hdr_height(h), 5, "header height = 5");
+    assert_eq(font_hdr_gap(h),    1, "header gap = 1");
+    var name = font_hdr_name(h);
+    assert_eq(strlen(name), 5, "name length = 5");
+    assert_eq(memeq(name, "block", 5), 1, "name = block");
+    var desc = font_hdr_desc(h);
+    assert(strlen(desc) > 0, "description present");
+}
+
+fn t_header_load_missing() {
+    test_group("font_header_load / missing");
+    assert_eq(font_header_load("fonts/__nope__.cyml"), 0, "missing -> 0");
+}
+
+fn t_header_load_malformed() {
+    test_group("font_header_load / malformed");
+    # The header loader validates schema + geometry — same gates as the
+    # full loader — so the bad_schema fixture should be rejected. The
+    # body-shape fixtures (bad_body_byte, wrong_row_count) only fail at
+    # glyph decode, which the header loader skips, so they should pass
+    # — that's by design (header preview shouldn't require body-shape
+    # validity). Just cover the bad_schema rejection here.
+    assert_eq(font_header_load("tests/fixtures/bad_schema.cyml"), 0, "bad schema -> 0");
+}
+
 fn main() {
     alloc_init();
     t_smoke();
@@ -204,6 +236,9 @@ fn main() {
     t_loaded_matches_embedded();
     t_load_missing();
     t_load_malformed();
+    t_header_load_block();
+    t_header_load_missing();
+    t_header_load_malformed();
     return assert_summary();
 }
 

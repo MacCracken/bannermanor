@@ -35,7 +35,31 @@ enum FontLimits {
     MAX_HEIGHT = 32;
     MAX_GLYPHS = 256;           # capped by lib/cyml.cyr parser
     SUPPORTED_SCHEMA = 1;
+    HDR_NAME_CAP = 64;          # font name buffer (NUL-terminated)
+    HDR_DESC_CAP = 256;         # font description buffer (NUL-terminated)
 }
+
+# FontHeader struct (40 bytes) — just enough to print a --list-fonts line
+# without paying for full glyph decode. Layout:
+#    0: width
+#    8: height
+#   16: gap
+#   24: name_buf (alloc'd, NUL-terminated, ≤ HDR_NAME_CAP bytes)
+#   32: desc_buf (alloc'd, NUL-terminated, ≤ HDR_DESC_CAP bytes)
+enum FontHdrField {
+    H_WIDTH = 0;
+    H_HEIGHT = 8;
+    H_GAP = 16;
+    H_NAME = 24;
+    H_DESC = 32;
+    H_SIZE = 40;
+}
+
+fn font_hdr_width(h): i64  { return load64(h); }
+fn font_hdr_height(h): i64 { return load64(h + 8); }
+fn font_hdr_gap(h): i64    { return load64(h + 16); }
+fn font_hdr_name(h): i64   { return load64(h + 24); }   # cstring
+fn font_hdr_desc(h): i64   { return load64(h + 32); }   # cstring
 
 # ---- accessors ----
 
@@ -347,4 +371,148 @@ fn font_load_file(path): i64 {
     }
     if (err == 1) { return 0; }
     return f;
+}
+
+# Find `key = "value"` in a TOML-style header buffer and copy `value`
+# bytes into dst (NUL-terminated, capped at dst_cap-1). Returns the
+# value length on success, -1 if not found or value exceeds the cap.
+# Used by font_header_load for `name = "..."` and `description = "..."`.
+fn _font_get_str(hdr, hlen, key, key_len, dst, dst_cap): i64 {
+    var i = 0;
+    var found_len = 0 - 1;
+    while (i < hlen && found_len < 0) {
+        # skip leading ws
+        var ls = 1;
+        while (i < hlen && ls == 1) {
+            var c = load8(hdr + i);
+            if (c == 32) { i = i + 1; }
+            else { if (c == 9) { i = i + 1; }
+            else { ls = 0; } }
+        }
+        if (i + key_len < hlen) {
+            if (memeq(hdr + i, key, key_len) == 1) {
+                var nc = load8(hdr + i + key_len);
+                if (nc == 32 || nc == 9 || nc == 61) {
+                    var p = i + key_len;
+                    var sk = 1;
+                    while (p < hlen && sk == 1) {
+                        var c = load8(hdr + p);
+                        if (c == 32) { p = p + 1; }
+                        else { if (c == 9) { p = p + 1; }
+                        else { sk = 0; } }
+                    }
+                    if (p < hlen) {
+                        if (load8(hdr + p) == 61) {
+                            p = p + 1;
+                            var sk2 = 1;
+                            while (p < hlen && sk2 == 1) {
+                                var c = load8(hdr + p);
+                                if (c == 32) { p = p + 1; }
+                                else { if (c == 9) { p = p + 1; }
+                                else { sk2 = 0; } }
+                            }
+                            # expect opening quote
+                            if (p < hlen) {
+                                if (load8(hdr + p) == 34) {
+                                    p = p + 1;
+                                    var start = p;
+                                    var sc = 1;
+                                    while (p < hlen && sc == 1) {
+                                        var c = load8(hdr + p);
+                                        if (c == 34) { sc = 0; }
+                                        else { if (c == 10) { sc = 0; }
+                                        else { p = p + 1; } }
+                                    }
+                                    if (p < hlen) {
+                                        if (load8(hdr + p) == 34) {
+                                            var vlen = p - start;
+                                            if (vlen < dst_cap) {
+                                                memcpy(dst, hdr + start, vlen);
+                                                store8(dst + vlen, 0);
+                                                found_len = vlen;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        # advance to next line
+        var le = 1;
+        while (i < hlen && le == 1) {
+            var c = load8(hdr + i);
+            i = i + 1;
+            if (c == 10) { le = 0; }
+        }
+    }
+    return found_len;
+}
+
+# Load only the [font] file header from a CYML font file. Cheaper than
+# font_load_file: no glyph decode, no rows allocation. Used by
+# --list-fonts. Returns FontHeader* on success, 0 on error.
+#
+# Validates the same geometry bounds as font_load_file so a header
+# loaded here is "trustworthy enough to print." Missing optional fields
+# (description) become empty strings.
+fn font_header_load(path): i64 {
+    var fd = syscall(2, path, 0, 0);
+    if (fd < 0) { return 0; }
+    var buf = alloc(65536);
+    if (buf == 0) { syscall(3, fd); return 0; }
+    var total = 0;
+    var rgo = 1;
+    while (rgo == 1) {
+        var n = syscall(0, fd, buf + total, 65536 - total);
+        if (n <= 0) { rgo = 0; }
+        else {
+            total = total + n;
+            if (total >= 65536) { rgo = 0; }
+        }
+    }
+    syscall(3, fd);
+    if (total <= 0) { return 0; }
+    if (total >= 65536) { return 0; }
+
+    var doc = cyml_parse(buf, total);
+    if (doc == 0) { return 0; }
+
+    var fhdr = cyml_doc_header(doc);
+    var fhlen = cyml_doc_header_len(doc);
+    var schema = _font_get_int(fhdr, fhlen, "schema", 6);
+    var width  = _font_get_int(fhdr, fhlen, "width", 5);
+    var height = _font_get_int(fhdr, fhlen, "height", 6);
+    var gap    = _font_get_int(fhdr, fhlen, "gap", 3);
+    if (schema != 1) { return 0; }
+    if (width <= 0)  { return 0; }
+    if (width > 64)  { return 0; }
+    if (height <= 0) { return 0; }
+    if (height > 32) { return 0; }
+    if (gap < 0)     { return 0; }
+    if (gap > 16)    { return 0; }
+
+    var h = alloc(40);
+    if (h == 0) { return 0; }
+    var name_buf = alloc(64);
+    if (name_buf == 0) { return 0; }
+    var desc_buf = alloc(256);
+    if (desc_buf == 0) { return 0; }
+    store8(name_buf, 0);
+    store8(desc_buf, 0);
+
+    # name is required by the ADR; description is optional.
+    if (_font_get_str(fhdr, fhlen, "name", 4, name_buf, 64) < 0) {
+        return 0;
+    }
+    _font_get_str(fhdr, fhlen, "description", 11, desc_buf, 256);
+
+    store64(h, width);
+    store64(h + 8, height);
+    store64(h + 16, gap);
+    store64(h + 24, name_buf);
+    store64(h + 32, desc_buf);
+    return h;
 }

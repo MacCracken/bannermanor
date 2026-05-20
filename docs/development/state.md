@@ -10,6 +10,11 @@ M1 (first render path, hardcoded block font, 1 KB input cap, flags
 `--version`/`--help`) and M2 (CYML font format, `fonts/block.cyml`,
 `--font NAME` flag, loader with validation).
 
+**Unreleased** — M3 in progress. `--list-fonts` flag + header-only
+loader are wired; remaining: full-ASCII coverage in `block.cyml`,
+additional default fonts, `docs/guides/fonts.md`. See `CHANGELOG.md`
+`[Unreleased]` for the running list.
+
 ## Toolchain
 
 - **Cyrius pin**: `6.0.0` (in `cyrius.cyml [package].cyrius`)
@@ -24,12 +29,15 @@ Single-shot CLI: text in, banner bytes out, exit.
 - `src/main.cyr` — entry point; concatenates argv, enforces 1 KB
   input cap, dispatches to the renderer. Flags: `--version`,
   `--help`, `--font NAME` (resolves to `fonts/NAME.cyml` relative
-  to cwd).
+  to cwd), `--list-fonts` (alphabetic listing of `./fonts/*.cyml`
+  with geometry + description from each font header).
 - `src/render.cyr` — generic render pipeline. Takes a `Font*`; same
   code path serves the embedded default and any CYML-loaded font.
 - `src/font.cyr` — `Font` struct + CYML loader (`font_load_file`).
   Validates file size, schema version, geometry bounds, and body
-  shape; rejects malformed input rather than degrading.
+  shape; rejects malformed input rather than degrading. Also
+  exposes `font_header_load()` — a lightweight header-only loader
+  used by `--list-fonts`.
 - `src/font_block.cyr` — embedded "block" font. `block_font_embed()`
   builds a `Font*` from inline glyph data; this is the default used
   when no `--font` flag is passed (CLAUDE.md self-contained rule).
@@ -53,13 +61,15 @@ documented in [`docs/adr/0001-cyml-font-format.md`](../adr/0001-cyml-font-format
 
 ## Tests
 
-- `tests/bannermanor.tcyr` — 1334 assertions covering: embedded font
+- `tests/bannermanor.tcyr` — 1343 assertions covering: embedded font
   geometry, glyph-index lookup (space / digits / uppercase /
   lowercase folding / unsupported), row-shape invariant, renderer
   bounds, CYML loader happy path + missing-file path + malformed
-  fixtures (bad schema, bad body byte, wrong row count), and the M2
+  fixtures (bad schema, bad body byte, wrong row count), the M2
   acceptance check (loaded `fonts/block.cyml` is byte-identical to
-  the embedded font on every char and every row). Runs clean.
+  the embedded font on every char and every row), and the M3 header
+  loader (fields on `block.cyml`, missing-file, bad-schema rejection).
+  Runs clean.
 - `tests/fixtures/` — malformed-font fixtures consumed by the loader
   rejection tests.
 - `tests/bannermanor.bcyr` — benchmark stub
@@ -85,5 +95,7 @@ _None yet._ BannerManor is end-user-facing; consumers will be:
 
 ## Next
 
-M3 — broaden `fonts/` to 3–5 opinionated defaults + `--list-fonts`.
-Targets v0.3.0. See [`roadmap.md`](roadmap.md) for the full sequence.
+M3 continues — broaden `fonts/` to 3–5 opinionated defaults with full
+printable-ASCII coverage, plus `docs/guides/fonts.md`. `--list-fonts`
+already wired against the current default-only font set. Targets
+v0.3.0. See [`roadmap.md`](roadmap.md) for the full sequence.

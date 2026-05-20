@@ -4,6 +4,21 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added — M3 (partial: --list-fonts)
+- `bnrmr --list-fonts` lists fonts in `./fonts`, alphabetically, with
+  geometry (`WxH gap=N`) and description pulled from each font's `[font]`
+  header. Malformed font files are surfaced as `(malformed — skipped)`
+  rather than aborting the listing.
+- `src/font.cyr` — `font_header_load(path)` lightweight loader. Parses
+  only the `[font]` file header, validates schema + geometry, and
+  returns a `FontHeader*` carrying width / height / gap / name /
+  description. Skips glyph decode (cheaper than `font_load_file`).
+- `src/font.cyr` — `_font_get_str()` TOML-style `key = "value"` parser
+  used by the header loader.
+- `tests/bannermanor.tcyr` — coverage for `font_header_load` happy path
+  (fields on `fonts/block.cyml`), missing-file rejection, and bad-schema
+  rejection. 1343 assertions (up from 1334).
+
 ## [0.2.0] — 2026-05-19
 
 First post-scaffold release. Bundles milestones M1 (first render path)

@@ -11,6 +11,8 @@
 
 include "src/render.cyr"
 include "src/font_block.cyr"
+include "lib/fs.cyr"
+include "lib/fmt.cyr"
 
 enum MainLimits {
     BUF_CAP = 1024;
@@ -58,11 +60,116 @@ fn print_usage(): i64 {
     println("Usage:");
     println("  bnrmr TEXT...           render TEXT with the default font");
     println("  bnrmr --font NAME TEXT  render TEXT with fonts/NAME.cyml");
+    println("  bnrmr --list-fonts      list available fonts in ./fonts");
     println("  bnrmr --version         print version and exit");
     println("  bnrmr --help            print this help and exit");
     println("");
     println("Coverage (M2): A-Z, 0-9, space. Lowercase is upcased.");
     println("Other characters render as blank glyphs.");
+    return 0;
+}
+
+# Lexicographic Str compare (byte-wise). Returns <0 / 0 / >0.
+fn _str_lex_cmp(a, b): i64 {
+    var al = str_len(a);
+    var bl = str_len(b);
+    var ad = str_data(a);
+    var bd = str_data(b);
+    var n = al;
+    if (bl < n) { n = bl; }
+    var i = 0;
+    while (i < n) {
+        var ac = load8(ad + i);
+        var bc = load8(bd + i);
+        if (ac != bc) { return ac - bc; }
+        i = i + 1;
+    }
+    return al - bl;
+}
+
+# Insertion sort vec of Str in place. Fine for 3–5 fonts.
+fn _sort_paths(v): i64 {
+    var n = vec_len(v);
+    var i = 1;
+    while (i < n) {
+        var cur = vec_get(v, i);
+        var j = i - 1;
+        var done = 0;
+        while (j >= 0 && done == 0) {
+            var prev = vec_get(v, j);
+            if (_str_lex_cmp(prev, cur) > 0) {
+                vec_set(v, j + 1, prev);
+                j = j - 1;
+            } else { done = 1; }
+        }
+        vec_set(v, j + 1, cur);
+        i = i + 1;
+    }
+    return 0;
+}
+
+# Print a cstring padded with trailing spaces to width `w`. If the
+# cstring is already >= w bytes, prints it as-is followed by a single
+# space (so adjacent columns don't collide).
+fn _print_padded(cstr, w): i64 {
+    var n = strlen(cstr);
+    syscall(1, 1, cstr, n);
+    if (n >= w) {
+        syscall(1, 1, " ", 1);
+        return 0;
+    }
+    var pad = w - n;
+    while (pad > 0) {
+        syscall(1, 1, " ", 1);
+        pad = pad - 1;
+    }
+    return 0;
+}
+
+# --list-fonts handler. Walks ./fonts, sorts alphabetically, prints
+# one line per font: "  NAME  WxH gap=N  DESCRIPTION".
+# Returns 0 on success (incl. empty fonts/ dir), 1 on internal error.
+fn cmd_list_fonts(): i64 {
+    var dir = str_from("fonts");
+    var ext = str_from(".cyml");
+    var files = find_files(dir, ext);
+    _sort_paths(files);
+
+    println("Available fonts (fonts/):");
+    println("");
+
+    var nf = vec_len(files);
+    if (nf == 0) {
+        println("  (none found — try running from the project root)");
+        return 0;
+    }
+
+    var i = 0;
+    while (i < nf) {
+        var path_str = vec_get(files, i);
+        var path_cstr = str_cstr(path_str);
+        var h = font_header_load(path_cstr);
+        if (h == 0) {
+            # Malformed font — surface the path but skip.
+            syscall(1, 1, "  ", 2);
+            syscall(1, 1, str_data(path_str), str_len(path_str));
+            println("  (malformed — skipped)");
+        } else {
+            syscall(1, 1, "  ", 2);
+            _print_padded(font_hdr_name(h), 10);
+            syscall(1, 1, " ", 1);
+            fmt_int(font_hdr_width(h));
+            syscall(1, 1, "x", 1);
+            fmt_int(font_hdr_height(h));
+            syscall(1, 1, " gap=", 5);
+            fmt_int(font_hdr_gap(h));
+            syscall(1, 1, "  ", 2);
+            var desc = font_hdr_desc(h);
+            syscall(1, 1, desc, strlen(desc));
+            syscall(1, 1, "\n", 1);
+        }
+        i = i + 1;
+    }
     return 0;
 }
 
@@ -106,6 +213,9 @@ fn main(): i64 {
     if (streq_lit(first, "--help") == 1) {
         print_usage();
         return 0;
+    }
+    if (streq_lit(first, "--list-fonts") == 1) {
+        return cmd_list_fonts();
     }
 
     # Resolve font: default to embedded, or load via --font NAME.
