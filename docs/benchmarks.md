@@ -75,9 +75,38 @@ scan to a single pass.
 100 `fit_chars` calls in 587 ns = **5.87 ns per call**. Pure integer
 math; this should stay flat unless someone refactors the formula.
 
-### Point 2 — 0.8.0 (pending)
+### Point 2 — 0.8.0
 
-Run after the next code release; capture deltas against Point 1.
+**Captured**: 2026-05-20
+**Toolchain**: cyrius 6.0.1
+**Host**: archaemenid (AMD Ryzen 7 5800H, Linux 7.0.5)
+**Code delta vs 0.7.0**: F-002 parser overflow caps (one extra
+`n > PARSER_INT_CAP` comparison per digit in `parse_uint`,
+`_font_get_int`, `_flf_take_int`) + F-008 `ws_col` clamp at 4096.
+Both are hot-path defense-in-depth.
+
+| ID | Subject | 0.8.0 avg | Δ vs 0.7.0 | iters |
+|----|---------|-----------|------------|-------|
+| B1 | `block_font_embed` | **6 ns** | −1 ns (−14%) | 10 000 |
+| B2 | `font_load_file(block.cyml)` | **58 µs** | −10 µs (−15%) | 1 000 |
+| B3 | `fit_chars ×100` | **572 ns** | −15 ns (−3%) | 100 000 |
+
+#### Reading the deltas
+
+All three subjects got nominally *faster*, which is at first
+counterintuitive — F-002 added a comparison to every digit consumed
+in three parsers. Two explanations, neither alarming:
+
+- **Single-batch run-to-run noise.** Each batch totals 50–70 ms of
+  wall time on a laptop with frequency scaling and background load;
+  ±15% drift batch-to-batch is normal. The benchmark trend is for
+  catching order-of-magnitude regressions, not 10% movement.
+- **B1 stays suspiciously fast.** Still consistent with the
+  hoisting-out-of-loop hypothesis noted at Point 1. The hoist
+  apparently survived the source change.
+
+Verdict: **no regression**. Parser overflow guards cost less than
+the bench-frame noise floor on this hardware.
 
 ### Point 3 — 0.9.0 (pending)
 

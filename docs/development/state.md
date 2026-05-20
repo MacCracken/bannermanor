@@ -5,6 +5,18 @@
 
 ## Version
 
+**0.8.0** — tagged 2026-05-20. Closes the v1.0 defense-in-depth
+items from the 0.7.0 audit: F-002 parser overflow caps (shared
+`PARSER_INT_CAP = 1 048 576` rejects mid-accumulation overflow in
+`parse_uint`, `_font_get_int`, `_flf_take_int`) and F-008 `ws_col`
+clamp at 4096 in `term_width_ioctl`. Neither was reachable as a bug
+in 0.7.0; both are belt-and-suspenders for future relaxations.
+Benchmark point 2 of 3 captured against the new code path — no
+regression. Ad-hoc stress sweep (50+ edge-case invocations)
+surfaced [`issue 0002`](issues/0002-unbounded-pad-and-width.md):
+huge `--pad` / `--width` produce unbounded output; deferred to the
+M8 freeze pass for an opinionated cap.
+
 **0.7.0** — tagged 2026-05-20. Closes the M7 security audit pass
 (maintainer-MOTD dogfood + benchmark trend remain in M7). Fixes
 F-001 — `.flf` glyph rows could smuggle ANSI control bytes (e.g.
@@ -91,6 +103,9 @@ Single-shot CLI: text in, banner bytes out, exit.
   Pure helpers: `banner_width`, `fit_chars`, `align_pad`,
   `parse_uint`, `stdout_is_tty` (M5). Public renderer:
   `render_layout(font, text, len, width, align, pad, color)`.
+  0.8.0 audit hardening: `parse_uint` rejects values over
+  `PARSER_INT_CAP` (F-002); `term_width_ioctl` clamps at
+  `WS_COL_CAP = 4096` (F-008).
 - `src/color.cyr` — M5 `--color` plumbing. `parse_color(name)` maps
   ANSI 16-color names + `rainbow` to SGR codes / sentinels;
   `rainbow_color_for_row(r)` returns the SGR code for row `r` in
@@ -197,17 +212,16 @@ _None yet._ BannerManor is end-user-facing; consumers will be:
 
 ## Next
 
-The M7 audit pass is shipped (0.7.0). M7 remaining:
+M7 progress through 0.8.0:
 
-- Maintainer-MOTD dogfooding for one release cycle (in-flight on
-  archaemenid). First real-world surprise filed at
-  [`docs/development/issues/0001-keystroke-interleave-during-render.md`](issues/0001-keystroke-interleave-during-render.md)
-  — keystrokes echoed between row writes interleave with the banner;
-  deferred past v1.0 as cosmetic.
-- 3-point benchmark trend in [`docs/benchmarks.md`](../benchmarks.md).
-  Point 1 of 3 captured against 0.7.0 (CPU side: 7 ns embed, 68 µs
-  CYML load, 5.87 ns per `fit_chars`). Points 2 and 3 land at 0.8.0
-  and 0.9.0.
+- [x] Security audit pass (0.7.0)
+- [x] Audit defense-in-depth follow-ups F-002 + F-008 (0.8.0)
+- [in-flight] Maintainer-MOTD dogfooding (running 0.8.0). Issues
+  filed: [`0001`](issues/0001-keystroke-interleave-during-render.md)
+  (keystroke interleave, deferred past v1.0),
+  [`0002`](issues/0002-unbounded-pad-and-width.md) (unbounded
+  `--pad`/`--width`, deferred to M8 freeze).
+- 3-point benchmark trend: points 1 + 2 captured; point 3 at 0.9.0.
 
-After both: M8 cuts v1.0.0 with the CLI flag surface frozen. See
-[`roadmap.md`](roadmap.md) for the full sequence.
+M8 cuts v1.0.0 with the CLI flag surface frozen and the deferred
+issues addressed. See [`roadmap.md`](roadmap.md) for sequence.

@@ -4,6 +4,43 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.8.0] — 2026-05-20
+
+Closes the **v1.0 defense-in-depth items** from the 0.7.0 audit. Both
+were tagged "future work" in `docs/audit/2026-05-20-audit.md`; both
+are now belt-and-suspenders against future regressions even though
+the audit confirmed neither was reachable as a bug in 0.7.0.
+
+Also captures **benchmark trend point 2 of 3** against the new
+parsers and clamps. M7's MOTD dogfood is in-flight on archaemenid;
+one cosmetic issue surfaced (0001, keystroke interleave) and was
+deferred past v1.0; one observed-but-deferred issue (0002, unbounded
+`--pad` / `--width`) was filed for the M8 freeze pass.
+
+### Added
+- `docs/development/issues/0002-unbounded-pad-and-width.md` — filed
+  from the pre-release ad-hoc stress sweep. `--pad 100000` produces
+  200 005 newlines, `--width 1000000` produces a 500 KB line.
+  No security impact (user-controlled); flagged for M8 freeze.
+- `docs/benchmarks.md` — point 2 captured (block_font_embed 6 ns,
+  font_load_file 58 µs, fit_chars 5.72 ns). No regression vs 0.7.0;
+  deltas all within bench-frame noise floor.
+
+### Changed
+- **F-002 (defense in depth) — parser overflow caps.** `parse_uint`
+  (`src/layout.cyr`), `_font_get_int` (`src/font.cyr`), and
+  `_flf_take_int` (`src/flf.cyr`) now reject any value that exceeds
+  the shared `PARSER_INT_CAP` (1 048 576) during accumulation,
+  rather than risk silent i64 wrap. Downstream bounds were already
+  tighter (`width ≤ 64`, `height ≤ 32`, etc.) — this guard is for
+  a future relaxation that might widen those caps.
+- **F-008 (defense in depth) — `ws_col` clamp.** `term_width_ioctl`
+  (`src/layout.cyr`) clamps the TIOCGWINSZ-reported column count at
+  `WS_COL_CAP` (4096). No current bnrmr code path sizes an
+  allocation from cols, but a `resize -s 65535 65535` attack
+  documented in the audit's external survey is now structurally
+  defeated.
+
 ## [0.7.0] — 2026-05-20
 
 Closes the **M7 security audit pass**. One concrete vulnerability

@@ -37,6 +37,15 @@ enum FontLimits {
     SUPPORTED_SCHEMA = 1;
     HDR_NAME_CAP = 64;          # font name buffer (NUL-terminated)
     HDR_DESC_CAP = 256;         # font description buffer (NUL-terminated)
+    PARSER_INT_CAP = 1048576;   # F-002 — shared cap for hand-written
+                                # integer parsers (parse_uint in
+                                # layout.cyr, _font_get_int here,
+                                # _flf_take_int in flf.cyr). Above
+                                # this, return -1 rather than risk
+                                # silent i64 wrap. Downstream bounds
+                                # (width≤64 etc.) are already tighter;
+                                # this is belt-and-suspenders for a
+                                # future relaxation.
 }
 
 # FontHeader struct (40 bytes) — just enough to print a --list-fonts line
@@ -182,18 +191,21 @@ fn _font_get_int(hdr, hlen, key, key_len): i64 {
                             }
                             var n = 0;
                             var any = 0;
+                            var ovf = 0;
                             var d = 1;
                             while (p < hlen && d == 1) {
                                 var c = load8(hdr + p);
                                 if (c >= 48) {
                                     if (c <= 57) {
                                         n = n * 10 + (c - 48);
+                                        if (n > PARSER_INT_CAP) { ovf = 1; d = 0; }
                                         any = 1;
                                         p = p + 1;
                                     } else { d = 0; }
                                 } else { d = 0; }
                             }
-                            if (any == 1) { found = n; }
+                            # F-002 — reject overflow rather than wrap.
+                            if (any == 1 && ovf == 0) { found = n; }
                         }
                     }
                 }

@@ -27,7 +27,16 @@ enum LayoutLimits {
     TIOCGWINSZ   = 0x5413;    # ioctl request; struct winsize is 4×u16
     WS_ROW_OFF   = 0;
     WS_COL_OFF   = 2;
+    WS_COL_CAP   = 4096;      # F-008 — clamp terminal cols. Defense in
+                              # depth: nothing in bnrmr currently sizes
+                              # an allocation from cols, but a future
+                              # caller that did could be tripped by a
+                              # `resize -s 65535 65535` attack.
 }
+# F-002 — shared overflow cap for hand-written integer parsers
+# (parse_uint here, _font_get_int in font.cyr, _flf_take_int in
+# flf.cyr) is defined in src/font.cyr's FontLimits enum, since
+# layout.cyr / font.cyr / flf.cyr all transitively include font.cyr.
 
 enum AlignKind {
     ALIGN_LEFT   = 0;
@@ -36,8 +45,8 @@ enum AlignKind {
 }
 
 # Parse a NUL-terminated decimal cstring into a non-negative int.
-# Returns -1 if the string is empty or contains a non-digit byte.
-# Stops at NUL.
+# Returns -1 if the string is empty, contains a non-digit byte, or
+# would exceed PARSER_INT_CAP (F-002 overflow guard). Stops at NUL.
 fn parse_uint(cstr): i64 {
     if (cstr == 0) { return 0 - 1; }
     var n = 0;
@@ -50,6 +59,7 @@ fn parse_uint(cstr): i64 {
         else {
             if (c < 48 || c > 57) { return 0 - 1; }
             n = n * 10 + (c - 48);
+            if (n > PARSER_INT_CAP) { return 0 - 1; }
             any = 1;
             i = i + 1;
             c = load8(cstr + i);
@@ -60,7 +70,9 @@ fn parse_uint(cstr): i64 {
 }
 
 # Detect terminal width on stdout via TIOCGWINSZ. Returns columns,
-# or 0 if stdout is not a TTY / ioctl fails.
+# or 0 if stdout is not a TTY / ioctl fails. F-008: clamp at WS_COL_CAP
+# so a `resize -s 65535 65535` attack can't propagate hostile width
+# into anything downstream that sizes from cols.
 fn term_width_ioctl(): i64 {
     var ws[8];                          # 4×u16: rows, cols, xpix, ypix
     store64(&ws, 0);
@@ -68,6 +80,7 @@ fn term_width_ioctl(): i64 {
     if (r != 0) { return 0; }
     var cols = load16(&ws + WS_COL_OFF);
     if (cols <= 0) { return 0; }
+    if (cols > WS_COL_CAP) { return WS_COL_CAP; }
     return cols;
 }
 
