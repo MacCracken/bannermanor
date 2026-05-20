@@ -264,6 +264,34 @@ fn t_header_load_missing() {
     assert_eq(font_header_load("fonts/__nope__.cyml"), 0, "missing -> 0");
 }
 
+fn t_load_big_cyml() {
+    test_group("font_load_file / fonts/big.cyml");
+    var f = font_load_file("fonts/big.cyml");
+    assert(f != 0, "loaded");
+    assert_eq(font_width(f),  7,  "big width = 7");
+    assert_eq(font_height(f), 7,  "big height = 7");
+    assert_eq(font_gap(f),    1,  "big gap = 1");
+    assert_eq(font_count(f),  69, "big count = 69 (full printable ASCII)");
+
+    # Every printable-ASCII char resolves.
+    var c = 32;
+    while (c <= 126) {
+        assert(font_glyph_index(f, c) >= 0, "printable char resolves");
+        c = c + 1;
+    }
+
+    # AGNOS acceptance.
+    assert(font_glyph_index(f, 65) >= 0, "A resolves");
+    assert(font_glyph_index(f, 71) >= 0, "G resolves");
+    assert(font_glyph_index(f, 78) >= 0, "N resolves");
+    assert(font_glyph_index(f, 79) >= 0, "O resolves");
+    assert(font_glyph_index(f, 83) >= 0, "S resolves");
+
+    # Fold-fallback: 'a' must resolve to 'A''s glyph.
+    assert_eq(font_glyph_index(f, 97), font_glyph_index(f, 65),
+              "'a' folds to 'A' on big");
+}
+
 fn t_load_slim_cyml() {
     test_group("font_load_file / fonts/slim.cyml");
     var f = font_load_file("fonts/slim.cyml");
@@ -322,6 +350,7 @@ fn main() {
     t_load_missing();
     t_load_malformed();
     t_load_slim_cyml();
+    t_load_big_cyml();
     t_header_load_block();
     t_header_load_missing();
     t_header_load_malformed();

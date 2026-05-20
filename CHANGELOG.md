@@ -25,6 +25,11 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   Full printable ASCII coverage (69 glyphs), uppercase-only with
   fold-fallback for lowercase. Reachable via `bnrmr --font slim TEXT`
   and listed by `bnrmr --list-fonts`.
+- `fonts/big.cyml` — third in-tree default font. 7×7, gap=1; chunky
+  banner option, ~96% more cells per glyph than block. Full printable
+  ASCII coverage (69 glyphs), uppercase-only with fold-fallback for
+  lowercase. Closes the M3 default-font set at three (small / medium
+  / large at distinct sizes).
 - `src/font_block.cyr` — mirrors the new glyphs byte-for-byte; the
   M2 acceptance test now covers 69 glyphs × 5 rows. `_block_raw_row`
   was split into `_block_raw_row_lo` (idx 0–36) and `_block_raw_row_hi`
@@ -34,8 +39,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `tests/bannermanor.tcyr` — `font_header_load` happy path / missing
   file / bad-schema rejection; `t_glyph_punctuation` covering all 32
   new chars; `t_glyph_fold_is_fallback` pinning the fold-fallback
-  semantics; `t_load_slim_cyml` validating slim's geometry and full
-  printable-ASCII coverage. 2467 assertions (up from 1334).
+  semantics; `t_load_slim_cyml` and `t_load_big_cyml` each validating
+  geometry and full printable-ASCII coverage on the new fonts. 2573
+  assertions (up from 1334).
 
 ### Changed — M3
 - `font_glyph_index` lowercase fold is now a **fallback**: a font that
