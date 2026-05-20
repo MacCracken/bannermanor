@@ -168,7 +168,11 @@ authoring walkthrough at [`docs/guides/fonts.md`](../guides/fonts.md).
   space, not 0x1B). Runs clean.
 - `tests/fixtures/` — malformed-font fixtures consumed by the loader
   rejection tests (both CYML and .flf variants).
-- `tests/bannermanor.bcyr` — benchmark stub
+- `tests/bannermanor.bcyr` — render hot-path CPU benchmarks (B1
+  `block_font_embed`, B2 `font_load_file(block.cyml)`, B3
+  `fit_chars` ×100). Run via `cyrius bench tests/bannermanor.bcyr`.
+  Trend lives in [`docs/benchmarks.md`](../benchmarks.md); point 1
+  of 3 captured against 0.7.0.
 - `tests/bannermanor.fcyr` — fuzz stub
 
 ## Dependencies
@@ -193,8 +197,17 @@ _None yet._ BannerManor is end-user-facing; consumers will be:
 
 ## Next
 
-The M7 audit pass is shipped (0.7.0). Two M7 items remain before M8:
-maintainer-MOTD dogfooding for one release cycle (in-flight) and the
-3-point benchmark trend in `docs/benchmarks.md`. After both: M8 cuts
-v1.0.0 with the CLI flag surface frozen. See
+The M7 audit pass is shipped (0.7.0). M7 remaining:
+
+- Maintainer-MOTD dogfooding for one release cycle (in-flight on
+  archaemenid). First real-world surprise filed at
+  [`docs/development/issues/0001-keystroke-interleave-during-render.md`](issues/0001-keystroke-interleave-during-render.md)
+  — keystrokes echoed between row writes interleave with the banner;
+  deferred past v1.0 as cosmetic.
+- 3-point benchmark trend in [`docs/benchmarks.md`](../benchmarks.md).
+  Point 1 of 3 captured against 0.7.0 (CPU side: 7 ns embed, 68 µs
+  CYML load, 5.87 ns per `fit_chars`). Points 2 and 3 land at 0.8.0
+  and 0.9.0.
+
+After both: M8 cuts v1.0.0 with the CLI flag surface frozen. See
 [`roadmap.md`](roadmap.md) for the full sequence.

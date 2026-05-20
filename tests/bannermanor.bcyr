@@ -1,21 +1,65 @@
-# bannermanor benchmarks
-# Stdlib auto-included via cyrius.cyml
+# bannermanor benchmarks — render hot-path CPU work.
 #
-# Pattern: bench_new -> bench_batch_start -> tight loop -> bench_batch_stop -> bench_report.
-# For sub-1us ops use batch_size >= 1000 to amortize clock_gettime overhead
-# (~240 ns per start/stop pair on x86_64 Linux). See lib/bench.cyr header for
-# the full overhead-vs-batching guidance.
+# Captures the CPU side of bnrmr's render pipeline so a trend can detect
+# regressions between releases (the M7 / docs/benchmarks.md goal). The
+# stdout-write side is bounded by terminal/pipe throughput, not bnrmr's
+# code, so we benchmark only the work bnrmr actually controls:
+#
+#   B1 — block_font_embed   build the embedded font (alloc + glyph copy)
+#   B2 — font_load_file     parse fonts/block.cyml end-to-end
+#   B3 — fit_chars          layout math hot loop (batched for clock cost)
+#
+# Run via `cyrius bench`. Patterns follow lib/bench.cyr header guidance
+# (batch_size large enough to amortize ~240 ns clock_gettime overhead).
 
-fn bench_noop(): i64 { return 0; }
+include "src/layout.cyr"
+include "src/font_block.cyr"
+
+fn bench_embed(): i64 {
+    return block_font_embed();
+}
+
+fn bench_load_block_cyml(): i64 {
+    return font_load_file("fonts/block.cyml");
+}
+
+# fit_chars is sub-ns CPU; batch 100 calls per iter so each timed unit is
+# a meaningful render's-worth of layout math (frame=80, 5×5 block font,
+# 12-char "HELLO WORLD," sized banner).
+fn bench_fit_chars_hot(): i64 {
+    var i = 0;
+    var acc = 0;
+    while (i < 100) {
+        acc = acc + fit_chars(80, 5, 1, 12);
+        i = i + 1;
+    }
+    return acc;
+}
 
 fn main(): i64 {
     alloc_init();
-    var b = bench_new("noop");
-    bench_batch_start(b);
+
+    var b1 = bench_new("block_font_embed");
+    bench_batch_start(b1);
     var i = 0;
-    while (i < 1000000) { bench_noop(); i = i + 1; }
-    bench_batch_stop(b, 1000000);
-    bench_report(b);
+    while (i < 10000) { bench_embed(); i = i + 1; }
+    bench_batch_stop(b1, 10000);
+    bench_report(b1);
+
+    var b2 = bench_new("font_load_file(block.cyml)");
+    bench_batch_start(b2);
+    i = 0;
+    while (i < 1000) { bench_load_block_cyml(); i = i + 1; }
+    bench_batch_stop(b2, 1000);
+    bench_report(b2);
+
+    var b3 = bench_new("fit_chars x100 (banner-worth)");
+    bench_batch_start(b3);
+    i = 0;
+    while (i < 100000) { bench_fit_chars_hot(); i = i + 1; }
+    bench_batch_stop(b3, 100000);
+    bench_report(b3);
+
     return 0;
 }
 

@@ -33,7 +33,9 @@ format. Frozen CLI flag surface.
       uniform-width fit, no smushing; renders ASCII 32..126 from any
       figlet font that fits the 64-col / 32-row geometry envelope)
 - [ ] Benchmarks captured in `docs/benchmarks.md` for render
-      throughput on a representative banner (M7)
+      throughput on a representative banner (M7) — point 1 of 3
+      captured against 0.7.0 (block_font_embed 7 ns, font_load_file
+      68 µs, fit_chars 5.87 ns); points 2 and 3 land at 0.8.0 / 0.9.0
 - [ ] Maintainer dogfood: BannerManor used in the maintainer's MOTD
       for one release cycle, real-world bugs filed in
       `docs/development/issues/` and resolved (M7)
@@ -56,7 +58,8 @@ see CHANGELOG). Versions are targets, not commitments — ship-when-ready.
 - [ ] BannerManor used in the maintainer's MOTD for one release cycle
 - [ ] All real-world bugs / font-rendering surprises filed in
       `docs/development/issues/` and resolved
-- [ ] 3-point benchmark trend in `docs/benchmarks.md`
+- [ ] 3-point benchmark trend in `docs/benchmarks.md` — point 1 of 3
+      captured against 0.7.0; points 2 and 3 land at 0.8.0 / 0.9.0
 
 ### M8 — v1.0.0
 
