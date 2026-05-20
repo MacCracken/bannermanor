@@ -12,10 +12,10 @@ M1 (first render path, hardcoded block font, 1 KB input cap, flags
 
 **Unreleased** — M3 in progress. Done: `--list-fonts`, header-only
 loader, fold-fallback in `font_glyph_index`, `block.cyml` expanded
-to full printable ASCII (69 glyphs), `docs/guides/fonts.md`,
-pin bumped to 6.0.1. Remaining: 2–4 additional default fonts
-(`slim`, `big`, optionally `script`). See `CHANGELOG.md`
-`[Unreleased]` for the running list.
+to full printable ASCII (69 glyphs), `fonts/slim.cyml` (4×5),
+`docs/guides/fonts.md`, pin bumped to 6.0.1. Remaining: 1–3
+additional default fonts (`big`, optionally `script`). See
+`CHANGELOG.md` `[Unreleased]` for the running list.
 
 ## Toolchain
 
@@ -63,6 +63,11 @@ In-tree (`fonts/`):
   punctuation. 69 glyphs. Lowercase `a`–`z` renders via fold-fallback
   to uppercase (no separate lowercase glyphs at this size). Author:
   BannerManor; license: GPL-3.0-only.
+- `fonts/slim.cyml` — slim font (4×5), schema 1. Same vertical size
+  as block; one column narrower per glyph (5 char-cells per glyph at
+  gap=1 vs block's 6 — ~16% horizontal compression). Full printable
+  ASCII coverage, 69 glyphs, uppercase-only with fold-fallback for
+  lowercase. Author: BannerManor; license: GPL-3.0-only.
 
 M3 broadens to 3–5 fonts total. Schema and loader contract are
 documented in [`docs/adr/0001-cyml-font-format.md`](../adr/0001-cyml-font-format.md);
@@ -70,15 +75,16 @@ authoring walkthrough at [`docs/guides/fonts.md`](../guides/fonts.md).
 
 ## Tests
 
-- `tests/bannermanor.tcyr` — 2361 assertions covering: embedded font
+- `tests/bannermanor.tcyr` — 2467 assertions covering: embedded font
   geometry, glyph-index lookup (space / digits / uppercase /
   lowercase folding / punctuation / unsupported / fold-is-fallback),
   row-shape invariant, renderer bounds, CYML loader happy path +
   missing-file path + malformed fixtures (bad schema, bad body byte,
   wrong row count), the M2 acceptance check (loaded `fonts/block.cyml`
   is byte-identical to the embedded font on every char and every row,
-  now over 69 glyphs), and the M3 header loader (fields on
-  `block.cyml`, missing-file, bad-schema rejection). Runs clean.
+  now over 69 glyphs), the slim-font load + full-printable-ASCII
+  coverage check, and the M3 header loader (fields on `block.cyml`,
+  missing-file, bad-schema rejection). Runs clean.
 - `tests/fixtures/` — malformed-font fixtures consumed by the loader
   rejection tests.
 - `tests/bannermanor.bcyr` — benchmark stub

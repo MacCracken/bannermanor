@@ -264,6 +264,35 @@ fn t_header_load_missing() {
     assert_eq(font_header_load("fonts/__nope__.cyml"), 0, "missing -> 0");
 }
 
+fn t_load_slim_cyml() {
+    test_group("font_load_file / fonts/slim.cyml");
+    var f = font_load_file("fonts/slim.cyml");
+    assert(f != 0, "loaded");
+    assert_eq(font_width(f),  4,  "slim width = 4");
+    assert_eq(font_height(f), 5,  "slim height = 5");
+    assert_eq(font_gap(f),    1,  "slim gap = 1");
+    assert_eq(font_count(f),  69, "slim count = 69 (full printable ASCII)");
+
+    # Every printable-ASCII char must resolve.
+    var c = 32;
+    while (c <= 126) {
+        assert(font_glyph_index(f, c) >= 0, "printable char resolves");
+        c = c + 1;
+    }
+
+    # AGNOS — the M3 acceptance bar for every shipped font.
+    assert(font_glyph_index(f, 65) >= 0, "A resolves");
+    assert(font_glyph_index(f, 71) >= 0, "G resolves");
+    assert(font_glyph_index(f, 78) >= 0, "N resolves");
+    assert(font_glyph_index(f, 79) >= 0, "O resolves");
+    assert(font_glyph_index(f, 83) >= 0, "S resolves");
+
+    # Fold-fallback should still kick in: slim has no lowercase glyphs,
+    # so 'a' must resolve to the same index as 'A'.
+    assert_eq(font_glyph_index(f, 97), font_glyph_index(f, 65),
+              "'a' folds to 'A' on slim");
+}
+
 fn t_header_load_malformed() {
     test_group("font_header_load / malformed");
     # The header loader validates schema + geometry — same gates as the
@@ -292,6 +321,7 @@ fn main() {
     t_loaded_matches_embedded();
     t_load_missing();
     t_load_malformed();
+    t_load_slim_cyml();
     t_header_load_block();
     t_header_load_missing();
     t_header_load_malformed();

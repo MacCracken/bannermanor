@@ -1,0 +1,642 @@
+# slim.cyml — BannerManor slim font (4×5).
+#
+# Companion to block. Same height, one column narrower per glyph
+# (5 char-cells per glyph at gap=1 vs block's 6) — useful when banner
+# width matters and you want more text to fit. Schema documented in
+# docs/adr/0001-cyml-font-format.md. Body convention: '.' = background
+# (rendered as space), '#' = stroke.
+#
+# Coverage: full printable ASCII (32..126), 69 glyphs. Lowercase a-z
+# folds to uppercase via the renderer's fold-fallback — no separate
+# lowercase glyphs (4 cols is too narrow for legible distinct lowercase).
+
+[font]
+schema = 1
+name = "slim"
+description = "BannerManor slim font: 5 rows tall, 4 cols wide. Narrower companion to block."
+width = 4
+height = 5
+gap = 1
+author = "BannerManor"
+license = "GPL-3.0-only"
+
+[[entries]]
+char = " "
+---
+....
+....
+....
+....
+....
+
+[[entries]]
+char = "0"
+---
+.##.
+#..#
+####
+#..#
+.##.
+
+[[entries]]
+char = "1"
+---
+.##.
+###.
+..#.
+..#.
+####
+
+[[entries]]
+char = "2"
+---
+###.
+...#
+..#.
+.#..
+####
+
+[[entries]]
+char = "3"
+---
+###.
+...#
+.##.
+...#
+###.
+
+[[entries]]
+char = "4"
+---
+#..#
+#..#
+####
+...#
+...#
+
+[[entries]]
+char = "5"
+---
+####
+#...
+###.
+...#
+###.
+
+[[entries]]
+char = "6"
+---
+.###
+#...
+###.
+#..#
+.##.
+
+[[entries]]
+char = "7"
+---
+####
+...#
+..#.
+.#..
+.#..
+
+[[entries]]
+char = "8"
+---
+.##.
+#..#
+.##.
+#..#
+.##.
+
+[[entries]]
+char = "9"
+---
+.##.
+#..#
+.###
+...#
+###.
+
+[[entries]]
+char = "A"
+---
+.##.
+#..#
+####
+#..#
+#..#
+
+[[entries]]
+char = "B"
+---
+###.
+#..#
+###.
+#..#
+###.
+
+[[entries]]
+char = "C"
+---
+.###
+#...
+#...
+#...
+.###
+
+[[entries]]
+char = "D"
+---
+###.
+#..#
+#..#
+#..#
+###.
+
+[[entries]]
+char = "E"
+---
+####
+#...
+###.
+#...
+####
+
+[[entries]]
+char = "F"
+---
+####
+#...
+###.
+#...
+#...
+
+[[entries]]
+char = "G"
+---
+.###
+#...
+#.##
+#..#
+.###
+
+[[entries]]
+char = "H"
+---
+#..#
+#..#
+####
+#..#
+#..#
+
+[[entries]]
+char = "I"
+---
+####
+.##.
+.##.
+.##.
+####
+
+[[entries]]
+char = "J"
+---
+####
+..#.
+..#.
+#.#.
+.##.
+
+[[entries]]
+char = "K"
+---
+#..#
+#.#.
+##..
+#.#.
+#..#
+
+[[entries]]
+char = "L"
+---
+#...
+#...
+#...
+#...
+####
+
+[[entries]]
+char = "M"
+---
+#..#
+####
+#..#
+#..#
+#..#
+
+[[entries]]
+char = "N"
+---
+#..#
+##.#
+####
+#.##
+#..#
+
+[[entries]]
+char = "O"
+---
+.##.
+#..#
+#..#
+#..#
+.##.
+
+[[entries]]
+char = "P"
+---
+###.
+#..#
+###.
+#...
+#...
+
+[[entries]]
+char = "Q"
+---
+.##.
+#..#
+#..#
+#.#.
+.#.#
+
+[[entries]]
+char = "R"
+---
+###.
+#..#
+###.
+#.#.
+#..#
+
+[[entries]]
+char = "S"
+---
+.###
+#...
+.##.
+...#
+###.
+
+[[entries]]
+char = "T"
+---
+####
+.##.
+.##.
+.##.
+.##.
+
+[[entries]]
+char = "U"
+---
+#..#
+#..#
+#..#
+#..#
+.##.
+
+[[entries]]
+char = "V"
+---
+#..#
+#..#
+#..#
+.##.
+.##.
+
+[[entries]]
+char = "W"
+---
+#..#
+#..#
+#..#
+####
+.##.
+
+[[entries]]
+char = "X"
+---
+#..#
+.##.
+.##.
+.##.
+#..#
+
+[[entries]]
+char = "Y"
+---
+#..#
+#..#
+.##.
+.##.
+.##.
+
+[[entries]]
+char = "Z"
+---
+####
+...#
+.##.
+#...
+####
+
+[[entries]]
+char = "!"
+---
+.##.
+.##.
+.##.
+....
+.##.
+
+[[entries]]
+char = "\""
+---
+#.#.
+#.#.
+....
+....
+....
+
+[[entries]]
+char = "#"
+---
+.#.#
+####
+.#.#
+####
+.#.#
+
+[[entries]]
+char = "$"
+---
+.###
+#.#.
+.##.
+.#.#
+###.
+
+[[entries]]
+char = "%"
+---
+#..#
+...#
+.##.
+#...
+#..#
+
+[[entries]]
+char = "&"
+---
+.##.
+#..#
+.##.
+#.##
+.##.
+
+[[entries]]
+char = "'"
+---
+..#.
+..#.
+....
+....
+....
+
+[[entries]]
+char = "("
+---
+..##
+.#..
+.#..
+.#..
+..##
+
+[[entries]]
+char = ")"
+---
+##..
+..#.
+..#.
+..#.
+##..
+
+[[entries]]
+char = "*"
+---
+....
+#..#
+.##.
+#..#
+....
+
+[[entries]]
+char = "+"
+---
+....
+.##.
+####
+.##.
+....
+
+[[entries]]
+char = ","
+---
+....
+....
+....
+.##.
+##..
+
+[[entries]]
+char = "-"
+---
+....
+....
+####
+....
+....
+
+[[entries]]
+char = "."
+---
+....
+....
+....
+....
+.##.
+
+[[entries]]
+char = "/"
+---
+...#
+..#.
+.##.
+.#..
+#...
+
+[[entries]]
+char = ":"
+---
+....
+.##.
+....
+.##.
+....
+
+[[entries]]
+char = ";"
+---
+....
+.##.
+....
+.##.
+##..
+
+[[entries]]
+char = "<"
+---
+..##
+.#..
+#...
+.#..
+..##
+
+[[entries]]
+char = "="
+---
+....
+####
+....
+####
+....
+
+[[entries]]
+char = ">"
+---
+##..
+..#.
+...#
+..#.
+##..
+
+[[entries]]
+char = "?"
+---
+###.
+#..#
+..#.
+....
+.##.
+
+[[entries]]
+char = "@"
+---
+.##.
+#..#
+#.##
+#...
+.###
+
+[[entries]]
+char = "["
+---
+.###
+.#..
+.#..
+.#..
+.###
+
+[[entries]]
+char = "\\"
+---
+#...
+.#..
+.##.
+..#.
+...#
+
+[[entries]]
+char = "]"
+---
+###.
+..#.
+..#.
+..#.
+###.
+
+[[entries]]
+char = "^"
+---
+.##.
+#..#
+....
+....
+....
+
+[[entries]]
+char = "_"
+---
+....
+....
+....
+....
+####
+
+[[entries]]
+char = "`"
+---
+##..
+..#.
+....
+....
+....
+
+[[entries]]
+char = "{"
+---
+..##
+..#.
+.##.
+..#.
+..##
+
+[[entries]]
+char = "|"
+---
+.##.
+.##.
+.##.
+.##.
+.##.
+
+[[entries]]
+char = "}"
+---
+##..
+.#..
+.##.
+.#..
+##..
+
+[[entries]]
+char = "~"
+---
+....
+##.#
+#.##
+....
+....

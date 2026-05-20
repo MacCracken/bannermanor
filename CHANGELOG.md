@@ -20,6 +20,11 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   Glyph count goes from 37 to 69 (space + 0–9 + A–Z + printable
   punctuation). `bnrmr "Hello, World!"` now renders the punctuation
   inline instead of falling through to blank space glyphs.
+- `fonts/slim.cyml` — second in-tree default font. 4×5, gap=1; one
+  column narrower per glyph than block (~16% horizontal compression).
+  Full printable ASCII coverage (69 glyphs), uppercase-only with
+  fold-fallback for lowercase. Reachable via `bnrmr --font slim TEXT`
+  and listed by `bnrmr --list-fonts`.
 - `src/font_block.cyr` — mirrors the new glyphs byte-for-byte; the
   M2 acceptance test now covers 69 glyphs × 5 rows. `_block_raw_row`
   was split into `_block_raw_row_lo` (idx 0–36) and `_block_raw_row_hi`
@@ -29,7 +34,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `tests/bannermanor.tcyr` — `font_header_load` happy path / missing
   file / bad-schema rejection; `t_glyph_punctuation` covering all 32
   new chars; `t_glyph_fold_is_fallback` pinning the fold-fallback
-  semantics. 2361 assertions (up from 1334).
+  semantics; `t_load_slim_cyml` validating slim's geometry and full
+  printable-ASCII coverage. 2467 assertions (up from 1334).
 
 ### Changed — M3
 - `font_glyph_index` lowercase fold is now a **fallback**: a font that
