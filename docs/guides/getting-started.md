@@ -27,14 +27,16 @@ Once M1+ ships, additional layout:
 
 ## Adding a font
 
-(Available at M2+.)
+See [`fonts.md`](fonts.md) for the full authoring walkthrough
+(schema fields, body convention, validation gates, drop-in workflow).
+Short version:
 
-1. Author the font as `fonts/<name>.cyml` per the schema in
-   `docs/adr/0001-cyml-font-format.md`.
-2. Cover at least ASCII A–Z + 0–9 + space.
-3. Add a test case rendering a sentence through the new font in
-   `tests/bannermanor.tcyr`.
-4. Add the font to `docs/guides/fonts.md` with a preview line.
+1. Author `fonts/<name>.cyml` per the schema in
+   [`../adr/0001-cyml-font-format.md`](../adr/0001-cyml-font-format.md).
+2. Cover all printable ASCII (32–126); lowercase folds to uppercase
+   when the font has no lowercase glyphs.
+3. Verify with `bnrmr --list-fonts` and `bnrmr --font <name> "AGNOS"`.
+4. Add a test case in `tests/bannermanor.tcyr`.
 5. CHANGELOG entry under `Added`.
 
 ## Adding a flag

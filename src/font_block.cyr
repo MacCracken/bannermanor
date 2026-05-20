@@ -15,7 +15,19 @@ include "src/font.cyr"
 # Background is space (32); stroke is '#'. Lifted verbatim from the
 # pre-M2 hardcoded font; the only change is that the renderer no longer
 # touches this fn directly — it goes through Font* via `block_font_embed`.
+#
+# Split into two helpers: cycc caps a function at 256 returns, and 69
+# glyphs × 5 rows = 345 returns would exceed that. `_block_raw_row_lo`
+# covers space + 0-9 + A-Z (idx 0..36); `_block_raw_row_hi` covers the
+# punctuation block (idx 37..68).
 fn _block_raw_row(glyph_idx, row): i64 {
+    if (glyph_idx <= 36) {
+        return _block_raw_row_lo(glyph_idx, row);
+    }
+    return _block_raw_row_hi(glyph_idx, row);
+}
+
+fn _block_raw_row_lo(glyph_idx, row): i64 {
     var i = glyph_idx;
     var r = row;
 
@@ -318,12 +330,290 @@ fn _block_raw_row(glyph_idx, row): i64 {
     return "     ";
 }
 
+fn _block_raw_row_hi(glyph_idx, row): i64 {
+    var i = glyph_idx;
+    var r = row;
+
+    # ! (33)
+    if (i == 37) {
+        if (r == 0) { return "  #  "; }
+        if (r == 1) { return "  #  "; }
+        if (r == 2) { return "  #  "; }
+        if (r == 3) { return "     "; }
+        return "  #  ";
+    }
+    # " (34)
+    if (i == 38) {
+        if (r == 0) { return " # # "; }
+        if (r == 1) { return " # # "; }
+        if (r == 2) { return "     "; }
+        if (r == 3) { return "     "; }
+        return "     ";
+    }
+    # # (35)
+    if (i == 39) {
+        if (r == 0) { return " # # "; }
+        if (r == 1) { return "#####"; }
+        if (r == 2) { return " # # "; }
+        if (r == 3) { return "#####"; }
+        return " # # ";
+    }
+    # $ (36)
+    if (i == 40) {
+        if (r == 0) { return " ####"; }
+        if (r == 1) { return "# #  "; }
+        if (r == 2) { return " ### "; }
+        if (r == 3) { return "  # #"; }
+        return "#### ";
+    }
+    # % (37)
+    if (i == 41) {
+        if (r == 0) { return "#   #"; }
+        if (r == 1) { return "   # "; }
+        if (r == 2) { return "  #  "; }
+        if (r == 3) { return " #   "; }
+        return "#   #";
+    }
+    # & (38)
+    if (i == 42) {
+        if (r == 0) { return " ##  "; }
+        if (r == 1) { return "#  # "; }
+        if (r == 2) { return " ##  "; }
+        if (r == 3) { return "# # #"; }
+        return " ## #";
+    }
+    # ' (39)
+    if (i == 43) {
+        if (r == 0) { return "  #  "; }
+        if (r == 1) { return "  #  "; }
+        if (r == 2) { return "     "; }
+        if (r == 3) { return "     "; }
+        return "     ";
+    }
+    # ( (40)
+    if (i == 44) {
+        if (r == 0) { return "  ## "; }
+        if (r == 1) { return " #   "; }
+        if (r == 2) { return " #   "; }
+        if (r == 3) { return " #   "; }
+        return "  ## ";
+    }
+    # ) (41)
+    if (i == 45) {
+        if (r == 0) { return " ##  "; }
+        if (r == 1) { return "   # "; }
+        if (r == 2) { return "   # "; }
+        if (r == 3) { return "   # "; }
+        return " ##  ";
+    }
+    # * (42)
+    if (i == 46) {
+        if (r == 0) { return "     "; }
+        if (r == 1) { return "# # #"; }
+        if (r == 2) { return " ### "; }
+        if (r == 3) { return "# # #"; }
+        return "     ";
+    }
+    # + (43)
+    if (i == 47) {
+        if (r == 0) { return "     "; }
+        if (r == 1) { return "  #  "; }
+        if (r == 2) { return " ### "; }
+        if (r == 3) { return "  #  "; }
+        return "     ";
+    }
+    # , (44)
+    if (i == 48) {
+        if (r == 0) { return "     "; }
+        if (r == 1) { return "     "; }
+        if (r == 2) { return "     "; }
+        if (r == 3) { return "  ## "; }
+        return " #   ";
+    }
+    # - (45)
+    if (i == 49) {
+        if (r == 0) { return "     "; }
+        if (r == 1) { return "     "; }
+        if (r == 2) { return " ### "; }
+        if (r == 3) { return "     "; }
+        return "     ";
+    }
+    # . (46)
+    if (i == 50) {
+        if (r == 0) { return "     "; }
+        if (r == 1) { return "     "; }
+        if (r == 2) { return "     "; }
+        if (r == 3) { return "     "; }
+        return " ##  ";
+    }
+    # / (47)
+    if (i == 51) {
+        if (r == 0) { return "    #"; }
+        if (r == 1) { return "   # "; }
+        if (r == 2) { return "  #  "; }
+        if (r == 3) { return " #   "; }
+        return "#    ";
+    }
+    # : (58)
+    if (i == 52) {
+        if (r == 0) { return "     "; }
+        if (r == 1) { return "  #  "; }
+        if (r == 2) { return "     "; }
+        if (r == 3) { return "  #  "; }
+        return "     ";
+    }
+    # ; (59)
+    if (i == 53) {
+        if (r == 0) { return "     "; }
+        if (r == 1) { return "  #  "; }
+        if (r == 2) { return "     "; }
+        if (r == 3) { return "  ## "; }
+        return " #   ";
+    }
+    # < (60)
+    if (i == 54) {
+        if (r == 0) { return "   # "; }
+        if (r == 1) { return "  #  "; }
+        if (r == 2) { return " #   "; }
+        if (r == 3) { return "  #  "; }
+        return "   # ";
+    }
+    # = (61)
+    if (i == 55) {
+        if (r == 0) { return "     "; }
+        if (r == 1) { return " ### "; }
+        if (r == 2) { return "     "; }
+        if (r == 3) { return " ### "; }
+        return "     ";
+    }
+    # > (62)
+    if (i == 56) {
+        if (r == 0) { return " #   "; }
+        if (r == 1) { return "  #  "; }
+        if (r == 2) { return "   # "; }
+        if (r == 3) { return "  #  "; }
+        return " #   ";
+    }
+    # ? (63)
+    if (i == 57) {
+        if (r == 0) { return " ### "; }
+        if (r == 1) { return "#   #"; }
+        if (r == 2) { return "   # "; }
+        if (r == 3) { return "     "; }
+        return "  #  ";
+    }
+    # @ (64)
+    if (i == 58) {
+        if (r == 0) { return " ### "; }
+        if (r == 1) { return "#   #"; }
+        if (r == 2) { return "# ###"; }
+        if (r == 3) { return "#    "; }
+        return " ####";
+    }
+    # [ (91)
+    if (i == 59) {
+        if (r == 0) { return " ### "; }
+        if (r == 1) { return " #   "; }
+        if (r == 2) { return " #   "; }
+        if (r == 3) { return " #   "; }
+        return " ### ";
+    }
+    # \ (92)
+    if (i == 60) {
+        if (r == 0) { return "#    "; }
+        if (r == 1) { return " #   "; }
+        if (r == 2) { return "  #  "; }
+        if (r == 3) { return "   # "; }
+        return "    #";
+    }
+    # ] (93)
+    if (i == 61) {
+        if (r == 0) { return " ### "; }
+        if (r == 1) { return "   # "; }
+        if (r == 2) { return "   # "; }
+        if (r == 3) { return "   # "; }
+        return " ### ";
+    }
+    # ^ (94)
+    if (i == 62) {
+        if (r == 0) { return "  #  "; }
+        if (r == 1) { return " # # "; }
+        if (r == 2) { return "     "; }
+        if (r == 3) { return "     "; }
+        return "     ";
+    }
+    # _ (95)
+    if (i == 63) {
+        if (r == 0) { return "     "; }
+        if (r == 1) { return "     "; }
+        if (r == 2) { return "     "; }
+        if (r == 3) { return "     "; }
+        return "#####";
+    }
+    # ` (96)
+    if (i == 64) {
+        if (r == 0) { return " #   "; }
+        if (r == 1) { return "  #  "; }
+        if (r == 2) { return "     "; }
+        if (r == 3) { return "     "; }
+        return "     ";
+    }
+    # { (123)
+    if (i == 65) {
+        if (r == 0) { return "  ## "; }
+        if (r == 1) { return "  #  "; }
+        if (r == 2) { return " ##  "; }
+        if (r == 3) { return "  #  "; }
+        return "  ## ";
+    }
+    # | (124)
+    if (i == 66) {
+        if (r == 0) { return "  #  "; }
+        if (r == 1) { return "  #  "; }
+        if (r == 2) { return "  #  "; }
+        if (r == 3) { return "  #  "; }
+        return "  #  ";
+    }
+    # } (125)
+    if (i == 67) {
+        if (r == 0) { return " ##  "; }
+        if (r == 1) { return "  #  "; }
+        if (r == 2) { return "  ## "; }
+        if (r == 3) { return "  #  "; }
+        return " ##  ";
+    }
+    # ~ (126)
+    if (i == 68) {
+        if (r == 0) { return "     "; }
+        if (r == 1) { return " ## #"; }
+        if (r == 2) { return "# ## "; }
+        if (r == 3) { return "     "; }
+        return "     ";
+    }
+    return "     ";
+}
+
 # Char (ASCII byte) for glyph index in the embedded order:
-# 0 = ' ', 1..10 = '0'..'9', 11..36 = 'A'..'Z'.
+#  0       = ' '
+#  1..10   = '0'..'9'
+#  11..36  = 'A'..'Z'
+#  37..51  = '!' .. '/'   (ASCII 33..47, contiguous)
+#  52..58  = ':' .. '@'   (ASCII 58..64, contiguous)
+#  59..64  = '[' .. '`'   (ASCII 91..96, contiguous)
+#  65..68  = '{' .. '~'   (ASCII 123..126, contiguous)
 fn _block_glyph_char(i): i64 {
     if (i == 0) { return 32; }
     if (i <= 10) { return 47 + i; }      # '0'..'9'
-    return 54 + i;                       # 'A'..'Z'
+    if (i <= 36) { return 54 + i; }      # 'A'..'Z'
+    if (i <= 51) { return i - 4; }       # '!' = 37 - 4 = 33 .. '/' = 51 - 4 = 47
+    if (i <= 58) { return i + 6; }       # ':' = 52 + 6 = 58 .. '@' = 58 + 6 = 64
+    if (i <= 64) { return i + 32; }      # '[' = 59 + 32 = 91 .. '`' = 64 + 32 = 96
+    return i + 58;                       # '{' = 65 + 58 = 123 .. '~' = 68 + 58 = 126
+}
+
+# Total glyphs in the embedded block font.
+enum BlockFontCount {
+    BLOCK_GLYPHS = 69;
 }
 
 # Build the embedded Font* from the inline glyph data above. Cached
@@ -332,10 +622,10 @@ var _block_font_cache = 0;
 
 fn block_font_embed(): i64 {
     if (_block_font_cache != 0) { return _block_font_cache; }
-    var f = font_new(5, 5, 1, 37);
+    var f = font_new(5, 5, 1, 69);
     if (f == 0) { return 0; }
     var i = 0;
-    while (i < 37) {
+    while (i < 69) {
         font_set_char(f, i, _block_glyph_char(i));
         var r = 0;
         while (r < 5) {

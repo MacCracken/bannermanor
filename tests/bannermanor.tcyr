@@ -31,7 +31,7 @@ fn t_embedded_geometry() {
     assert_eq(font_width(f),  5,  "width = 5");
     assert_eq(font_height(f), 5,  "height = 5");
     assert_eq(font_gap(f),    1,  "gap = 1");
-    assert_eq(font_count(f),  37, "count = 37");
+    assert_eq(font_count(f),  69, "count = 69");
 }
 
 # ---- glyph index coverage ----
@@ -77,14 +77,68 @@ fn t_glyph_lower_folds() {
 fn t_glyph_unsupported() {
     test_group("font_glyph_index / unsupported");
     var f = block_font_embed();
-    assert_eq(font_glyph_index(f, 33),  0 - 1, "'!' -> -1");
-    assert_eq(font_glyph_index(f, 64),  0 - 1, "'@' -> -1");
-    assert_eq(font_glyph_index(f, 91),  0 - 1, "'[' -> -1");
-    assert_eq(font_glyph_index(f, 96),  0 - 1, "'`' -> -1");
-    assert_eq(font_glyph_index(f, 123), 0 - 1, "'{' -> -1");
+    # After M3, block covers all printable ASCII (32..126), so the
+    # unsupported set is now NUL, control chars, DEL, and >127.
     assert_eq(font_glyph_index(f, 0),   0 - 1, "NUL -> -1");
+    assert_eq(font_glyph_index(f, 1),   0 - 1, "SOH -> -1");
+    assert_eq(font_glyph_index(f, 7),   0 - 1, "BEL -> -1");
+    assert_eq(font_glyph_index(f, 9),   0 - 1, "TAB -> -1");
+    assert_eq(font_glyph_index(f, 10),  0 - 1, "LF -> -1");
+    assert_eq(font_glyph_index(f, 31),  0 - 1, "US (last C0) -> -1");
     assert_eq(font_glyph_index(f, 127), 0 - 1, "DEL -> -1");
     assert_eq(font_glyph_index(f, 200), 0 - 1, "high byte -> -1");
+}
+
+fn t_glyph_punctuation() {
+    test_group("font_glyph_index / punctuation (M3)");
+    var f = block_font_embed();
+    # Every printable-ASCII punctuation char should resolve.
+    assert(font_glyph_index(f, 33)  >= 0, "'!' resolves");
+    assert(font_glyph_index(f, 34)  >= 0, "'\"' resolves");
+    assert(font_glyph_index(f, 35)  >= 0, "'#' resolves");
+    assert(font_glyph_index(f, 36)  >= 0, "'$' resolves");
+    assert(font_glyph_index(f, 37)  >= 0, "'%' resolves");
+    assert(font_glyph_index(f, 38)  >= 0, "'&' resolves");
+    assert(font_glyph_index(f, 39)  >= 0, "''' resolves");
+    assert(font_glyph_index(f, 40)  >= 0, "'(' resolves");
+    assert(font_glyph_index(f, 41)  >= 0, "')' resolves");
+    assert(font_glyph_index(f, 42)  >= 0, "'*' resolves");
+    assert(font_glyph_index(f, 43)  >= 0, "'+' resolves");
+    assert(font_glyph_index(f, 44)  >= 0, "',' resolves");
+    assert(font_glyph_index(f, 45)  >= 0, "'-' resolves");
+    assert(font_glyph_index(f, 46)  >= 0, "'.' resolves");
+    assert(font_glyph_index(f, 47)  >= 0, "'/' resolves");
+    assert(font_glyph_index(f, 58)  >= 0, "':' resolves");
+    assert(font_glyph_index(f, 59)  >= 0, "';' resolves");
+    assert(font_glyph_index(f, 60)  >= 0, "'<' resolves");
+    assert(font_glyph_index(f, 61)  >= 0, "'=' resolves");
+    assert(font_glyph_index(f, 62)  >= 0, "'>' resolves");
+    assert(font_glyph_index(f, 63)  >= 0, "'?' resolves");
+    assert(font_glyph_index(f, 64)  >= 0, "'@' resolves");
+    assert(font_glyph_index(f, 91)  >= 0, "'[' resolves");
+    assert(font_glyph_index(f, 92)  >= 0, "'\\' resolves");
+    assert(font_glyph_index(f, 93)  >= 0, "']' resolves");
+    assert(font_glyph_index(f, 94)  >= 0, "'^' resolves");
+    assert(font_glyph_index(f, 95)  >= 0, "'_' resolves");
+    assert(font_glyph_index(f, 96)  >= 0, "'`' resolves");
+    assert(font_glyph_index(f, 123) >= 0, "'{' resolves");
+    assert(font_glyph_index(f, 124) >= 0, "'|' resolves");
+    assert(font_glyph_index(f, 125) >= 0, "'}' resolves");
+    assert(font_glyph_index(f, 126) >= 0, "'~' resolves");
+}
+
+fn t_glyph_fold_is_fallback() {
+    test_group("font_glyph_index / lowercase fold is fallback");
+    var f = block_font_embed();
+    # block.cyml ships uppercase only, so lowercase must fall back.
+    var c = 97;
+    var u = 65;
+    while (c <= 122) {
+        assert_eq(font_glyph_index(f, c), font_glyph_index(f, u),
+                  "lowercase falls back to uppercase when no lowercase glyph");
+        c = c + 1;
+        u = u + 1;
+    }
 }
 
 # ---- row shape ----
@@ -137,7 +191,7 @@ fn t_load_block_cyml() {
     assert_eq(font_width(f),  5,  "width");
     assert_eq(font_height(f), 5,  "height");
     assert_eq(font_gap(f),    1,  "gap");
-    assert_eq(font_count(f),  37, "count");
+    assert_eq(font_count(f),  69, "count");
 }
 
 # M2 acceptance: the loaded font must agree with the embedded font on
@@ -165,7 +219,7 @@ fn t_loaded_matches_embedded() {
     var w = font_width(emb);
     var h = font_height(emb);
     var idx = 0;
-    while (idx < 37) {
+    while (idx < 69) {
         var r = 0;
         while (r < h) {
             var ep = font_row(emb, idx, r);
@@ -230,6 +284,8 @@ fn main() {
     t_glyph_upper();
     t_glyph_lower_folds();
     t_glyph_unsupported();
+    t_glyph_punctuation();
+    t_glyph_fold_is_fallback();
     t_row_shape();
     t_render_bounds();
     t_load_block_cyml();

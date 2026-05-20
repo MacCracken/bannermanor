@@ -10,14 +10,16 @@ M1 (first render path, hardcoded block font, 1 KB input cap, flags
 `--version`/`--help`) and M2 (CYML font format, `fonts/block.cyml`,
 `--font NAME` flag, loader with validation).
 
-**Unreleased** — M3 in progress. `--list-fonts` flag + header-only
-loader are wired; remaining: full-ASCII coverage in `block.cyml`,
-additional default fonts, `docs/guides/fonts.md`. See `CHANGELOG.md`
+**Unreleased** — M3 in progress. Done: `--list-fonts`, header-only
+loader, fold-fallback in `font_glyph_index`, `block.cyml` expanded
+to full printable ASCII (69 glyphs), `docs/guides/fonts.md`,
+pin bumped to 6.0.1. Remaining: 2–4 additional default fonts
+(`slim`, `big`, optionally `script`). See `CHANGELOG.md`
 `[Unreleased]` for the running list.
 
 ## Toolchain
 
-- **Cyrius pin**: `6.0.0` (in `cyrius.cyml [package].cyrius`)
+- **Cyrius pin**: `6.0.1` (in `cyrius.cyml [package].cyrius`)
 
 ## Shape
 
@@ -42,6 +44,9 @@ Single-shot CLI: text in, banner bytes out, exit.
   builds a `Font*` from inline glyph data; this is the default used
   when no `--font` flag is passed (CLAUDE.md self-contained rule).
   Mirrors `fonts/block.cyml` byte-for-byte — drift checked in tests.
+  Glyph data is split across `_block_raw_row_lo` (idx 0–36: space +
+  0–9 + A–Z) and `_block_raw_row_hi` (idx 37–68: printable
+  punctuation) to stay under cycc's 256-return-per-function limit.
 
 Planned by milestone:
 
@@ -53,23 +58,27 @@ Planned by milestone:
 
 In-tree (`fonts/`):
 
-- `fonts/block.cyml` — block font (5×5), schema 1. Coverage: space,
-  `0`–`9`, `A`–`Z`. Author: BannerManor; license: GPL-3.0-only.
+- `fonts/block.cyml` — block font (5×5), schema 1. Coverage: full
+  printable ASCII (32–126) = space, `0`–`9`, `A`–`Z`, all standard
+  punctuation. 69 glyphs. Lowercase `a`–`z` renders via fold-fallback
+  to uppercase (no separate lowercase glyphs at this size). Author:
+  BannerManor; license: GPL-3.0-only.
 
 M3 broadens to 3–5 fonts total. Schema and loader contract are
-documented in [`docs/adr/0001-cyml-font-format.md`](../adr/0001-cyml-font-format.md).
+documented in [`docs/adr/0001-cyml-font-format.md`](../adr/0001-cyml-font-format.md);
+authoring walkthrough at [`docs/guides/fonts.md`](../guides/fonts.md).
 
 ## Tests
 
-- `tests/bannermanor.tcyr` — 1343 assertions covering: embedded font
+- `tests/bannermanor.tcyr` — 2361 assertions covering: embedded font
   geometry, glyph-index lookup (space / digits / uppercase /
-  lowercase folding / unsupported), row-shape invariant, renderer
-  bounds, CYML loader happy path + missing-file path + malformed
-  fixtures (bad schema, bad body byte, wrong row count), the M2
-  acceptance check (loaded `fonts/block.cyml` is byte-identical to
-  the embedded font on every char and every row), and the M3 header
-  loader (fields on `block.cyml`, missing-file, bad-schema rejection).
-  Runs clean.
+  lowercase folding / punctuation / unsupported / fold-is-fallback),
+  row-shape invariant, renderer bounds, CYML loader happy path +
+  missing-file path + malformed fixtures (bad schema, bad body byte,
+  wrong row count), the M2 acceptance check (loaded `fonts/block.cyml`
+  is byte-identical to the embedded font on every char and every row,
+  now over 69 glyphs), and the M3 header loader (fields on
+  `block.cyml`, missing-file, bad-schema rejection). Runs clean.
 - `tests/fixtures/` — malformed-font fixtures consumed by the loader
   rejection tests.
 - `tests/bannermanor.bcyr` — benchmark stub

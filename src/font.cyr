@@ -68,15 +68,27 @@ fn font_height(f): i64 { return load64(f + 8); }
 fn font_gap(f): i64    { return load64(f + 16); }
 fn font_count(f): i64  { return load64(f + 24); }
 
-# Return glyph_idx for char c, or -1. Lowercase ASCII folds to upper.
+# Return glyph_idx for char c, or -1.
+#
+# Lowercase ASCII folds to uppercase ONLY when the font has no
+# lowercase glyph registered (fallback fold). A font that ships both
+# cases — typical for tall fonts where lowercase descenders are
+# legible — gets distinct glyphs honored. block.cyml ships uppercase
+# only, so 'a' falls back to 'A' on that font.
 fn font_glyph_index(f, c): i64 {
     if (c < 0) { return 0 - 1; }
     if (c >= 128) { return 0 - 1; }
-    var cc = c;
-    if (cc >= 97) { if (cc <= 122) { cc = cc - 32; } }
-    var v = load8(load64(f + 40) + cc);
-    if (v == 0) { return 0 - 1; }
-    return v - 1;
+    var charmap = load64(f + 40);
+    var v = load8(charmap + c);
+    if (v != 0) { return v - 1; }
+    # Fallback: lowercase ASCII tries the uppercase slot.
+    if (c >= 97) {
+        if (c <= 122) {
+            v = load8(charmap + (c - 32));
+            if (v != 0) { return v - 1; }
+        }
+    }
+    return 0 - 1;
 }
 
 # Pointer to the `width` bytes for (glyph_idx, row).
@@ -234,12 +246,28 @@ fn _font_get_char(hdr, hlen): i64 {
                                 else { if (c == 9) { p = p + 1; }
                                 else { sk2 = 0; } }
                             }
-                            # expect "X"
+                            # expect "X" or "\X" (two escapes supported:
+                            # \" -> 0x22, \\ -> 0x5C — needed for chars
+                            # that would otherwise terminate the string).
                             if (p + 2 < hlen) {
                                 if (load8(hdr + p) == 34) {
                                     var ch = load8(hdr + p + 1);
-                                    if (load8(hdr + p + 2) == 34) {
-                                        if (ch >= 0) { if (ch < 128) { found = ch; } }
+                                    var close_at = p + 2;
+                                    if (ch == 92) {
+                                        # escape: \" or \\
+                                        if (p + 3 < hlen) {
+                                            var esc = load8(hdr + p + 2);
+                                            if (esc == 34) { ch = 34; close_at = p + 3; }
+                                            else { if (esc == 92) { ch = 92; close_at = p + 3; }
+                                            else { ch = 0 - 1; } }
+                                        } else { ch = 0 - 1; }
+                                    }
+                                    if (ch >= 0) {
+                                        if (close_at < hlen) {
+                                            if (load8(hdr + close_at) == 34) {
+                                                if (ch < 128) { found = ch; }
+                                            }
+                                        }
                                     }
                                 }
                             }

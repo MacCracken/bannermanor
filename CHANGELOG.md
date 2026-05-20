@@ -4,7 +4,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-### Added — M3 (partial: --list-fonts)
+### Added — M3 (partial)
 - `bnrmr --list-fonts` lists fonts in `./fonts`, alphabetically, with
   geometry (`WxH gap=N`) and description pulled from each font's `[font]`
   header. Malformed font files are surfaced as `(malformed — skipped)`
@@ -14,10 +14,31 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   returns a `FontHeader*` carrying width / height / gap / name /
   description. Skips glyph decode (cheaper than `font_load_file`).
 - `src/font.cyr` — `_font_get_str()` TOML-style `key = "value"` parser
-  used by the header loader.
-- `tests/bannermanor.tcyr` — coverage for `font_header_load` happy path
-  (fields on `fonts/block.cyml`), missing-file rejection, and bad-schema
-  rejection. 1343 assertions (up from 1334).
+  used by the header loader. `_font_get_char()` now accepts `\"` and
+  `\\` escapes so fonts can declare `char = "\""` and `char = "\\"`.
+- `fonts/block.cyml` — 32 punctuation glyphs added: `! " # $ % & ' ( ) * + , - . / : ; < = > ? @ [ \ ] ^ _ \` { | } ~`.
+  Glyph count goes from 37 to 69 (space + 0–9 + A–Z + printable
+  punctuation). `bnrmr "Hello, World!"` now renders the punctuation
+  inline instead of falling through to blank space glyphs.
+- `src/font_block.cyr` — mirrors the new glyphs byte-for-byte; the
+  M2 acceptance test now covers 69 glyphs × 5 rows. `_block_raw_row`
+  was split into `_block_raw_row_lo` (idx 0–36) and `_block_raw_row_hi`
+  (idx 37–68) to stay under cycc's 256-return-per-function limit.
+- `docs/guides/fonts.md` — full font-authoring walkthrough (schema,
+  body convention, validation gates, drop-in workflow, design tips).
+- `tests/bannermanor.tcyr` — `font_header_load` happy path / missing
+  file / bad-schema rejection; `t_glyph_punctuation` covering all 32
+  new chars; `t_glyph_fold_is_fallback` pinning the fold-fallback
+  semantics. 2361 assertions (up from 1334).
+
+### Changed — M3
+- `font_glyph_index` lowercase fold is now a **fallback**: a font that
+  registers a lowercase glyph gets that glyph honored; only fonts
+  with no lowercase entry (like `block.cyml`) fall through to the
+  uppercase. Lets future taller fonts ship distinct lowercase without
+  changing block's behavior.
+- `cyrius.cyml` pin bumped from `6.0.0` to `6.0.1` — matches local
+  cycc, silences toolchain-drift warning.
 
 ## [0.2.0] — 2026-05-19
 
