@@ -4,6 +4,39 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added — M5 (color via darshana)
+- `bnrmr --color NAME` — colorize the banner. Accepts the 8 base ANSI
+  colors (`black`, `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`,
+  `white`) and the 8 bright variants (`bright_red`, `bright-cyan`, …
+  both underscore and dash forms accepted). Special value `rainbow`
+  cycles a 6-color hue rotation per banner row.
+- TTY auto-detection: SGR sequences are emitted only when stdout is
+  attached to a TTY (probed via TIOCGWINSZ). Pipes / redirects
+  receive plain bytes. Roadmap M5 acceptance: `bnrmr --color cyan
+  "AGNOS"` renders colored on TTY, plain on `bnrmr ... | cat`.
+- `src/color.cyr` — new module. `parse_color(name)` maps user strings
+  to either an SGR code (30..37 / 90..97), `COLOR_NONE`, `COLOR_RAINBOW`,
+  or `-3` (unknown — distinct from default). `rainbow_color_for_row(r)`
+  returns the SGR code for row `r` modulo 6.
+- `src/layout.cyr` — `stdout_is_tty()` helper. `render_layout` gained
+  a 7th `color` param; per-row SGR-set/reset wrapping when color
+  != `COLOR_NONE` and stdout is a TTY.
+- `tests/bannermanor.tcyr` — coverage for `parse_color` (all 16 names
+  in underscore + dash forms, special values, unknown names),
+  `rainbow_color_for_row` (full 6-step cycle + wrap), and sentinel
+  distinctness. 2641 assertions (up from 2608).
+
+### Changed — M5
+- `src/render.cyr` — `render()` shim passes `COLOR_NONE` through to
+  `render_layout`'s new color parameter. Byte-identical behavior
+  preserved.
+- `cyrius.cyml` — `[deps.darshana]` resolves the sibling library.
+  Currently pinned via `path = "../darshana"` for development; will
+  flip to `git + tag = "0.3.5"` at release-cut time.
+- `lib/darshana.cyr` — vendored from `darshana@0.3.5` via `cyrius
+  deps`. Provides `tty_sgr`, `tty_sgr_reset`, and the 16
+  `TTY_FG_*` SGR constants.
+
 ## [0.4.0] — 2026-05-20
 
 Closes M4 — layout flags. `--align`, `--width`, `--pad` land, CLI

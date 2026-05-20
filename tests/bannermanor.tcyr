@@ -406,11 +406,75 @@ fn t_layout_render_layout_default_matches_render() {
     # already delegates and the build links — covered structurally.
     var f = block_font_embed();
     assert(f != 0, "font built");
-    # Smoke: rejects oversized like render does.
+    # Smoke: rejects oversized like render does. Pass COLOR_NONE
+    # explicitly so the bounds-rejection path returns before color
+    # logic, but the test signature still matches the M5 fn surface.
     var big[1];
-    assert_eq(render_layout(f, &big, 1025, 0, ALIGN_LEFT, 0), 0 - 1, "over-cap -> -1");
-    assert_eq(render_layout(f, &big, 0 - 1, 0, ALIGN_LEFT, 0), 0 - 1, "negative len -> -1");
-    assert_eq(render_layout(0, &big, 5,  0, ALIGN_LEFT, 0), 0 - 2, "null font -> -2");
+    assert_eq(render_layout(f, &big, 1025,   0, ALIGN_LEFT, 0, COLOR_NONE), 0 - 1, "over-cap -> -1");
+    assert_eq(render_layout(f, &big, 0 - 1,  0, ALIGN_LEFT, 0, COLOR_NONE), 0 - 1, "negative len -> -1");
+    assert_eq(render_layout(0, &big, 5,      0, ALIGN_LEFT, 0, COLOR_NONE), 0 - 2, "null font -> -2");
+}
+
+# ---- M5 color ----
+
+fn t_color_parse_names() {
+    test_group("color / parse_color named colors");
+    # 8 base
+    assert_eq(parse_color("black"),   TTY_FG_BLACK,   "black");
+    assert_eq(parse_color("red"),     TTY_FG_RED,     "red");
+    assert_eq(parse_color("green"),   TTY_FG_GREEN,   "green");
+    assert_eq(parse_color("yellow"),  TTY_FG_YELLOW,  "yellow");
+    assert_eq(parse_color("blue"),    TTY_FG_BLUE,    "blue");
+    assert_eq(parse_color("magenta"), TTY_FG_MAGENTA, "magenta");
+    assert_eq(parse_color("cyan"),    TTY_FG_CYAN,    "cyan");
+    assert_eq(parse_color("white"),   TTY_FG_WHITE,   "white");
+    # 8 bright (underscore form)
+    assert_eq(parse_color("bright_red"),     TTY_FG_BRIGHT_RED,     "bright_red");
+    assert_eq(parse_color("bright_cyan"),    TTY_FG_BRIGHT_CYAN,    "bright_cyan");
+    assert_eq(parse_color("bright_white"),   TTY_FG_BRIGHT_WHITE,   "bright_white");
+    # 8 bright (dash form)
+    assert_eq(parse_color("bright-magenta"), TTY_FG_BRIGHT_MAGENTA, "bright-magenta");
+    assert_eq(parse_color("bright-yellow"),  TTY_FG_BRIGHT_YELLOW,  "bright-yellow");
+}
+
+fn t_color_parse_special() {
+    test_group("color / parse_color special values");
+    # Sentinel for "no --color"
+    assert_eq(parse_color(0),  COLOR_NONE, "null -> COLOR_NONE");
+    assert_eq(parse_color(""), COLOR_NONE, "empty -> COLOR_NONE");
+    # Rainbow mode
+    assert_eq(parse_color("rainbow"), COLOR_RAINBOW, "rainbow -> COLOR_RAINBOW");
+}
+
+fn t_color_parse_unknown() {
+    test_group("color / parse_color unknown names");
+    assert_eq(parse_color("purple"),  0 - 3, "purple (not in 8/16 ANSI)");
+    assert_eq(parse_color("CYAN"),    0 - 3, "CYAN (uppercase not accepted)");
+    assert_eq(parse_color("cyann"),   0 - 3, "cyann (typo)");
+    assert_eq(parse_color("12"),      0 - 3, "numeric string not accepted");
+    assert_eq(parse_color("red green"), 0 - 3, "multi-word rejected");
+}
+
+fn t_color_rainbow_cycle() {
+    test_group("color / rainbow_color_for_row cycle");
+    assert_eq(rainbow_color_for_row(0), TTY_FG_RED,     "row 0 = red");
+    assert_eq(rainbow_color_for_row(1), TTY_FG_YELLOW,  "row 1 = yellow");
+    assert_eq(rainbow_color_for_row(2), TTY_FG_GREEN,   "row 2 = green");
+    assert_eq(rainbow_color_for_row(3), TTY_FG_CYAN,    "row 3 = cyan");
+    assert_eq(rainbow_color_for_row(4), TTY_FG_BLUE,    "row 4 = blue");
+    assert_eq(rainbow_color_for_row(5), TTY_FG_MAGENTA, "row 5 = magenta");
+    # Wraps at 6
+    assert_eq(rainbow_color_for_row(6),  TTY_FG_RED,    "row 6 wraps to red");
+    assert_eq(rainbow_color_for_row(13), TTY_FG_YELLOW, "row 13 -> idx 1 = yellow");
+}
+
+fn t_color_constants_are_distinct() {
+    test_group("color / sentinel values don't collide with SGR codes");
+    # All SGR codes are >= 30; sentinels are negative. No collision.
+    assert(COLOR_NONE    < 0,  "COLOR_NONE is negative");
+    assert(COLOR_RAINBOW < 0,  "COLOR_RAINBOW is negative");
+    assert(COLOR_NONE != COLOR_RAINBOW, "sentinels distinct");
+    assert(TTY_FG_BLACK >= 30, "first real SGR code >= 30");
 }
 
 fn t_header_load_malformed() {
@@ -448,6 +512,11 @@ fn main() {
     t_layout_align_pad();
     t_layout_parse_uint();
     t_layout_render_layout_default_matches_render();
+    t_color_parse_names();
+    t_color_parse_special();
+    t_color_parse_unknown();
+    t_color_rainbow_cycle();
+    t_color_constants_are_distinct();
     t_header_load_block();
     t_header_load_missing();
     t_header_load_malformed();

@@ -23,6 +23,14 @@ thin neutral-options wrapper so the M1 byte-identity contract
 holds. `--width N` smaller than one glyph renders nothing —
 documented in `--help` and the layout-module comments.
 
+**Unreleased** — M5 (color via darshana) done. Ships `--color NAME`
+covering the 16 ANSI named foreground colors + `rainbow` (per-row
+6-color cycle). SGR sequences route through darshana 0.3.5's new
+`tty_sgr` / `tty_sgr_reset` primitives — no inline ANSI in bnrmr.
+Stdout TTY detection via TIOCGWINSZ: piped output gets plain bytes,
+TTY output gets color. New `src/color.cyr` module; `render_layout`
+gained a 7th `color` parameter.
+
 **0.2.0** — tagged 2026-05-19. First post-scaffold release; bundles
 M1 (first render path, hardcoded block font, 1 KB input cap, flags
 `--version`/`--help`) and M2 (CYML font format, `fonts/block.cyml`,
@@ -42,8 +50,9 @@ Single-shot CLI: text in, banner bytes out, exit.
 - `src/main.cyr` — entry point. Builds a flag context via
   `lib/flags.cyr` and dispatches to the renderer. Flags:
   `--version`, `-h/--help`, `-f/--font NAME`, `--list-fonts`,
-  `--align L|C|R`, `-w/--width N`, `--pad N`. Positional args
-  concatenate (space-separated) into the 1 KB-capped render text.
+  `--align L|C|R`, `-w/--width N`, `--pad N`, `--color NAME`.
+  Positional args concatenate (space-separated) into the 1 KB-capped
+  render text.
 - `src/render.cyr` — `render(font, text, len)` shim; delegates to
   `render_layout` (in `src/layout.cyr`) with neutral options
   (width=0, align=left, pad=0). Preserves the M1+M2 byte-identical
@@ -51,8 +60,13 @@ Single-shot CLI: text in, banner bytes out, exit.
 - `src/layout.cyr` — M4 layout orchestrator. Detects terminal
   width via `TIOCGWINSZ` with COLUMNS env + 80-col fallback.
   Pure helpers: `banner_width`, `fit_chars`, `align_pad`,
-  `parse_uint`. Public renderer: `render_layout(font, text, len,
-  width, align, pad)`.
+  `parse_uint`, `stdout_is_tty` (M5). Public renderer:
+  `render_layout(font, text, len, width, align, pad, color)`.
+- `src/color.cyr` — M5 `--color` plumbing. `parse_color(name)` maps
+  ANSI 16-color names + `rainbow` to SGR codes / sentinels;
+  `rainbow_color_for_row(r)` returns the SGR code for row `r` in
+  the 6-step rainbow cycle. All SGR emission goes through darshana
+  (`tty_sgr` / `tty_sgr_reset`).
 - `src/font.cyr` — `Font` struct + CYML loader (`font_load_file`).
   Validates file size, schema version, geometry bounds, and body
   shape; rejects malformed input rather than degrading. Also
@@ -68,7 +82,6 @@ Single-shot CLI: text in, banner bytes out, exit.
 
 Planned by milestone:
 
-- `src/color.cyr` — darshana ANSI routing (M5)
 - `src/flf.cyr` — legacy figlet font adapter (M6)
 
 ## Fonts
@@ -99,7 +112,7 @@ authoring walkthrough at [`docs/guides/fonts.md`](../guides/fonts.md).
 
 ## Tests
 
-- `tests/bannermanor.tcyr` — 2608 assertions covering: embedded font
+- `tests/bannermanor.tcyr` — 2641 assertions covering: embedded font
   geometry, glyph-index lookup (space / digits / uppercase /
   lowercase folding / punctuation / unsupported / fold-is-fallback),
   row-shape invariant, renderer bounds, CYML loader happy path +
@@ -108,9 +121,11 @@ authoring walkthrough at [`docs/guides/fonts.md`](../guides/fonts.md).
   is byte-identical to the embedded font on every char and every row,
   now over 69 glyphs), the slim and big font loads + full-printable-
   ASCII coverage checks, the M3 header loader (fields on
-  `block.cyml`, missing-file, bad-schema rejection), and the M4
-  layout math (`banner_width`, `fit_chars`, `align_pad`,
-  `parse_uint`, `render_layout` bounds). Runs clean.
+  `block.cyml`, missing-file, bad-schema rejection), the M4 layout
+  math (`banner_width`, `fit_chars`, `align_pad`, `parse_uint`,
+  `render_layout` bounds), and the M5 color path (`parse_color`
+  across all 16 names + special values + unknowns, rainbow cycle,
+  sentinel distinctness). Runs clean.
 - `tests/fixtures/` — malformed-font fixtures consumed by the loader
   rejection tests.
 - `tests/bannermanor.bcyr` — benchmark stub
@@ -122,8 +137,10 @@ Direct (declared in `cyrius.cyml`):
 
 - stdlib — string, fmt, alloc, io, vec, str, syscalls, assert, bench,
   args, cyml, result, flags
-
-M5 adds `[deps.darshana]` for ANSI color primitives.
+- `darshana ≥ 0.3.5` — SGR primitives (`tty_sgr`, `tty_sgr_reset`,
+  `TTY_FG_*` constants) for `--color`. Currently resolved via
+  `path = "../darshana"` for development; flips to `git + tag`
+  at release-cut time.
 
 ## Consumers
 
@@ -136,6 +153,6 @@ _None yet._ BannerManor is end-user-facing; consumers will be:
 
 ## Next
 
-M4 is done; v0.4.0 is ready to tag. M5 is next — color via darshana
-(`--color`, `--color rainbow`, TTY auto-detect). See
+M5 is done; v0.5.0 is ready to tag. M6 is next — legacy `.flf` read
+adapter for users with existing figlet font libraries. See
 [`roadmap.md`](roadmap.md) for the full sequence.

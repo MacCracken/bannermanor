@@ -1,0 +1,79 @@
+# color.cyr — `--color` flag plumbing.
+#
+# Maps user-facing color names ("cyan", "bright_red", "rainbow") to
+# SGR codes. The actual escape-sequence emission goes through
+# darshana's `tty_sgr` / `tty_sgr_reset` so bnrmr never inlines ANSI
+# (CLAUDE.md: "no raw ANSI escape codes in the codebase").
+#
+# Resolved color values fed to render_layout are:
+#   COLOR_NONE     — no color (default; no SGR emitted)
+#   COLOR_RAINBOW  — per-row cycle through the rainbow palette
+#   30..37 / 90..97 — concrete TTY_FG_* code for solid-color render
+
+include "lib/darshana.cyr"
+include "lib/string.cyr"
+
+# Sentinel values for the resolved-color int passed to render_layout.
+# Negatives so they can never collide with a real SGR code (30+).
+# `var` (not `enum`) because the enum syntax only accepts positive
+# integer literals.
+var COLOR_NONE    = 0 - 1;
+var COLOR_RAINBOW = 0 - 2;
+
+# Map a user-supplied color name to its SGR code, or one of the
+# COLOR_* sentinels. Returns COLOR_NONE for empty / null input
+# (treated as "no --color flag"). Returns -3 for unknown names so
+# callers can distinguish them from the default/rainbow sentinels.
+fn parse_color(s): i64 {
+    if (s == 0) { return COLOR_NONE; }
+    if (strlen(s) == 0) { return COLOR_NONE; }
+
+    # Special mode
+    if (streq(s, "rainbow") == 1) { return COLOR_RAINBOW; }
+
+    # 8 base colors
+    if (streq(s, "black")   == 1) { return TTY_FG_BLACK; }
+    if (streq(s, "red")     == 1) { return TTY_FG_RED; }
+    if (streq(s, "green")   == 1) { return TTY_FG_GREEN; }
+    if (streq(s, "yellow")  == 1) { return TTY_FG_YELLOW; }
+    if (streq(s, "blue")    == 1) { return TTY_FG_BLUE; }
+    if (streq(s, "magenta") == 1) { return TTY_FG_MAGENTA; }
+    if (streq(s, "cyan")    == 1) { return TTY_FG_CYAN; }
+    if (streq(s, "white")   == 1) { return TTY_FG_WHITE; }
+
+    # 8 bright variants — accept both "bright_X" and "bright-X" /
+    # "brightX" so users don't have to memorize the separator.
+    if (streq(s, "bright_black")   == 1) { return TTY_FG_BRIGHT_BLACK; }
+    if (streq(s, "bright_red")     == 1) { return TTY_FG_BRIGHT_RED; }
+    if (streq(s, "bright_green")   == 1) { return TTY_FG_BRIGHT_GREEN; }
+    if (streq(s, "bright_yellow")  == 1) { return TTY_FG_BRIGHT_YELLOW; }
+    if (streq(s, "bright_blue")    == 1) { return TTY_FG_BRIGHT_BLUE; }
+    if (streq(s, "bright_magenta") == 1) { return TTY_FG_BRIGHT_MAGENTA; }
+    if (streq(s, "bright_cyan")    == 1) { return TTY_FG_BRIGHT_CYAN; }
+    if (streq(s, "bright_white")   == 1) { return TTY_FG_BRIGHT_WHITE; }
+    if (streq(s, "bright-black")   == 1) { return TTY_FG_BRIGHT_BLACK; }
+    if (streq(s, "bright-red")     == 1) { return TTY_FG_BRIGHT_RED; }
+    if (streq(s, "bright-green")   == 1) { return TTY_FG_BRIGHT_GREEN; }
+    if (streq(s, "bright-yellow")  == 1) { return TTY_FG_BRIGHT_YELLOW; }
+    if (streq(s, "bright-blue")    == 1) { return TTY_FG_BRIGHT_BLUE; }
+    if (streq(s, "bright-magenta") == 1) { return TTY_FG_BRIGHT_MAGENTA; }
+    if (streq(s, "bright-cyan")    == 1) { return TTY_FG_BRIGHT_CYAN; }
+    if (streq(s, "bright-white")   == 1) { return TTY_FG_BRIGHT_WHITE; }
+
+    return 0 - 3;   # unknown — distinct from COLOR_NONE / COLOR_RAINBOW
+}
+
+# Rainbow palette — 6 hue-rotating SGR codes. Cycled per output row
+# when --color rainbow is set. Order is ROYGBV-ish: red, yellow,
+# green, cyan, blue, magenta. Orange and indigo aren't standard
+# ANSI; cyan stands in for orange's slot in the cycle and magenta
+# for violet's.
+fn rainbow_color_for_row(row): i64 {
+    var m = row % 6;
+    if (m == 0) { return TTY_FG_RED; }
+    if (m == 1) { return TTY_FG_YELLOW; }
+    if (m == 2) { return TTY_FG_GREEN; }
+    if (m == 3) { return TTY_FG_CYAN; }
+    if (m == 4) { return TTY_FG_BLUE; }
+    return TTY_FG_MAGENTA;
+}

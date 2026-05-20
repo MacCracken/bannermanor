@@ -66,6 +66,9 @@ fn print_usage(): i64 {
     println("                        (default: 0 = unlimited; if N is smaller");
     println("                        than one glyph, nothing renders)");
     println("      --pad N           N blank lines above and below banner (default: 0)");
+    println("      --color NAME      colorize: red, green, yellow, blue, magenta,");
+    println("                        cyan, white (or bright_<name>), or 'rainbow'");
+    println("                        for per-row cycling. Suppressed on non-TTY stdout.");
     println("      --list-fonts      list available fonts and exit");
     println("      --version         print version and exit");
     println("  -h, --help            print this help and exit");
@@ -251,6 +254,7 @@ fn main(): i64 {
     var f_align      = flags_add_str (fs, 0,   "align",      0, "left | center | right");
     var f_width      = flags_add_int (fs, 119, "width",      0, "truncate at N columns (0 = unlimited)"); # 'w'
     var f_pad        = flags_add_int (fs, 0,   "pad",        0, "N blank lines above and below");
+    var f_color      = flags_add_str (fs, 0,   "color",      0, "name (red/cyan/...) or 'rainbow'");
 
     if (flags_parse(fs, ac, &argv_arr) != 0) {
         var err = flags_error(fs);
@@ -295,6 +299,15 @@ fn main(): i64 {
         return 1;
     }
 
+    var color_str = flags_get_str(fs, f_color);
+    var color = parse_color(color_str);
+    if (color == 0 - 3) {
+        println("bnrmr: --color must be a known name or 'rainbow'");
+        println("       (black/red/green/yellow/blue/magenta/cyan/white,");
+        println("        bright_<name>, or rainbow)");
+        return 1;
+    }
+
     # Resolve font: default to embedded, or load via --font NAME.
     var font = 0;
     var font_name = flags_get_str(fs, f_font);
@@ -335,7 +348,7 @@ fn main(): i64 {
         return 0;
     }
 
-    render_layout(font, &buf, n, width, align, pad);
+    render_layout(font, &buf, n, width, align, pad, color);
     return 0;
 }
 
