@@ -207,7 +207,7 @@ fn main(): i64 {
 
     var first = argv(1);
     if (streq_lit(first, "--version") == 1) {
-        println("bnrmr 0.2.0");
+        println("bnrmr 0.3.0");
         return 0;
     }
     if (streq_lit(first, "--help") == 1) {

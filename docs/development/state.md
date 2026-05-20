@@ -5,19 +5,18 @@
 
 ## Version
 
+**0.3.0** — tagged 2026-05-20. Closes M3 (the default font set).
+Ships `--list-fonts`, header-only loader, fold-fallback in
+`font_glyph_index`, `block.cyml` expanded to full printable ASCII
+(69 glyphs), `fonts/slim.cyml` (4×5), `fonts/big.cyml` (7×7),
+`docs/guides/fonts.md`, pin bumped to 6.0.1. Default font set is
+the initial three (block/slim/big) covering small / medium / large;
+more fonts land post-v1.
+
 **0.2.0** — tagged 2026-05-19. First post-scaffold release; bundles
 M1 (first render path, hardcoded block font, 1 KB input cap, flags
 `--version`/`--help`) and M2 (CYML font format, `fonts/block.cyml`,
 `--font NAME` flag, loader with validation).
-
-**Unreleased** — M3 complete. Ships: `--list-fonts`, header-only
-loader, fold-fallback in `font_glyph_index`, `block.cyml` expanded
-to full printable ASCII (69 glyphs), `fonts/slim.cyml` (4×5),
-`fonts/big.cyml` (7×7), `docs/guides/fonts.md`, pin bumped to 6.0.1.
-Final font set is the initial three (block/slim/big) covering
-small / medium / large; more fonts can land in subsequent releases
-without re-cutting M3. Ready for v0.3.0 tag. See `CHANGELOG.md`
-`[Unreleased]` for the full list.
 
 ## Toolchain
 

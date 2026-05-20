@@ -4,7 +4,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-### Added — M3 (partial)
+## [0.3.0] — 2026-05-20
+
+Closes M3 — the default font set. Block expanded to full printable
+ASCII; two new fonts (`slim`, `big`) shipped; `--list-fonts` and a
+font-authoring guide land alongside. Toolchain pin caught up to
+`cycc` 6.0.1.
+
+### Added — M3
 - `bnrmr --list-fonts` lists fonts in `./fonts`, alphabetically, with
   geometry (`WxH gap=N`) and description pulled from each font's `[font]`
   header. Malformed font files are surfaced as `(malformed — skipped)`
@@ -51,6 +58,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   changing block's behavior.
 - `cyrius.cyml` pin bumped from `6.0.0` to `6.0.1` — matches local
   cycc, silences toolchain-drift warning.
+- `VERSION` and the `--version` string bumped to `0.3.0`.
 
 ## [0.2.0] — 2026-05-19
 
