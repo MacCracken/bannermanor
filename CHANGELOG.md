@@ -4,6 +4,46 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.0] — 2026-05-20
+
+Closes the **M7 security audit pass**. One concrete vulnerability
+(F-001: `.flf` glyph rows could smuggle ANSI control bytes through to
+stdout, CWE-150) is fixed in this release. The remainder of the audit
+documents positive observations and defense-in-depth recommendations
+for v1.0. See [`docs/audit/2026-05-20-audit.md`](docs/audit/2026-05-20-audit.md)
+for the full report.
+
+M7 is not closed by this release — the maintainer-MOTD dogfood cycle
+and the 3-point benchmark trend (`docs/benchmarks.md`) remain.
+
+### Security
+- **F-001 (HIGH) — `.flf` glyph row control-byte injection.** The
+  `.flf` loader (`src/flf.cyr`) previously copied glyph row bytes
+  verbatim after hardblank→space substitution. A malicious `.flf`
+  could embed an ESC (`0x1B`) or other C0/C1 control byte inside a
+  glyph; `bnrmr --font evil.flf "X"` would emit real ANSI to the
+  user's terminal — the same vector documented in the OpenAI Codex
+  CLI RCE (CVE-2026-…) and the `gh run view --log` advisory. The
+  per-byte copy now scrubs `0x00–0x1F`, `0x7F`, and `0x80–0x9F` to
+  space after the hardblank substitution. CYML body bytes were
+  already restricted to `'.'` and `'#'` and were never exposed.
+
+### Added
+- `docs/audit/2026-05-20-audit.md` — full 0.7.0 audit report:
+  10 findings (1 HIGH/fixed, 3 LOW/accepted, 6 informational), threat
+  model, external CVE survey, future-work tracking for v1.0
+  defense-in-depth.
+- `tests/fixtures/flf_esc_glyph.flf` — synthetic 1-row `.flf` whose
+  space glyph carries a literal ESC byte; consumed by the new
+  regression test.
+- `tests/bannermanor.tcyr` — `t_flf_strips_control_bytes` (loaded ESC
+  row reads back as space; non-control bytes preserved). 2754
+  assertions (up from 2751).
+
+### Changed
+- `src/flf.cyr` — per-byte glyph copy now applies the control-byte
+  scrub described under Security.
+
 ## [0.6.0] — 2026-05-20
 
 Closes M6 — legacy `.flf` read adapter. Users with existing figlet

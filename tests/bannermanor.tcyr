@@ -527,6 +527,21 @@ fn t_load_flf_malformed() {
     assert_eq(flf_load_file("tests/fixtures/flf_truncated.flf"),  0, "truncated -> 0");
 }
 
+# 0.7.0 audit F-001 — a .flf whose glyph rows contain control bytes
+# (e.g. ESC 0x1B) must NOT pass those bytes through to the rendered
+# row. The loader sanitizes C0/C1/DEL → space, defeating the ANSI
+# injection vector documented in docs/audit/2026-05-20-audit.md.
+fn t_flf_strips_control_bytes() {
+    test_group("flf_load_file / strips control bytes");
+    var f = flf_load_file("tests/fixtures/flf_esc_glyph.flf");
+    assert(f != 0, "loaded");
+    # The space glyph (idx 0) was authored with a literal ESC (0x1B)
+    # in its row. After load, that row byte must be the safe space (32).
+    assert_eq(load8(font_row(f, 0, 0)), 32, "ESC in space-glyph row -> space");
+    # A normal glyph ('A' at idx 33) survives unchanged.
+    assert_eq(load8(font_row(f, 33, 0)), 65, "non-control byte ('A') preserved");
+}
+
 fn t_header_load_malformed() {
     test_group("font_header_load / malformed");
     # The header loader validates schema + geometry — same gates as the
@@ -573,6 +588,7 @@ fn main() {
     t_load_tiny_flf();
     t_load_flf_missing();
     t_load_flf_malformed();
+    t_flf_strips_control_bytes();
     return assert_summary();
 }
 

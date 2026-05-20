@@ -216,11 +216,20 @@ fn flf_load_file(path): i64 {
             if (llen > 64) { return 0; }
 
             # Copy to scratch with hardblank → space substitution.
+            # Control bytes (0x00–0x1F, 0x7F, 0x80–0x9F) are replaced
+            # with space: a malicious .flf could otherwise smuggle an
+            # ESC (0x1B) into a glyph row and emit ANSI to the user's
+            # TTY when rendered (CWE-150 / category B in the 0.7.0
+            # audit). Hardblank is substituted before this filter, so
+            # legitimate hardblank=0x01 fonts still work.
             var dst = rows_scratch + (gi * height + r) * 64;
             var col = 0;
             while (col < llen) {
                 var b = load8(buf + line_start + col);
                 if (b == hardblank) { b = 32; }
+                if (b < 32)  { b = 32; }      # C0 controls + DEL-band
+                if (b == 127) { b = 32; }     # DEL
+                if (b >= 128 && b <= 159) { b = 32; }  # C1 controls
                 store8(dst + col, b);
                 col = col + 1;
             }

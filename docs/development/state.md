@@ -5,6 +5,21 @@
 
 ## Version
 
+**0.7.0** — tagged 2026-05-20. Closes the M7 security audit pass
+(maintainer-MOTD dogfood + benchmark trend remain in M7). Fixes
+F-001 — `.flf` glyph rows could smuggle ANSI control bytes (e.g.
+ESC `0x1B`) through to stdout, the CWE-150 vector documented across
+recent terminal CVEs and the OpenAI Codex CLI RCE. The per-byte
+copy in `flf_load_file` now scrubs `0x00–0x1F`, `0x7F`, and
+`0x80–0x9F` to space after the hardblank substitution. New synthetic
+fixture `tests/fixtures/flf_esc_glyph.flf` + regression
+`t_flf_strips_control_bytes`. Full report at
+[`docs/audit/2026-05-20-audit.md`](../audit/2026-05-20-audit.md) — 10
+findings (1 HIGH/fixed, 3 LOW/accepted, 6 informational), threat
+model, external CVE survey covering figlet/.flf, ANSI escape
+injection, CYML expansion, TIOCGWINSZ trust, and CLI argv→stdout
+precedents.
+
 **0.6.0** — tagged 2026-05-20. Closes M6 (legacy `.flf` read path).
 Ships `src/flf.cyr` — a read-only adapter that loads figlet `.flf`
 font files into the same `Font*` shape as the CYML loader. Activated
@@ -92,7 +107,10 @@ Single-shot CLI: text in, banner bytes out, exit.
   glyphs (ASCII 32..126) with per-glyph endmark detection and
   hardblank → space substitution, then assembles a uniform-width
   `Font*` (`gap=0`, width = observed max across all glyphs). 1 MB
-  file cap. Activated by `--font` values that end in `.flf`.
+  file cap. Activated by `--font` values that end in `.flf`. The
+  per-byte copy scrubs C0/C1 control bytes + DEL to space (0.7.0
+  audit fix F-001) so malicious `.flf` files cannot smuggle ANSI
+  escapes through to the user's terminal.
 - `src/font_block.cyr` — embedded "block" font. `block_font_embed()`
   builds a `Font*` from inline glyph data; this is the default used
   when no `--font` flag is passed (CLAUDE.md self-contained rule).
@@ -129,7 +147,7 @@ authoring walkthrough at [`docs/guides/fonts.md`](../guides/fonts.md).
 
 ## Tests
 
-- `tests/bannermanor.tcyr` — 2751 assertions covering: embedded font
+- `tests/bannermanor.tcyr` — 2754 assertions covering: embedded font
   geometry, glyph-index lookup (space / digits / uppercase /
   lowercase folding / punctuation / unsupported / fold-is-fallback),
   row-shape invariant, renderer bounds, CYML loader happy path +
@@ -145,7 +163,9 @@ authoring walkthrough at [`docs/guides/fonts.md`](../guides/fonts.md).
   sentinel distinctness), and the M6 .flf adapter (`flf_load_file`
   happy path on `tiny.flf` — geometry, charmap, hardblank
   substitution — plus missing-file and three malformed-fixture
-  rejections). Runs clean.
+  rejections), and the 0.7.0 audit regression
+  (`t_flf_strips_control_bytes` — ESC in a `.flf` glyph row loads as
+  space, not 0x1B). Runs clean.
 - `tests/fixtures/` — malformed-font fixtures consumed by the loader
   rejection tests (both CYML and .flf variants).
 - `tests/bannermanor.bcyr` — benchmark stub
@@ -173,8 +193,8 @@ _None yet._ BannerManor is end-user-facing; consumers will be:
 
 ## Next
 
-M6 is done; v0.6.0 is ready to tag. M7 is next — harden + dogfood:
-maintainer-MOTD usage for one release cycle, P(-1) hardening pass
-(security audit doc at `docs/audit/YYYY-MM-DD-audit.md`), and a
-3-point benchmark trend in `docs/benchmarks.md`. See
+The M7 audit pass is shipped (0.7.0). Two M7 items remain before M8:
+maintainer-MOTD dogfooding for one release cycle (in-flight) and the
+3-point benchmark trend in `docs/benchmarks.md`. After both: M8 cuts
+v1.0.0 with the CLI flag surface frozen. See
 [`roadmap.md`](roadmap.md) for the full sequence.

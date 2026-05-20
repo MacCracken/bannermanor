@@ -5,11 +5,13 @@
 > in what order, against what dependency gates. State lives in
 > [`state.md`](state.md).
 
-**Currently shipped**: v0.6.0 — M1–M6 (render pipeline, CYML font
+**Currently shipped**: v0.7.0 — M1–M6 (render pipeline, CYML font
 format, default font set, layout flags, color, legacy `.flf` read
-adapter). See CHANGELOG for the per-release details.
+adapter) plus the M7 security audit pass. See CHANGELOG for the
+per-release details.
 
-**Next**: M7 — harden + dogfood.
+**Next**: finish M7 — maintainer-MOTD dogfooding (in-flight) and the
+3-point benchmark trend.
 
 ## v1.0 criteria
 
@@ -35,8 +37,9 @@ format. Frozen CLI flag surface.
 - [ ] Maintainer dogfood: BannerManor used in the maintainer's MOTD
       for one release cycle, real-world bugs filed in
       `docs/development/issues/` and resolved (M7)
-- [ ] Security audit pass (`docs/audit/YYYY-MM-DD-audit.md`) — input
-      length cap, font-file bounds, output buffer sizing (M7)
+- [x] Security audit pass (shipped v0.7.0 — `docs/audit/2026-05-20-audit.md`,
+      10 findings, F-001 control-byte injection in `.flf` glyph rows fixed
+      same-release)
 - [ ] CHANGELOG complete from v0.1.0 onward (currently yes; keep so)
 
 ## Milestones
@@ -47,12 +50,13 @@ see CHANGELOG). Versions are targets, not commitments — ship-when-ready.
 
 ### M7 — Harden + dogfood (v0.9.0; gap before v1.0 is intentional)
 
-- BannerManor used in the maintainer's MOTD for one release cycle
-- All real-world bugs / font-rendering surprises filed in
-  `docs/development/issues/` and resolved
-- P(-1) hardening pass complete — security audit doc filed at
-  `docs/audit/YYYY-MM-DD-audit.md`
-- 3-point benchmark trend in `docs/benchmarks.md`
+- [x] P(-1) hardening pass complete — security audit doc filed at
+      [`docs/audit/2026-05-20-audit.md`](../audit/2026-05-20-audit.md)
+      (shipped v0.7.0; F-001 control-byte injection fix included)
+- [ ] BannerManor used in the maintainer's MOTD for one release cycle
+- [ ] All real-world bugs / font-rendering surprises filed in
+      `docs/development/issues/` and resolved
+- [ ] 3-point benchmark trend in `docs/benchmarks.md`
 
 ### M8 — v1.0.0
 
