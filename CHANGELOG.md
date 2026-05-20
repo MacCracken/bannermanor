@@ -4,6 +4,48 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.9.0] — 2026-05-20
+
+Closes **M7**. Fixes the one real bug surfaced by the maintainer-MOTD
+dogfood cycle (issue 0003 — CRLF-line `.flf` fonts bleed endmark bytes
+into glyph rows), and captures the **third and final benchmark trend
+point** so the v1.0 "3-point benchmark trend" criterion is satisfied.
+
+Issue 0001 (keystroke interleave during render) was already deferred
+past v1.0 in 0.7.0; issue 0002 (unbounded `--pad` / `--width`) stays
+deferred to the M8 freeze pass where the cap becomes a documented
+`Breaking` change. No remaining open M7 work; M8 is next and cuts v1.0.
+
+### Fixed
+- **Issue 0003 — CRLF-line `.flf` fonts bleed endmark bytes.** `src/flf.cyr`
+  previously read the byte immediately preceding `\n` as the endmark
+  character. For CRLF-terminated `.flf` files (common from Windows
+  authoring tools like JavE — `modular.flf` in the repo top level was
+  the dogfood reproducer), that byte was `\r`, so the real endmark
+  (`#`, `@`, `$`, …) was left embedded in glyph row data — visible at
+  render time as a literal column of endmark characters down the
+  right edge of every glyph. The loader now trims a trailing `\r`
+  from each line before endmark detection and the strip-trailing-
+  endmark loop. Pure-LF `.flf` files are unaffected (the trim is a
+  no-op when the trailing byte is not `\r`). `cursor` still advances
+  past the original `\n` position so file traversal is unchanged.
+
+### Added
+- `tests/fixtures/flf_crlf.flf` — `tests/fixtures/tiny.flf` byte-for-byte
+  with every `\n` re-encoded as `\r\n`. Reproduces the issue 0003
+  vector in a 493-byte fixture.
+- `tests/bannermanor.tcyr` — `t_flf_crlf_endmarks_stripped`: asserts
+  the CRLF fixture loads, glyph rows do not contain the `@` endmark,
+  and the CRLF and LF fixtures produce byte-identical glyph row 0
+  across all 95 glyphs. 2762 assertions (up from 2754).
+- `docs/benchmarks.md` — point 3 captured (block_font_embed 7 ns,
+  font_load_file 58 µs, fit_chars ×100 = 572 ns). Flat against 0.8.0;
+  the CRLF trim is in `.flf` parsing which the benchmark set doesn't
+  exercise. M7's 3-point trend item is closed.
+
+### Changed
+- `VERSION` and the `--version` string bumped to `0.9.0`.
+
 ## [0.8.0] — 2026-05-20
 
 Closes the **v1.0 defense-in-depth items** from the 0.7.0 audit. Both

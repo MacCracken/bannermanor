@@ -196,14 +196,26 @@ fn flf_load_file(path): i64 {
             if (cursor >= total) { return 0; }    # truncated
             var line_start = cursor;
             var line_end = _flf_eol(buf, total, cursor);
-            var llen = line_end - line_start;
+
+            # Issue 0003 — treat \r\n as the line terminator. CRLF .flf
+            # files (common from Windows authoring tools like JavE)
+            # would otherwise have \r mistaken for the endmark, leaving
+            # the real endmark `#`/`@`/`$` bytes embedded in glyph rows.
+            # Pure-LF files are unaffected (CR check fails harmlessly).
+            # cursor still advances past line_end + 1, so byte-offset
+            # bookkeeping is unchanged.
+            var eff_end = line_end;
+            if (eff_end > line_start && load8(buf + eff_end - 1) == 13) {
+                eff_end = eff_end - 1;
+            }
+            var llen = eff_end - line_start;
             if (llen <= 0) { return 0; }          # empty line not allowed
 
             # Endmark = last byte of glyph's first row; applied to all
             # rows of this glyph. Per-glyph (not per-font) so we tolerate
             # fonts with mixed endmarks (rare, but the spec allows it).
             if (r == 0) {
-                endmark = load8(buf + line_end - 1);
+                endmark = load8(buf + eff_end - 1);
             }
 
             # Strip every trailing byte == endmark (handles single

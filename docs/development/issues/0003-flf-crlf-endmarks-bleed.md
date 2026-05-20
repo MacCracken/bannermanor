@@ -4,7 +4,7 @@
 **Version**: 0.8.0
 **Reporter**: maintainer (M7 dogfood — added `modular.flf` to repo top
 level for testing, third-party JavE-exported FIGlet font from 2006)
-**Status**: real bug, fix proposed for 0.9.0
+**Status**: **fixed in 0.9.0** (2026-05-20)
 **Severity**: rendering correctness (cosmetic, no security impact)
 
 ## Observation
@@ -113,3 +113,23 @@ fonts, with a failure mode that looks like a font-design feature
 
 Fix lands in **0.9.0** alongside benchmark point #3 — clean release
 cargo that closes M7's dogfood-finds-and-resolves loop.
+
+## Resolution (2026-05-20)
+
+Shipped in 0.9.0. The proposed 3-line fix applied as written: an
+`eff_end` local that trims a trailing `\r` (byte 13) feeds both the
+`llen` calculation and the first-row endmark detection; `cursor`
+still advances past the original `line_end + 1` so byte-offset
+bookkeeping is unchanged. Pure-LF files are byte-identical to the
+pre-fix behavior (covered by `t_load_tiny_flf` still passing).
+
+Regression locked in by `tests/fixtures/flf_crlf.flf` (493 bytes —
+`tiny.flf` re-encoded LF → CRLF) and `t_flf_crlf_endmarks_stripped`
+in `tests/bannermanor.tcyr`, which asserts the CRLF fixture loads
+glyph rows byte-identical to the LF fixture across all 95 glyphs.
+
+Real-world verification with `./modular.flf` (the dogfood
+reproducer): post-fix `./build/bnrmr --font ./modular.flf "BNRMR"`
+renders cleanly — no trailing `#` column, no doubled `##` on the
+last row of each glyph. Compare against the pre-fix capture earlier
+in this issue.

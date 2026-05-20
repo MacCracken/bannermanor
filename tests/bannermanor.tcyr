@@ -542,6 +542,44 @@ fn t_flf_strips_control_bytes() {
     assert_eq(load8(font_row(f, 33, 0)), 65, "non-control byte ('A') preserved");
 }
 
+# Issue 0003 — CRLF-line .flf files must load with the same glyph row
+# bytes as their LF counterparts. The fixture is tests/fixtures/tiny.flf
+# byte-for-byte with every \n replaced by \r\n. Pre-fix, \r was
+# mistaken for the endmark and the real endmark `@` bytes survived in
+# the row data; post-fix the loader trims trailing \r before endmark
+# detection so glyph row bytes match the LF fixture exactly.
+fn t_flf_crlf_endmarks_stripped() {
+    test_group("flf_load_file / CRLF endmark handling");
+    var f = flf_load_file("tests/fixtures/flf_crlf.flf");
+    assert(f != 0, "loaded CRLF fixture");
+    assert_eq(font_width(f),  1,  "crlf width = 1");
+    assert_eq(font_height(f), 1,  "crlf height = 1");
+    assert_eq(font_count(f),  95, "crlf count = 95");
+
+    # 'A' glyph (idx 33): the fixture stores literal 'A' (0x41). If
+    # endmark detection had picked up '\r', the strip loop would have
+    # left the '@' endmarks in place and the row byte would be '@'.
+    assert_eq(load8(font_row(f, 33, 0)), 65, "'A' row[0] = 'A' (not '@')");
+    # Cross-check a different glyph location for the same property.
+    assert_eq(load8(font_row(f, 17, 0)), 49, "'1' row[0] = '1' (not '@')");
+
+    # Byte-identical to the LF fixture: pure-LF behavior unchanged,
+    # CRLF behavior now matches it.
+    var lf = flf_load_file("tests/fixtures/tiny.flf");
+    assert(lf != 0, "LF fixture still loads");
+    var i = 0;
+    var same = 1;
+    while (i < 95) {
+        if (load8(font_row(f, i, 0)) != load8(font_row(lf, i, 0))) {
+            same = 0;
+            i = 95;
+        } else {
+            i = i + 1;
+        }
+    }
+    assert_eq(same, 1, "CRLF and LF fixtures produce identical glyph rows");
+}
+
 fn t_header_load_malformed() {
     test_group("font_header_load / malformed");
     # The header loader validates schema + geometry — same gates as the
@@ -589,6 +627,7 @@ fn main() {
     t_load_flf_missing();
     t_load_flf_malformed();
     t_flf_strips_control_bytes();
+    t_flf_crlf_endmarks_stripped();
     return assert_summary();
 }
 

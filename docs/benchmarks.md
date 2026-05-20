@@ -108,10 +108,39 @@ in three parsers. Two explanations, neither alarming:
 Verdict: **no regression**. Parser overflow guards cost less than
 the bench-frame noise floor on this hardware.
 
-### Point 3 — 0.9.0 (pending)
+### Point 3 — 0.9.0
 
-Run before the v1.0 cut; if the three points are flat-or-improving
-the trend item is closed and M7 is complete.
+**Captured**: 2026-05-20
+**Toolchain**: cyrius 6.0.1
+**Host**: archaemenid (AMD Ryzen 7 5800H, Linux 7.0.5)
+**Code delta vs 0.8.0**: issue 0003 fix — one extra `eff_end` /
+trailing-`\r` check per glyph row in `flf_load_file`. The CYML loader
+(B2's subject) is unchanged. B1's `block_font_embed` is unchanged.
+Only `.flf` loads pay the new comparison, and the benchmark set
+doesn't cover that path — so the bench is effectively a no-op
+regression check that 0.9.0 didn't accidentally touch the CYML hot
+path.
+
+| ID | Subject | 0.9.0 avg | Δ vs 0.8.0 | iters |
+|----|---------|-----------|------------|-------|
+| B1 | `block_font_embed` | **7 ns** | +1 ns (noise) | 10 000 |
+| B2 | `font_load_file(block.cyml)` | **58 µs** | 0 µs (flat) | 1 000 |
+| B3 | `fit_chars ×100` | **572 ns** | 0 ns (flat) | 100 000 |
+
+#### Reading the deltas
+
+- **B1's single-ns jitter is the bench-frame floor.** Three back-to-
+  back runs at 0.9.0 produced 7 / 11 / 9 ns on the same binary; the
+  hoist-out-of-loop hypothesis from Point 1 continues to hold.
+  Anything in this range is noise.
+- **B2 + B3 are byte-stable.** The CYML loader and `fit_chars` were
+  not touched at 0.9.0, and the numbers agree to the resolution the
+  bench can measure. Confirms the CRLF fix is isolated to the .flf
+  read path.
+
+Verdict: **no regression**. M7's 3-point benchmark trend is now
+complete; across 0.7.0 → 0.8.0 → 0.9.0 the CPU hot paths have stayed
+flat-or-faster, well inside batch noise.
 
 ## Re-running
 

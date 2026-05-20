@@ -5,6 +5,21 @@
 
 ## Version
 
+**0.9.0** — tagged 2026-05-20. Closes M7. Fixes
+[`issue 0003`](issues/0003-flf-crlf-endmarks-bleed.md) — CRLF-line
+`.flf` fonts (common from Windows authoring tools; the
+`modular.flf` JavE export in the repo top level was the dogfood
+reproducer) were mistaking `\r` for the endmark, leaving the real
+endmark bytes embedded as a phantom column in every glyph row.
+`src/flf.cyr` now trims a trailing `\r` from each line before
+endmark detection and the strip loop; pure-LF files unaffected.
+Regression covered by `tests/fixtures/flf_crlf.flf` (493 bytes,
+`tiny.flf` re-encoded with CRLF) and `t_flf_crlf_endmarks_stripped`
+in the test suite. Benchmark trend's third point captured — flat
+against 0.8.0 — closing the v1.0 "3-point benchmark trend" item.
+M8 freeze is next; issues 0001 (deferred past v1.0) and 0002
+(deferred to M8) remain on hold per their filings.
+
 **0.8.0** — tagged 2026-05-20. Closes the v1.0 defense-in-depth
 items from the 0.7.0 audit: F-002 parser overflow caps (shared
 `PARSER_INT_CAP = 1 048 576` rejects mid-accumulation overflow in
@@ -125,7 +140,10 @@ Single-shot CLI: text in, banner bytes out, exit.
   file cap. Activated by `--font` values that end in `.flf`. The
   per-byte copy scrubs C0/C1 control bytes + DEL to space (0.7.0
   audit fix F-001) so malicious `.flf` files cannot smuggle ANSI
-  escapes through to the user's terminal.
+  escapes through to the user's terminal. 0.9.0 issue 0003 fix:
+  trailing `\r` is trimmed from each line before endmark detection
+  so CRLF-line `.flf` files don't leave phantom endmark columns in
+  glyph row data.
 - `src/font_block.cyr` — embedded "block" font. `block_font_embed()`
   builds a `Font*` from inline glyph data; this is the default used
   when no `--font` flag is passed (CLAUDE.md self-contained rule).
@@ -162,7 +180,7 @@ authoring walkthrough at [`docs/guides/fonts.md`](../guides/fonts.md).
 
 ## Tests
 
-- `tests/bannermanor.tcyr` — 2754 assertions covering: embedded font
+- `tests/bannermanor.tcyr` — 2762 assertions covering: embedded font
   geometry, glyph-index lookup (space / digits / uppercase /
   lowercase folding / punctuation / unsupported / fold-is-fallback),
   row-shape invariant, renderer bounds, CYML loader happy path +
@@ -178,16 +196,19 @@ authoring walkthrough at [`docs/guides/fonts.md`](../guides/fonts.md).
   sentinel distinctness), and the M6 .flf adapter (`flf_load_file`
   happy path on `tiny.flf` — geometry, charmap, hardblank
   substitution — plus missing-file and three malformed-fixture
-  rejections), and the 0.7.0 audit regression
+  rejections), the 0.7.0 audit regression
   (`t_flf_strips_control_bytes` — ESC in a `.flf` glyph row loads as
-  space, not 0x1B). Runs clean.
+  space, not 0x1B), and the 0.9.0 issue-0003 regression
+  (`t_flf_crlf_endmarks_stripped` — CRLF fixture loads identical
+  glyph rows to the LF fixture, no embedded endmark bytes). Runs clean.
 - `tests/fixtures/` — malformed-font fixtures consumed by the loader
   rejection tests (both CYML and .flf variants).
 - `tests/bannermanor.bcyr` — render hot-path CPU benchmarks (B1
   `block_font_embed`, B2 `font_load_file(block.cyml)`, B3
   `fit_chars` ×100). Run via `cyrius bench tests/bannermanor.bcyr`.
-  Trend lives in [`docs/benchmarks.md`](../benchmarks.md); point 1
-  of 3 captured against 0.7.0.
+  Trend lives in [`docs/benchmarks.md`](../benchmarks.md); all three
+  points (0.7.0, 0.8.0, 0.9.0) captured — flat-or-faster across
+  releases, M7's trend item closed.
 - `tests/bannermanor.fcyr` — fuzz stub
 
 ## Dependencies
@@ -212,16 +233,20 @@ _None yet._ BannerManor is end-user-facing; consumers will be:
 
 ## Next
 
-M7 progress through 0.8.0:
+M7 closed at 0.9.0:
 
 - [x] Security audit pass (0.7.0)
 - [x] Audit defense-in-depth follow-ups F-002 + F-008 (0.8.0)
-- [in-flight] Maintainer-MOTD dogfooding (running 0.8.0). Issues
-  filed: [`0001`](issues/0001-keystroke-interleave-during-render.md)
-  (keystroke interleave, deferred past v1.0),
+- [x] Maintainer-MOTD dogfooding — one release cycle complete. Issues
+  filed and resolved: [`0001`](issues/0001-keystroke-interleave-during-render.md)
+  (keystroke interleave, deferred past v1.0 — cost/benefit unfavorable),
   [`0002`](issues/0002-unbounded-pad-and-width.md) (unbounded
-  `--pad`/`--width`, deferred to M8 freeze).
-- 3-point benchmark trend: points 1 + 2 captured; point 3 at 0.9.0.
+  `--pad`/`--width`, deferred to M8 freeze),
+  [`0003`](issues/0003-flf-crlf-endmarks-bleed.md) (CRLF `.flf`
+  endmark bleed — **fixed in 0.9.0**).
+- [x] 3-point benchmark trend captured (0.7.0 baseline, 0.8.0
+  no-regression, 0.9.0 flat). See [`docs/benchmarks.md`](../benchmarks.md).
 
-M8 cuts v1.0.0 with the CLI flag surface frozen and the deferred
-issues addressed. See [`roadmap.md`](roadmap.md) for sequence.
+M8 cuts v1.0.0 with the CLI flag surface frozen and issue 0002's
+cap landed as a documented `Breaking`. See [`roadmap.md`](roadmap.md)
+for sequence.

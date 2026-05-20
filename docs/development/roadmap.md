@@ -5,14 +5,17 @@
 > in what order, against what dependency gates. State lives in
 > [`state.md`](state.md).
 
-**Currently shipped**: v0.8.0 — M1–M6 (render pipeline, CYML font
-format, default font set, layout flags, color, legacy `.flf` read
-adapter) plus the M7 security audit pass and its v1.0 defense-in-depth
-follow-ups (F-002 parser overflow caps + F-008 `ws_col` clamp). See
-CHANGELOG for the per-release details.
+**Currently shipped**: v0.9.0 — M1–M7 complete. M1–M6 cover the
+render pipeline, CYML font format, default font set, layout flags,
+color, and legacy `.flf` read adapter. M7 closes at 0.9.0 with the
+security audit pass (0.7.0), its defense-in-depth follow-ups (0.8.0),
+the issue-0003 CRLF `.flf` endmark-bleed fix (0.9.0), and a 3-point
+benchmark trend (0.7.0 / 0.8.0 / 0.9.0). See CHANGELOG for per-release
+details.
 
-**Next**: finish M7 — maintainer-MOTD dogfooding (in-flight) and the
-3-point benchmark trend (points 1 + 2 captured).
+**Next**: M8 — v1.0 freeze. Land issue 0002's `--pad` / `--width`
+caps as a documented `Breaking` change, lock the CLI flag surface,
+cut v1.0.0.
 
 ## v1.0 criteria
 
@@ -33,13 +36,16 @@ format. Frozen CLI flag surface.
 - [x] Optional .flf read path for legacy figlet fonts (shipped v0.6.0 —
       uniform-width fit, no smushing; renders ASCII 32..126 from any
       figlet font that fits the 64-col / 32-row geometry envelope)
-- [ ] Benchmarks captured in `docs/benchmarks.md` for render
-      throughput on a representative banner (M7) — points 1 + 2 of 3
-      captured (0.7.0 baseline, 0.8.0 post-F-002/F-008 no-regression);
-      point 3 lands at 0.9.0
-- [ ] Maintainer dogfood: BannerManor used in the maintainer's MOTD
+- [x] Benchmarks captured in `docs/benchmarks.md` for render
+      throughput on a representative banner (M7) — three points
+      captured (0.7.0 baseline, 0.8.0 post-F-002/F-008 no-regression,
+      0.9.0 post-issue-0003 flat). Trend item closed at v0.9.0.
+- [x] Maintainer dogfood: BannerManor used in the maintainer's MOTD
       for one release cycle, real-world bugs filed in
-      `docs/development/issues/` and resolved (M7)
+      `docs/development/issues/` (0001 / 0002 / 0003) and resolved
+      (0003 fixed in 0.9.0; 0001 deferred past v1.0 per
+      cost/benefit; 0002 deferred to M8 as the freeze's one
+      documented `Breaking`). (M7 — closed at v0.9.0)
 - [x] Security audit pass (shipped v0.7.0 — `docs/audit/2026-05-20-audit.md`,
       10 findings, F-001 control-byte injection in `.flf` glyph rows fixed
       same-release)
@@ -51,16 +57,22 @@ Milestone numbers preserve the historical sequence (M1 / M2 shipped
 in v0.2.0; M3 in v0.3.0; M4 in v0.4.0; M5 in v0.5.0; M6 in v0.6.0 —
 see CHANGELOG). Versions are targets, not commitments — ship-when-ready.
 
-### M7 — Harden + dogfood (v0.9.0; gap before v1.0 is intentional)
+### M7 — Harden + dogfood (closed at v0.9.0; gap before v1.0 is intentional)
 
 - [x] P(-1) hardening pass complete — security audit doc filed at
       [`docs/audit/2026-05-20-audit.md`](../audit/2026-05-20-audit.md)
       (shipped v0.7.0; F-001 control-byte injection fix included)
-- [ ] BannerManor used in the maintainer's MOTD for one release cycle
-- [ ] All real-world bugs / font-rendering surprises filed in
-      `docs/development/issues/` and resolved
-- [ ] 3-point benchmark trend in `docs/benchmarks.md` — points 1 + 2
-      of 3 captured; point 3 lands at 0.9.0
+- [x] BannerManor used in the maintainer's MOTD for one release
+      cycle (0.7.0 → 0.9.0)
+- [x] All real-world bugs / font-rendering surprises filed in
+      `docs/development/issues/` and resolved — issue 0001
+      (keystroke interleave, deferred past v1.0 with rationale),
+      issue 0002 (unbounded `--pad`/`--width`, deferred to M8
+      freeze with rationale), issue 0003 (CRLF `.flf` endmark
+      bleed, fixed in v0.9.0)
+- [x] 3-point benchmark trend in `docs/benchmarks.md` complete —
+      points 1 (0.7.0), 2 (0.8.0), 3 (0.9.0) captured; flat-or-faster
+      across the trend
 
 ### M8 — v1.0.0
 
