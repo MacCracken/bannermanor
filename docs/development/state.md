@@ -13,6 +13,16 @@ Ships `--list-fonts`, header-only loader, fold-fallback in
 the initial three (block/slim/big) covering small / medium / large;
 more fonts land post-v1.
 
+**0.4.0** — tagged 2026-05-20. Closes M4 (layout flags). Ships
+`--align L|C|R`, `--width N` (glyph-boundary truncation), `--pad N`,
+plus short forms `-f` and `-w` and a CLI parser refactor to
+`lib/flags.cyr` (handles `--name=value`, `--` terminator). Frame
+width detection: `--width` → `TIOCGWINSZ` → `$COLUMNS` → 80. Render
+path goes through `render_layout`; `render()` is preserved as a
+thin neutral-options wrapper so the M1 byte-identity contract
+holds. `--width N` smaller than one glyph renders nothing —
+documented in `--help` and the layout-module comments.
+
 **0.2.0** — tagged 2026-05-19. First post-scaffold release; bundles
 M1 (first render path, hardcoded block font, 1 KB input cap, flags
 `--version`/`--help`) and M2 (CYML font format, `fonts/block.cyml`,
@@ -29,13 +39,20 @@ Single-shot CLI: text in, banner bytes out, exit.
 
 ## Source
 
-- `src/main.cyr` — entry point; concatenates argv, enforces 1 KB
-  input cap, dispatches to the renderer. Flags: `--version`,
-  `--help`, `--font NAME` (resolves to `fonts/NAME.cyml` relative
-  to cwd), `--list-fonts` (alphabetic listing of `./fonts/*.cyml`
-  with geometry + description from each font header).
-- `src/render.cyr` — generic render pipeline. Takes a `Font*`; same
-  code path serves the embedded default and any CYML-loaded font.
+- `src/main.cyr` — entry point. Builds a flag context via
+  `lib/flags.cyr` and dispatches to the renderer. Flags:
+  `--version`, `-h/--help`, `-f/--font NAME`, `--list-fonts`,
+  `--align L|C|R`, `-w/--width N`, `--pad N`. Positional args
+  concatenate (space-separated) into the 1 KB-capped render text.
+- `src/render.cyr` — `render(font, text, len)` shim; delegates to
+  `render_layout` (in `src/layout.cyr`) with neutral options
+  (width=0, align=left, pad=0). Preserves the M1+M2 byte-identical
+  output contract for callers that don't opt into layout flags.
+- `src/layout.cyr` — M4 layout orchestrator. Detects terminal
+  width via `TIOCGWINSZ` with COLUMNS env + 80-col fallback.
+  Pure helpers: `banner_width`, `fit_chars`, `align_pad`,
+  `parse_uint`. Public renderer: `render_layout(font, text, len,
+  width, align, pad)`.
 - `src/font.cyr` — `Font` struct + CYML loader (`font_load_file`).
   Validates file size, schema version, geometry bounds, and body
   shape; rejects malformed input rather than degrading. Also
@@ -51,7 +68,6 @@ Single-shot CLI: text in, banner bytes out, exit.
 
 Planned by milestone:
 
-- `src/layout.cyr` — alignment / width / padding (M4)
 - `src/color.cyr` — darshana ANSI routing (M5)
 - `src/flf.cyr` — legacy figlet font adapter (M6)
 
@@ -83,7 +99,7 @@ authoring walkthrough at [`docs/guides/fonts.md`](../guides/fonts.md).
 
 ## Tests
 
-- `tests/bannermanor.tcyr` — 2573 assertions covering: embedded font
+- `tests/bannermanor.tcyr` — 2608 assertions covering: embedded font
   geometry, glyph-index lookup (space / digits / uppercase /
   lowercase folding / punctuation / unsupported / fold-is-fallback),
   row-shape invariant, renderer bounds, CYML loader happy path +
@@ -91,8 +107,10 @@ authoring walkthrough at [`docs/guides/fonts.md`](../guides/fonts.md).
   wrong row count), the M2 acceptance check (loaded `fonts/block.cyml`
   is byte-identical to the embedded font on every char and every row,
   now over 69 glyphs), the slim and big font loads + full-printable-
-  ASCII coverage checks, and the M3 header loader (fields on
-  `block.cyml`, missing-file, bad-schema rejection). Runs clean.
+  ASCII coverage checks, the M3 header loader (fields on
+  `block.cyml`, missing-file, bad-schema rejection), and the M4
+  layout math (`banner_width`, `fit_chars`, `align_pad`,
+  `parse_uint`, `render_layout` bounds). Runs clean.
 - `tests/fixtures/` — malformed-font fixtures consumed by the loader
   rejection tests.
 - `tests/bannermanor.bcyr` — benchmark stub
@@ -103,7 +121,7 @@ authoring walkthrough at [`docs/guides/fonts.md`](../guides/fonts.md).
 Direct (declared in `cyrius.cyml`):
 
 - stdlib — string, fmt, alloc, io, vec, str, syscalls, assert, bench,
-  args, cyml, result
+  args, cyml, result, flags
 
 M5 adds `[deps.darshana]` for ANSI color primitives.
 
@@ -118,6 +136,6 @@ _None yet._ BannerManor is end-user-facing; consumers will be:
 
 ## Next
 
-M3 is done; v0.3.0 is ready to tag. M4 is next — layout flags
-(`--align`, `--width`, `--pad`). See [`roadmap.md`](roadmap.md) for
-the full sequence.
+M4 is done; v0.4.0 is ready to tag. M5 is next — color via darshana
+(`--color`, `--color rainbow`, TTY auto-detect). See
+[`roadmap.md`](roadmap.md) for the full sequence.

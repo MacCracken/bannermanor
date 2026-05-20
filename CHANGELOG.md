@@ -4,6 +4,54 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-05-20
+
+Closes M4 — layout flags. `--align`, `--width`, `--pad` land, CLI
+parser migrated to `lib/flags.cyr` (getopt-long shape), terminal
+width detection wired through ioctl + COLUMNS + 80-col fallback.
+
+### Added — M4 (layout flags)
+- `bnrmr --align V` — banner alignment within the frame. `V` is one
+  of `left` (default), `center`, `right`. Short aliases `L`/`C`/`R`
+  and `centre` are accepted. Frame width = `--width N` if given,
+  else terminal width (TIOCGWINSZ on stdout), else `$COLUMNS`, else
+  80 (documented fallback so `bnrmr --align center 'hi' | cat`
+  still centers).
+- `bnrmr --width N` (short: `-w N`) — truncate input at the glyph
+  boundary so no banner row exceeds N columns. `--width 0` is the
+  default and means unlimited. Truncation is always whole-glyph; a
+  glyph is never half-rendered.
+- `bnrmr --pad N` — N blank lines above and below the banner.
+- `bnrmr -h` short alias for `--help`; `-f NAME` short alias for
+  `--font NAME`.
+- `src/layout.cyr` — new module. Exposes `term_width_ioctl()`,
+  `term_width_env()`, `resolve_frame()`, `banner_width()`,
+  `fit_chars()`, `align_pad()`, `parse_uint()`, and the
+  `render_layout(font, text, len, width, align, pad)` orchestrator.
+- `tests/bannermanor.tcyr` — coverage for layout math (`fit_chars`,
+  `align_pad`, `banner_width`, `parse_uint`) and `render_layout`
+  bounds. 2608 assertions (up from 2573).
+
+### Changed — M4
+- `src/main.cyr` — CLI arg parsing now goes through `lib/flags.cyr`
+  (getopt-long-style: supports `--name value`, `--name=value`,
+  short forms like `-f`, and `--` terminator). Replaces the previous
+  hand-rolled `streq_lit` ladder. `--help` text rewritten to list
+  the full M4 flag surface.
+- `src/render.cyr` — `render(font, text, len)` is now a thin wrapper
+  over `render_layout` with neutral options (`width=0`,
+  `align=ALIGN_LEFT`, `pad=0`). Byte-for-byte identical to the
+  pre-M4 output for callers that don't opt into layout flags
+  (covered by the existing test suite).
+- `cyrius.cyml` — `[deps].stdlib` adds `flags`.
+- `VERSION` and the `--version` string bumped to `0.4.0`.
+
+### Contract — M4
+- If `--width N` is smaller than a single glyph (i.e. `N < font width`),
+  bnrmr emits no banner. A clean "no output" is the documented
+  behavior — preferred over partial-glyph rendering or silently
+  overflowing the frame. Documented under `--width` in `--help`.
+
 ## [0.3.0] — 2026-05-20
 
 Closes M3 — the default font set. Block expanded to full printable

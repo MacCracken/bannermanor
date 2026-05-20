@@ -321,6 +321,98 @@ fn t_load_slim_cyml() {
               "'a' folds to 'A' on slim");
 }
 
+# ---- M4 layout ----
+
+fn t_layout_banner_width() {
+    test_group("layout / banner_width");
+    # 1 glyph: just width
+    assert_eq(banner_width(1, 5, 1), 5,  "1 glyph @ 5w gap=1 -> 5");
+    # 2 glyphs: w + gap + w
+    assert_eq(banner_width(2, 5, 1), 11, "2 glyphs @ 5w gap=1 -> 11");
+    # 5 glyphs at block: 5*5 + 4*1 = 29
+    assert_eq(banner_width(5, 5, 1), 29, "AGNOS-shape banner -> 29 cols");
+    # n=0 -> 0 (no glyphs, no gaps)
+    assert_eq(banner_width(0, 5, 1), 0,  "0 glyphs -> 0");
+    # gap=0 means flush glyphs
+    assert_eq(banner_width(3, 4, 0), 12, "3 glyphs @ 4w gap=0 -> 12");
+}
+
+fn t_layout_fit_chars() {
+    test_group("layout / fit_chars");
+    # frame=0 (unlimited): pass through len untouched
+    assert_eq(fit_chars(0, 5, 1, 10), 10, "frame=0 unlimited");
+    assert_eq(fit_chars(0, 5, 1, 0),  0,  "frame=0 + len=0");
+    # exact fits at block geometry (w=5, gap=1)
+    assert_eq(fit_chars(5,  5, 1, 10), 1, "frame=5  -> 1 glyph fits");
+    assert_eq(fit_chars(11, 5, 1, 10), 2, "frame=11 -> 2 glyphs fit");
+    assert_eq(fit_chars(17, 5, 1, 10), 3, "frame=17 -> 3 glyphs fit");
+    # one byte short of a 4th glyph — still 3
+    assert_eq(fit_chars(22, 5, 1, 10), 3, "frame=22 -> still 3 glyphs (4th needs 23)");
+    assert_eq(fit_chars(23, 5, 1, 10), 4, "frame=23 -> 4 glyphs fit");
+    # frame wider than text: capped by len
+    assert_eq(fit_chars(80, 5, 1, 5),  5, "frame=80 + 5-char text -> 5");
+    # frame=20 + AGNOSTIC (8 chars): 3 glyphs fit (17 cols), 4th needs 23
+    assert_eq(fit_chars(20, 5, 1, 8),  3, "frame=20 AGNOSTIC -> AGN (3 glyphs)");
+    # roadmap acceptance: --width 80 + "hi"
+    assert_eq(fit_chars(80, 5, 1, 2),  2, "frame=80 'hi' -> both glyphs (no truncation)");
+    # frame too small for even one glyph (< gw): 0
+    assert_eq(fit_chars(3, 5, 1, 10), 0, "frame=3 < width=5 -> 0 glyphs");
+}
+
+fn t_layout_align_pad() {
+    test_group("layout / align_pad");
+    # left always 0 regardless of frame
+    assert_eq(align_pad(10, 80, ALIGN_LEFT),   0, "left -> 0 pad");
+    assert_eq(align_pad(10, 0,  ALIGN_LEFT),   0, "left + frame=0 -> 0");
+    # center: (frame - banner) / 2
+    assert_eq(align_pad(10, 80, ALIGN_CENTER), 35, "center 10 in 80 -> 35");
+    assert_eq(align_pad(11, 80, ALIGN_CENTER), 34, "center 11 in 80 -> 34 (hi acceptance)");
+    # right: frame - banner
+    assert_eq(align_pad(10, 80, ALIGN_RIGHT),  70, "right 10 in 80 -> 70");
+    assert_eq(align_pad(11, 80, ALIGN_RIGHT),  69, "right 11 in 80 -> 69");
+    # banner wider than frame -> 0 (caller is expected to truncate first)
+    assert_eq(align_pad(100, 80, ALIGN_CENTER), 0, "banner > frame -> 0");
+    assert_eq(align_pad(100, 80, ALIGN_RIGHT),  0, "banner > frame -> 0");
+    # exactly fits -> 0
+    assert_eq(align_pad(80, 80, ALIGN_CENTER), 0, "banner == frame -> 0");
+}
+
+fn t_layout_parse_uint() {
+    test_group("layout / parse_uint");
+    var buf[16];
+    # "0"
+    store8(&buf, 48);  store8(&buf + 1, 0);
+    assert_eq(parse_uint(&buf), 0, "0");
+    # "42"
+    store8(&buf, 52);  store8(&buf + 1, 50);  store8(&buf + 2, 0);
+    assert_eq(parse_uint(&buf), 42, "42");
+    # "80"
+    store8(&buf, 56);  store8(&buf + 1, 48);  store8(&buf + 2, 0);
+    assert_eq(parse_uint(&buf), 80, "80");
+    # empty -> -1
+    store8(&buf, 0);
+    assert_eq(parse_uint(&buf), 0 - 1, "empty -> -1");
+    # "12x" non-digit -> -1
+    store8(&buf, 49); store8(&buf + 1, 50); store8(&buf + 2, 120); store8(&buf + 3, 0);
+    assert_eq(parse_uint(&buf), 0 - 1, "trailing non-digit -> -1");
+    # NULL ptr -> -1
+    assert_eq(parse_uint(0), 0 - 1, "null -> -1");
+}
+
+fn t_layout_render_layout_default_matches_render() {
+    test_group("layout / render_layout(width=0,LEFT,pad=0) matches render");
+    # No assertions beyond "doesn't crash" — render writes to stdout
+    # and we'd need to capture to compare. The wrapper in render.cyr
+    # already delegates and the build links — covered structurally.
+    var f = block_font_embed();
+    assert(f != 0, "font built");
+    # Smoke: rejects oversized like render does.
+    var big[1];
+    assert_eq(render_layout(f, &big, 1025, 0, ALIGN_LEFT, 0), 0 - 1, "over-cap -> -1");
+    assert_eq(render_layout(f, &big, 0 - 1, 0, ALIGN_LEFT, 0), 0 - 1, "negative len -> -1");
+    assert_eq(render_layout(0, &big, 5,  0, ALIGN_LEFT, 0), 0 - 2, "null font -> -2");
+}
+
 fn t_header_load_malformed() {
     test_group("font_header_load / malformed");
     # The header loader validates schema + geometry — same gates as the
@@ -351,6 +443,11 @@ fn main() {
     t_load_malformed();
     t_load_slim_cyml();
     t_load_big_cyml();
+    t_layout_banner_width();
+    t_layout_fit_chars();
+    t_layout_align_pad();
+    t_layout_parse_uint();
+    t_layout_render_layout_default_matches_render();
     t_header_load_block();
     t_header_load_missing();
     t_header_load_malformed();

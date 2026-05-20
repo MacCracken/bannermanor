@@ -1,0 +1,225 @@
+# layout.cyr — banner layout (alignment, width, padding).
+#
+# Wraps render.cyr's row-by-row writer with three M4 controls:
+#
+#   --align L|C|R   alignment within the "frame" (terminal width
+#                   or --width); default left
+#   --width N       truncate input at the glyph boundary so output
+#                   never exceeds N columns; 0 = unlimited
+#   --pad N         N blank lines above and below the banner
+#
+# The frame width is resolved as:
+#   1. --width N if N > 0
+#   2. terminal width via TIOCGWINSZ on fd 1 if attached to a TTY
+#   3. COLUMNS env var if it parses as a positive integer
+#   4. 80 (documented fallback per `--help`)
+#
+# Truncation is at glyph boundary — `bnrmr --width 20 "AGNOS"` with
+# the 5×5 block font fits 3 glyphs (3*5 + 2*1 = 17 cols) and drops
+# "OS"; it never renders a half-glyph.
+
+include "src/font.cyr"
+include "lib/io.cyr"
+
+enum LayoutLimits {
+    DEFAULT_FRAME = 80;       # fallback when neither --width nor TTY size known
+    TIOCGWINSZ   = 0x5413;    # ioctl request; struct winsize is 4×u16
+    WS_ROW_OFF   = 0;
+    WS_COL_OFF   = 2;
+}
+
+enum AlignKind {
+    ALIGN_LEFT   = 0;
+    ALIGN_CENTER = 1;
+    ALIGN_RIGHT  = 2;
+}
+
+# Parse a NUL-terminated decimal cstring into a non-negative int.
+# Returns -1 if the string is empty or contains a non-digit byte.
+# Stops at NUL.
+fn parse_uint(cstr): i64 {
+    if (cstr == 0) { return 0 - 1; }
+    var n = 0;
+    var any = 0;
+    var i = 0;
+    var c = load8(cstr);
+    var done = 0;
+    while (done == 0) {
+        if (c == 0) { done = 1; }
+        else {
+            if (c < 48 || c > 57) { return 0 - 1; }
+            n = n * 10 + (c - 48);
+            any = 1;
+            i = i + 1;
+            c = load8(cstr + i);
+        }
+    }
+    if (any == 0) { return 0 - 1; }
+    return n;
+}
+
+# Detect terminal width on stdout via TIOCGWINSZ. Returns columns,
+# or 0 if stdout is not a TTY / ioctl fails.
+fn term_width_ioctl(): i64 {
+    var ws[8];                          # 4×u16: rows, cols, xpix, ypix
+    store64(&ws, 0);
+    var r = syscall(SYS_IOCTL, 1, TIOCGWINSZ, &ws);
+    if (r != 0) { return 0; }
+    var cols = load16(&ws + WS_COL_OFF);
+    if (cols <= 0) { return 0; }
+    return cols;
+}
+
+# Read the COLUMNS env var; return parsed value or 0 on miss/error.
+fn term_width_env(): i64 {
+    var v = getenv("COLUMNS");
+    if (v == 0) { return 0; }
+    var n = parse_uint(v);
+    if (n <= 0) { return 0; }
+    return n;
+}
+
+# Resolve the frame width. Priority: explicit --width > TIOCGWINSZ >
+# COLUMNS env > DEFAULT_FRAME. Caller passes `requested = 0` for
+# "no --width specified."
+fn resolve_frame(requested): i64 {
+    if (requested > 0) { return requested; }
+    var w = term_width_ioctl();
+    if (w > 0) { return w; }
+    w = term_width_env();
+    if (w > 0) { return w; }
+    return DEFAULT_FRAME;
+}
+
+# Columns consumed by `n` glyphs of width `gw` with `gap` between
+# adjacent pairs. For n=0 returns 0.
+fn banner_width(n, gw, gap): i64 {
+    if (n <= 0) { return 0; }
+    return n * gw + (n - 1) * gap;
+}
+
+# Maximum number of glyphs that fit within `frame` columns at glyph
+# width `gw` and inter-glyph gap `gap`. Frame=0 → unlimited (returns
+# len). Always rounds down at the glyph boundary — never partial.
+#
+# If `frame` is smaller than a single glyph (`frame < gw`), returns 0
+# and the caller emits no banner. That's the contract: a clean "no
+# output" beats a half-rendered glyph or a fixed-width attempt that
+# overflows the frame. Surfaced in --help under --width.
+fn fit_chars(frame, gw, gap, len): i64 {
+    if (frame <= 0) { return len; }
+    if (len <= 0) { return 0; }
+    # Solve banner_width(n) <= frame: n*gw + (n-1)*gap <= frame
+    #                                 n*(gw + gap) <= frame + gap
+    #                                 n <= (frame + gap) / (gw + gap)
+    var n = (frame + gap) / (gw + gap);
+    if (n > len) { return len; }
+    if (n < 0) { return 0; }
+    return n;
+}
+
+# Compute leading-space count for alignment. align: 0=left, 1=center,
+# 2=right. If the banner is wider than the frame (shouldn't happen
+# post-fit) returns 0.
+fn align_pad(banner, frame, align): i64 {
+    if (align == ALIGN_LEFT) { return 0; }
+    if (frame <= banner) { return 0; }
+    var slack = frame - banner;
+    if (align == ALIGN_CENTER) { return slack / 2; }
+    if (align == ALIGN_RIGHT) { return slack; }
+    return 0;
+}
+
+# Emit n spaces on stdout. Cheap loop; not perf-critical (only run
+# once per banner row).
+fn _write_spaces(n): i64 {
+    var i = 0;
+    while (i < n) {
+        syscall(1, 1, " ", 1);
+        i = i + 1;
+    }
+    return 0;
+}
+
+# Emit n newlines on stdout.
+fn _write_newlines(n): i64 {
+    var i = 0;
+    while (i < n) {
+        syscall(1, 1, "\n", 1);
+        i = i + 1;
+    }
+    return 0;
+}
+
+# Render `text[0..len-1]` with `font` honoring layout opts:
+#
+#   width  — requested frame width; 0 = unlimited (no truncation, no
+#            frame resolution for alignment)
+#   align  — AlignKind value
+#   pad    — blank lines above and below the banner
+#
+# Returns 0 on success, -1 on bad input (mirrors render() in render.cyr).
+#
+# Behavior:
+#   - With width=0 and align=ALIGN_LEFT, this is byte-identical to
+#     render(font, text, len) — preserves the M1 contract.
+#   - With align != LEFT, the frame is resolved even if width=0 so
+#     center/right-align always has something to center inside.
+#   - With width > 0, input is truncated at glyph boundary first,
+#     then aligned within the requested frame.
+fn render_layout(font, text, len, width, align, pad): i64 {
+    if (len < 0) { return 0 - 1; }
+    if (len > 1024) { return 0 - 1; }
+    if (font == 0) { return 0 - 2; }
+
+    var w = font_width(font);
+    var h = font_height(font);
+    var g = font_gap(font);
+
+    var draw_len = len;
+    if (width > 0) {
+        draw_len = fit_chars(width, w, g, len);
+    }
+
+    # Frame width for alignment. Left-align with width=0 means we
+    # never resolve a frame at all (preserves M1 byte-identity).
+    var frame = 0;
+    if (align != ALIGN_LEFT) {
+        frame = resolve_frame(width);
+    } else {
+        if (width > 0) { frame = width; }
+    }
+
+    var bw = banner_width(draw_len, w, g);
+    var lpad = align_pad(bw, frame, align);
+
+    var space_idx = font_glyph_index(font, 32);
+    if (space_idx < 0) { space_idx = 0; }
+
+    _write_newlines(pad);
+
+    var r = 0;
+    while (r < h) {
+        _write_spaces(lpad);
+        var i = 0;
+        while (i < draw_len) {
+            var c = load8(text + i);
+            var gi = font_glyph_index(font, c);
+            if (gi < 0) { gi = space_idx; }
+            syscall(1, 1, font_row(font, gi, r), w);
+            if (i + 1 < draw_len) {
+                var gn = 0;
+                while (gn < g) {
+                    syscall(1, 1, " ", 1);
+                    gn = gn + 1;
+                }
+            }
+            i = i + 1;
+        }
+        syscall(1, 1, "\n", 1);
+        r = r + 1;
+    }
+
+    _write_newlines(pad);
+    return 0;
+}
