@@ -5,6 +5,18 @@
 
 ## Version
 
+**0.6.0** — tagged 2026-05-20. Closes M6 (legacy `.flf` read path).
+Ships `src/flf.cyr` — a read-only adapter that loads figlet `.flf`
+font files into the same `Font*` shape as the CYML loader. Activated
+when `--font NAME` ends in `.flf`; the value is treated as a literal
+path (the CYML branch's path-segment sanitization stays untouched).
+1 MB file cap. Uniform-width fit (every glyph row padded with spaces
+to the font's observed max width; `gap=0`). No smushing — hardblanks
+render as spaces, matching figlet's no-smushing mode. ASCII 32–126
+only; trailing German chars and code-tagged glyphs are skipped.
+Synthetic test fixtures cover happy path + bad magic + bad height +
+truncated.
+
 **0.3.0** — tagged 2026-05-20. Closes M3 (the default font set).
 Ships `--list-fonts`, header-only loader, fold-fallback in
 `font_glyph_index`, `block.cyml` expanded to full printable ASCII
@@ -51,6 +63,8 @@ Single-shot CLI: text in, banner bytes out, exit.
   `lib/flags.cyr` and dispatches to the renderer. Flags:
   `--version`, `-h/--help`, `-f/--font NAME`, `--list-fonts`,
   `--align L|C|R`, `-w/--width N`, `--pad N`, `--color NAME`.
+  `--font` values ending in `.flf` route to the M6 legacy figlet
+  adapter (`flf_load_file`); other names go through the CYML loader.
   Positional args concatenate (space-separated) into the 1 KB-capped
   render text.
 - `src/render.cyr` — `render(font, text, len)` shim; delegates to
@@ -72,6 +86,13 @@ Single-shot CLI: text in, banner bytes out, exit.
   shape; rejects malformed input rather than degrading. Also
   exposes `font_header_load()` — a lightweight header-only loader
   used by `--list-fonts`.
+- `src/flf.cyr` — M6 legacy figlet font reader. `flf_load_file(path)`
+  validates the `flf2a$` magic, parses height/baseline/maxlen/layout/
+  comment-count from the header line, skips comment lines, decodes 95
+  glyphs (ASCII 32..126) with per-glyph endmark detection and
+  hardblank → space substitution, then assembles a uniform-width
+  `Font*` (`gap=0`, width = observed max across all glyphs). 1 MB
+  file cap. Activated by `--font` values that end in `.flf`.
 - `src/font_block.cyr` — embedded "block" font. `block_font_embed()`
   builds a `Font*` from inline glyph data; this is the default used
   when no `--font` flag is passed (CLAUDE.md self-contained rule).
@@ -79,10 +100,6 @@ Single-shot CLI: text in, banner bytes out, exit.
   Glyph data is split across `_block_raw_row_lo` (idx 0–36: space +
   0–9 + A–Z) and `_block_raw_row_hi` (idx 37–68: printable
   punctuation) to stay under cycc's 256-return-per-function limit.
-
-Planned by milestone:
-
-- `src/flf.cyr` — legacy figlet font adapter (M6)
 
 ## Fonts
 
@@ -112,7 +129,7 @@ authoring walkthrough at [`docs/guides/fonts.md`](../guides/fonts.md).
 
 ## Tests
 
-- `tests/bannermanor.tcyr` — 2641 assertions covering: embedded font
+- `tests/bannermanor.tcyr` — 2751 assertions covering: embedded font
   geometry, glyph-index lookup (space / digits / uppercase /
   lowercase folding / punctuation / unsupported / fold-is-fallback),
   row-shape invariant, renderer bounds, CYML loader happy path +
@@ -123,11 +140,14 @@ authoring walkthrough at [`docs/guides/fonts.md`](../guides/fonts.md).
   ASCII coverage checks, the M3 header loader (fields on
   `block.cyml`, missing-file, bad-schema rejection), the M4 layout
   math (`banner_width`, `fit_chars`, `align_pad`, `parse_uint`,
-  `render_layout` bounds), and the M5 color path (`parse_color`
+  `render_layout` bounds), the M5 color path (`parse_color`
   across all 16 names + special values + unknowns, rainbow cycle,
-  sentinel distinctness). Runs clean.
+  sentinel distinctness), and the M6 .flf adapter (`flf_load_file`
+  happy path on `tiny.flf` — geometry, charmap, hardblank
+  substitution — plus missing-file and three malformed-fixture
+  rejections). Runs clean.
 - `tests/fixtures/` — malformed-font fixtures consumed by the loader
-  rejection tests.
+  rejection tests (both CYML and .flf variants).
 - `tests/bannermanor.bcyr` — benchmark stub
 - `tests/bannermanor.fcyr` — fuzz stub
 
@@ -153,6 +173,8 @@ _None yet._ BannerManor is end-user-facing; consumers will be:
 
 ## Next
 
-M5 is done; v0.5.0 is ready to tag. M6 is next — legacy `.flf` read
-adapter for users with existing figlet font libraries. See
+M6 is done; v0.6.0 is ready to tag. M7 is next — harden + dogfood:
+maintainer-MOTD usage for one release cycle, P(-1) hardening pass
+(security audit doc at `docs/audit/YYYY-MM-DD-audit.md`), and a
+3-point benchmark trend in `docs/benchmarks.md`. See
 [`roadmap.md`](roadmap.md) for the full sequence.

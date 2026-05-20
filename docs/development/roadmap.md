@@ -5,11 +5,11 @@
 > in what order, against what dependency gates. State lives in
 > [`state.md`](state.md).
 
-**Currently shipped**: v0.5.0 — M1–M5 (render pipeline, CYML font
-format, default font set, layout flags, color). See CHANGELOG for
-the per-release details.
+**Currently shipped**: v0.6.0 — M1–M6 (render pipeline, CYML font
+format, default font set, layout flags, color, legacy `.flf` read
+adapter). See CHANGELOG for the per-release details.
 
-**Next**: M6 — legacy `.flf` read adapter.
+**Next**: M7 — harden + dogfood.
 
 ## v1.0 criteria
 
@@ -27,7 +27,9 @@ format. Frozen CLI flag surface.
 - [ ] CLI flag surface frozen — current set is `--font`, `--width`,
       `--align`, `--pad`, `--color`, `--list-fonts`, `--help`,
       `--version` (plus `-f`/`-w`/`-h` short forms). M8 freeze.
-- [ ] Optional .flf read path for legacy figlet fonts (M6)
+- [x] Optional .flf read path for legacy figlet fonts (shipped v0.6.0 —
+      uniform-width fit, no smushing; renders ASCII 32..126 from any
+      figlet font that fits the 64-col / 32-row geometry envelope)
 - [ ] Benchmarks captured in `docs/benchmarks.md` for render
       throughput on a representative banner (M7)
 - [ ] Maintainer dogfood: BannerManor used in the maintainer's MOTD
@@ -40,23 +42,8 @@ format. Frozen CLI flag surface.
 ## Milestones
 
 Milestone numbers preserve the historical sequence (M1 / M2 shipped
-in v0.2.0; M3 in v0.3.0; M4 in v0.4.0; M5 in v0.5.0 — see CHANGELOG).
-Versions are targets, not commitments — ship-when-ready.
-
-### M6 — Legacy .flf read path (v0.6.0)
-
-Optional figlet-font-format adapter for users with existing
-figlet font libraries.
-
-- `bnrmr --font path/to/standard.flf "hello"` — parse and render
-- Read-only — no .flf write path, no .flf authoring docs
-- Bounded parsing (refuse files > 1 MB; refuse malformed headers)
-- Tests on a small set of public-domain figlet fonts
-- **Dep gate**: none beyond what's already shipped — the CYML loader
-  + Font struct from M2 are the model; .flf is a parallel input path
-  that produces the same `Font*`.
-- **Acceptance**: a standard `.flf` font renders identically to
-  the canonical figlet `figlet` binary on the same input.
+in v0.2.0; M3 in v0.3.0; M4 in v0.4.0; M5 in v0.5.0; M6 in v0.6.0 —
+see CHANGELOG). Versions are targets, not commitments — ship-when-ready.
 
 ### M7 — Harden + dogfood (v0.9.0; gap before v1.0 is intentional)
 

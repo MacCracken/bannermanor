@@ -4,6 +4,61 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-05-20
+
+Closes M6 — legacy `.flf` read adapter. Users with existing figlet
+font libraries can now `bnrmr --font path/to/standard.flf "hello"`
+and get a banner; CYML stays canonical.
+
+### Added — M6 (legacy .flf read path)
+- `bnrmr --font NAME.flf` — when the `--font` value ends in `.flf`,
+  the value is taken as a literal filesystem path and dispatched to
+  the new `flf_load_file` adapter. Other values continue through the
+  CYML loader (`fonts/NAME.cyml`) with the existing path-segment
+  sanitization untouched.
+- `src/flf.cyr` — new module. `flf_load_file(path)` validates the
+  `flf2a$` magic line, parses the 6 standard header ints
+  (height / baseline / max-length / old-layout / comment-count), skips
+  comment lines, decodes 95 glyph blocks (ASCII 32..126) with
+  per-glyph endmark detection and hardblank → space substitution,
+  then assembles a uniform-width `Font*` (gap=0, width = observed
+  max across all glyphs). Same `Font*` shape as the CYML loader, so
+  the renderer is unchanged.
+- `tests/fixtures/tiny.flf` — synthetic 95-glyph fixture; exercises
+  header parse, comment-skip with CL=0, endmark strip, hardblank
+  substitution, geometry registration.
+- `tests/fixtures/flf_bad_magic.flf` / `flf_bad_height.flf` /
+  `flf_truncated.flf` — malformed fixtures consumed by the loader
+  rejection tests.
+- `tests/bannermanor.tcyr` — `t_load_tiny_flf` (geometry, charmap,
+  hardblank assertions), `t_load_flf_missing`, and
+  `t_load_flf_malformed` (three malformed fixtures → 0). 2751
+  assertions (up from 2641).
+
+### Notes — M6 (known limitations, intentional for v0.6)
+- **Uniform-width fit.** Every glyph row is right-padded with spaces
+  to the font's observed max width; gap = 0. Narrow glyphs (e.g.
+  `.` `!` `,`) carry trailing whitespace, so output diverges from
+  `figlet -W` for fonts with significant width variance. Variable
+  per-glyph widths would require extending the Font* model and the
+  renderer's per-row byte emission loop — pushed beyond v0.6.
+- **No smushing or kerning.** The header's old-layout / full-layout
+  fields are parsed and discarded; hardblanks render as spaces, which
+  matches figlet's no-smushing mode. Smushing rules are out of scope
+  for v1.0.
+- **ASCII 32..126 only.** The 7 trailing "German" required chars
+  (196 / 214 / 220 / 228 / 246 / 252 / 223) and any code-tagged
+  glyphs after the standard block are *skipped*, not failed on. v1.0
+  is ASCII-only per `roadmap.md` "Out of scope".
+- **1 MB file cap.** Bounded read; oversized files are rejected.
+
+### Changed — M6
+- `src/main.cyr` — `--font` dispatch grows a `.flf` branch (delegates
+  to `flf_load_file`); CYML branch unchanged. `print_usage` gains
+  one line documenting the `.flf` form. Header comment block
+  refreshed to list M5 + M6.
+- `VERSION` and the `--version` string bumped to `0.6.0`.
+
 ## [0.5.0] — 2026-05-20
 
 Closes M5 — color. `--color NAME` lands with the 16 ANSI named

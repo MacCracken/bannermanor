@@ -1,0 +1,261 @@
+# flf.cyr — legacy figlet (.flf) font read adapter (M6).
+#
+# Read-only — .flf in, Font* out (same shape as src/font.cyr's CYML
+# loader). CYML remains BannerManor's canonical format; this exists so
+# users with existing figlet font libraries can point --font at them.
+#
+# Scope simplifications (documented in CHANGELOG 0.6.0):
+#   - Uniform-width fit: every glyph row is right-padded with spaces
+#     to the max width observed across all 95 glyphs; gap=0. Diverges
+#     from real figlet output for narrow glyphs (narrow chars get
+#     trailing whitespace). Variable-width storage in Font* is a
+#     post-v0.6 question.
+#   - No smushing / kerning. Hardblanks render as literal spaces,
+#     which is exactly what figlet does when smushing is disabled.
+#   - ASCII 32..126 only. The 7 "German" required chars and any
+#     code-tagged extras are skipped (not failed on). v1.0 is ASCII.
+#
+# Format reference: http://www.jave.de/figlet/figfont.html
+# Minimum-viable header line: "flf2a$ HH BB ML OL CL [PD] [FL] [CC]"
+# followed by CL comment lines, followed by 95 glyph blocks (chars
+# 32..126), each HH lines long with an endmark char at the end of
+# every line (doubled on the last line of each glyph).
+
+include "src/font.cyr"
+include "lib/string.cyr"
+
+enum FlfLimits {
+    FLF_MAX_FILE = 1048576;     # 1 MB cap per roadmap M6
+    FLF_GLYPHS = 95;            # ASCII 32..126 inclusive
+    FLF_FIRST_CH = 32;
+    FLF_MAX_WIDTH = 64;         # match font.cyr MAX_WIDTH
+    FLF_MAX_HEIGHT = 32;        # match font.cyr MAX_HEIGHT
+    FLF_MAX_COMMENTS = 1024;    # absurd-but-finite cap on header comments
+}
+
+# ---- low-level parse helpers ----
+
+# Slurp `path` into a freshly alloc'd buffer up to FLF_MAX_FILE bytes.
+# Returns the buffer pointer and writes the byte count to *out_len.
+# Returns 0 on open failure, OOM, empty file, or file at/over the cap.
+fn _flf_slurp(path, out_len): i64 {
+    var fd = syscall(2, path, 0, 0);
+    if (fd < 0) { return 0; }
+    var buf = alloc(1048576);
+    if (buf == 0) { syscall(3, fd); return 0; }
+    var total = 0;
+    var rgo = 1;
+    while (rgo == 1) {
+        var n = syscall(0, fd, buf + total, 1048576 - total);
+        if (n <= 0) { rgo = 0; }
+        else {
+            total = total + n;
+            if (total >= 1048576) { rgo = 0; }
+        }
+    }
+    syscall(3, fd);
+    if (total <= 0) { return 0; }
+    if (total >= 1048576) { return 0; }
+    store64(out_len, total);
+    return buf;
+}
+
+# Index of the next \n at or after `pos`, or `len` if none (EOF).
+fn _flf_eol(buf, len, pos): i64 {
+    var i = pos;
+    var found = 0 - 1;
+    while (i < len && found < 0) {
+        if (load8(buf + i) == 10) { found = i; }
+        else { i = i + 1; }
+    }
+    if (found < 0) { return len; }
+    return found;
+}
+
+# Skip space + tab starting at `pos`. Returns new pos.
+fn _flf_skip_ws(buf, len, pos): i64 {
+    var i = pos;
+    var go = 1;
+    while (i < len && go == 1) {
+        var c = load8(buf + i);
+        if (c == 32 || c == 9) { i = i + 1; }
+        else { go = 0; }
+    }
+    return i;
+}
+
+# Parse a non-negative decimal int at `pos` within buf[0..len-1].
+# Writes the ending pos (first non-digit byte) to *out_end and returns
+# the value, or -1 if no digits were consumed.
+fn _flf_take_int(buf, len, pos, out_end): i64 {
+    var i = pos;
+    var n = 0;
+    var any = 0;
+    var go = 1;
+    while (i < len && go == 1) {
+        var c = load8(buf + i);
+        if (c >= 48 && c <= 57) {
+            n = n * 10 + (c - 48);
+            any = 1;
+            i = i + 1;
+        } else { go = 0; }
+    }
+    store64(out_end, i);
+    if (any == 0) { return 0 - 1; }
+    return n;
+}
+
+# ---- public entry ----
+
+# Load a .flf figlet font from `path`. Returns Font* on success, 0 on
+# error. Errors are bounded — file size, magic, geometry, comment
+# count, and glyph-block shape are all validated.
+fn flf_load_file(path): i64 {
+    var len_box[8];
+    store64(&len_box, 0);
+    var buf = _flf_slurp(path, &len_box);
+    if (buf == 0) { return 0; }
+    var total = load64(&len_box);
+
+    # --- header line: "flf2a$ HH BB ML OL CL [...]\n" ---
+    var hdr_end = _flf_eol(buf, total, 0);
+    if (hdr_end < 7) { return 0; }                # need at least flf2aX + 1
+    if (memeq(buf, "flf2a", 5) != 1) { return 0; }
+    var hardblank = load8(buf + 5);
+    if (hardblank < 33) { return 0; }             # must be printable, not space
+    if (hardblank > 126) { return 0; }
+
+    var p_box[8];
+    store64(&p_box, 0);
+
+    var p = 6;
+    p = _flf_skip_ws(buf, hdr_end, p);
+    var height = _flf_take_int(buf, hdr_end, p, &p_box);
+    p = load64(&p_box);
+    if (height < 1) { return 0; }
+    if (height > 32) { return 0; }
+
+    p = _flf_skip_ws(buf, hdr_end, p);
+    var baseline = _flf_take_int(buf, hdr_end, p, &p_box);
+    p = load64(&p_box);
+    if (baseline < 0) { return 0; }
+
+    p = _flf_skip_ws(buf, hdr_end, p);
+    var max_len = _flf_take_int(buf, hdr_end, p, &p_box);
+    p = load64(&p_box);
+    if (max_len < 0) { return 0; }
+
+    # old_layout can be negative (-1 = "no smushing" per spec). We
+    # don't use it (no smushing in our renderer), so just consume.
+    p = _flf_skip_ws(buf, hdr_end, p);
+    if (p < hdr_end) {
+        if (load8(buf + p) == 45) { p = p + 1; }  # leading '-' allowed
+    }
+    var _ol_end[8];
+    store64(&_ol_end, p);
+    var _ol = _flf_take_int(buf, hdr_end, p, &_ol_end);
+    p = load64(&_ol_end);
+    if (_ol < 0) { return 0; }                    # digits required
+
+    p = _flf_skip_ws(buf, hdr_end, p);
+    var comments = _flf_take_int(buf, hdr_end, p, &p_box);
+    p = load64(&p_box);
+    if (comments < 0) { return 0; }
+    if (comments > 1024) { return 0; }
+
+    # --- skip CL comment lines ---
+    var cursor = hdr_end + 1;
+    var ci = 0;
+    while (ci < comments) {
+        if (cursor >= total) { return 0; }
+        cursor = _flf_eol(buf, total, cursor);
+        if (cursor >= total) { return 0; }        # comment line not \n-terminated
+        cursor = cursor + 1;
+        ci = ci + 1;
+    }
+
+    # --- scratch for 95 glyphs × HH rows, max 64 cols ---
+    var scratch_bytes = 95 * height * 64;
+    var rows_scratch = alloc(scratch_bytes);
+    if (rows_scratch == 0) { return 0; }
+    var lens_scratch = alloc(95 * height * 8);
+    if (lens_scratch == 0) { return 0; }
+    memset(rows_scratch, 32, scratch_bytes);      # default-fill with space
+
+    # --- parse 95 glyph blocks ---
+    var max_width = 0;
+    var gi = 0;
+    while (gi < 95) {
+        var endmark = 0;
+        var r = 0;
+        while (r < height) {
+            if (cursor >= total) { return 0; }    # truncated
+            var line_start = cursor;
+            var line_end = _flf_eol(buf, total, cursor);
+            var llen = line_end - line_start;
+            if (llen <= 0) { return 0; }          # empty line not allowed
+
+            # Endmark = last byte of glyph's first row; applied to all
+            # rows of this glyph. Per-glyph (not per-font) so we tolerate
+            # fonts with mixed endmarks (rare, but the spec allows it).
+            if (r == 0) {
+                endmark = load8(buf + line_end - 1);
+            }
+
+            # Strip every trailing byte == endmark (handles single
+            # endmark on lines 1..H-1 and doubled endmark on line H).
+            var strip_done = 0;
+            while (llen > 0 && strip_done == 0) {
+                if (load8(buf + line_start + llen - 1) != endmark) {
+                    strip_done = 1;
+                } else {
+                    llen = llen - 1;
+                }
+            }
+
+            if (llen > 64) { return 0; }
+
+            # Copy to scratch with hardblank → space substitution.
+            var dst = rows_scratch + (gi * height + r) * 64;
+            var col = 0;
+            while (col < llen) {
+                var b = load8(buf + line_start + col);
+                if (b == hardblank) { b = 32; }
+                store8(dst + col, b);
+                col = col + 1;
+            }
+            store64(lens_scratch + (gi * height + r) * 8, llen);
+            if (llen > max_width) { max_width = llen; }
+
+            # Advance past line. _flf_eol returns `total` if no \n found,
+            # so cursor=total+1 is fine — the next iteration's
+            # `cursor >= total` check catches it.
+            cursor = line_end + 1;
+            r = r + 1;
+        }
+        gi = gi + 1;
+    }
+
+    if (max_width <= 0) { return 0; }
+    if (max_width > 64) { return 0; }
+
+    # --- assemble Font* ---
+    var f = font_new(max_width, height, 0, 95);
+    if (f == 0) { return 0; }
+
+    var idx = 0;
+    while (idx < 95) {
+        var ch = 32 + idx;
+        if (font_set_char(f, idx, ch) < 0) { return 0; }
+        var rr = 0;
+        while (rr < height) {
+            var src = rows_scratch + (idx * height + rr) * 64;
+            var dst = font_row(f, idx, rr);
+            memcpy(dst, src, max_width);
+            rr = rr + 1;
+        }
+        idx = idx + 1;
+    }
+
+    return f;
+}

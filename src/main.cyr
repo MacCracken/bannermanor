@@ -1,15 +1,18 @@
 # bannermanor / bnrmr — main entry point.
 #
-# Flag surface (M2 + M3 + M4):
+# Flag surface (M2 + M3 + M4 + M5 + M6):
 #   --version              print version and exit
 #   --help            -h   print help and exit
-#   --font NAME       -f   load fonts/NAME.cyml (default: embedded block)
+#   --font NAME       -f   load fonts/NAME.cyml (default: embedded block);
+#                          NAME ending in .flf is loaded as a legacy
+#                          figlet font via src/flf.cyr (M6)
 #   --list-fonts           list available fonts in ./fonts and exit
 #   --align V              left | center | right (default: left)
 #   --width N         -w   truncate at glyph boundary so no row >N cols
 #                          (default: 0 = unlimited)
 #   --pad N                blank lines above and below banner
 #                          (default: 0)
+#   --color NAME           colorize (16 ANSI names or rainbow); M5
 #
 # Long flags accept both `--name value` and `--name=value` (handled by
 # lib/flags.cyr). Positional args are concatenated with spaces into the
@@ -17,6 +20,7 @@
 
 include "src/render.cyr"
 include "src/font_block.cyr"
+include "src/flf.cyr"
 include "lib/flags.cyr"
 include "lib/fs.cyr"
 include "lib/fmt.cyr"
@@ -24,6 +28,17 @@ include "lib/fmt.cyr"
 enum MainLimits {
     BUF_CAP = 1024;
     FONT_NAME_CAP = 64;
+}
+
+# Does `name` end in ".flf"? Used to dispatch --font to the legacy
+# figlet-font adapter (src/flf.cyr) instead of the CYML loader.
+# When true, the name is treated as a literal path — no path-segment
+# sanitization (the user explicitly opted into a path with the .flf
+# suffix; size is bounded inside flf_load_file).
+fn _is_flf_path(name): i64 {
+    var n = strlen(name);
+    if (n < 5) { return 0; }
+    return memeq(name + n - 4, ".flf", 4);
 }
 
 # Build "fonts/<name>.cyml" into out, null-terminated. Returns 0 if
@@ -61,6 +76,7 @@ fn print_usage(): i64 {
     println("");
     println("Flags:");
     println("  -f, --font NAME       load fonts/NAME.cyml (default: embedded block)");
+    println("                        or a path ending in .flf for a legacy figlet font");
     println("      --align V         left | center | right (default: left)");
     println("  -w, --width N         truncate at glyph boundary at N columns");
     println("                        (default: 0 = unlimited; if N is smaller");
@@ -273,7 +289,7 @@ fn main(): i64 {
         return 0;
     }
     if (flags_get_bool(fs, f_version) == 1) {
-        println("bnrmr 0.5.0");
+        println("bnrmr 0.6.0");
         return 0;
     }
     if (flags_get_bool(fs, f_list) == 1) {
@@ -312,16 +328,24 @@ fn main(): i64 {
     var font = 0;
     var font_name = flags_get_str(fs, f_font);
     if (font_name != 0) {
-        var pathbuf[80];
-        var plen = build_font_path(&pathbuf, 80, font_name);
-        if (plen <= 0) {
-            println("bnrmr: invalid font name");
-            return 1;
-        }
-        font = font_load_file(&pathbuf);
-        if (font == 0) {
-            println("bnrmr: failed to load font (missing or malformed)");
-            return 1;
+        if (_is_flf_path(font_name) == 1) {
+            font = flf_load_file(font_name);
+            if (font == 0) {
+                println("bnrmr: failed to load .flf font (missing or malformed)");
+                return 1;
+            }
+        } else {
+            var pathbuf[80];
+            var plen = build_font_path(&pathbuf, 80, font_name);
+            if (plen <= 0) {
+                println("bnrmr: invalid font name");
+                return 1;
+            }
+            font = font_load_file(&pathbuf);
+            if (font == 0) {
+                println("bnrmr: failed to load font (missing or malformed)");
+                return 1;
+            }
         }
     } else {
         font = block_font_embed();
