@@ -139,7 +139,7 @@ deferred past v1.0; one observed-but-deferred issue (0002, unbounded
 `--pad` / `--width`) was filed for the M8 freeze pass.
 
 ### Added
-- `docs/development/issues/0002-unbounded-pad-and-width.md` — filed
+- `docs/development/issues/archive/0002-unbounded-pad-and-width.md` — filed
   from the pre-release ad-hoc stress sweep. `--pad 100000` produces
   200 005 newlines, `--width 1000000` produces a 500 KB line.
   No security impact (user-controlled); flagged for M8 freeze.

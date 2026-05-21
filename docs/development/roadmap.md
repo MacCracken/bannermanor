@@ -81,6 +81,9 @@ see CHANGELOG). Versions are targets, not commitments — ship-when-ready.
 - [x] CHANGELOG `Breaking` section for the freeze: `--pad` cap at 64,
       `--width` cap at 4096 (issue 0002's resolution). No signature
       changes; the freeze itself is the contract change.
+- [x] Final M8 dogfood pass fixed issue 0004 (TTY wrap on narrow
+      terminals) in the same release — TTY-aware default truncation
+      in `render_layout`; pipe output stays byte-identical.
 - [x] v1.0.0 cut
 
 ## Out of scope (for v1.0)

@@ -16,12 +16,19 @@ documented `Breaking`: `--pad` rejects > 64 with
 `bnrmr: --pad max 64` exit 1, `--width` rejects > 4096 with
 `bnrmr: --width max 4096` exit 1. Pre-1.0 these were accepted and
 produced unbounded output (issue 0002's filing). `WIDTH_CAP` /
-`PAD_CAP` named in `src/layout.cyr`'s `LayoutLimits` enum. Issue
-0001 (keystroke interleave) formally deferred past 1.0.0. All M7
-+ M8 acceptance criteria met; v1.0 ships.
+`PAD_CAP` named in `src/layout.cyr`'s `LayoutLimits` enum. Final
+M8 dogfood pass also surfaced and fixed
+[`issue 0004`](issues/archive/0004-tty-wrap-on-narrow-terminal.md) —
+without `--width`, the renderer skipped `fit_chars` entirely, so
+banners wider than the TTY wrapped into themselves and broke row
+alignment. `render_layout` now clamps the truncation width to
+`term_width_ioctl()` when `--width` is unset; piped output stays
+byte-identical (M1 contract preserved). Issue 0001 (keystroke
+interleave) formally deferred past 1.0.0. All M7 + M8 acceptance
+criteria met; v1.0 ships.
 
 **0.9.0** — tagged 2026-05-20. Closes M7. Fixes
-[`issue 0003`](issues/0003-flf-crlf-endmarks-bleed.md) — CRLF-line
+[`issue 0003`](issues/archive/0003-flf-crlf-endmarks-bleed.md) — CRLF-line
 `.flf` fonts (common from Windows authoring tools; the
 `modular.flf` JavE export in the repo top level was the dogfood
 reproducer) were mistaking `\r` for the endmark, leaving the real
@@ -43,7 +50,7 @@ clamp at 4096 in `term_width_ioctl`. Neither was reachable as a bug
 in 0.7.0; both are belt-and-suspenders for future relaxations.
 Benchmark point 2 of 3 captured against the new code path — no
 regression. Ad-hoc stress sweep (50+ edge-case invocations)
-surfaced [`issue 0002`](issues/0002-unbounded-pad-and-width.md):
+surfaced [`issue 0002`](issues/archive/0002-unbounded-pad-and-width.md):
 huge `--pad` / `--width` produce unbounded output; deferred to the
 M8 freeze pass for an opinionated cap.
 
@@ -263,8 +270,9 @@ v1.0 shipped 2026-05-20. M7 and M8 both closed:
   benchmark trend (0.7.0 / 0.8.0 / 0.9.0, flat-or-faster).
 - [x] M8 — v1.0 freeze. CLI flags, CYML format, default font set,
   `.flf` adapter contract all frozen. Issue 0002's `--pad` /
-  `--width` caps shipped as the freeze's one documented `Breaking`.
-  Issue 0001 formally deferred past 1.0.0.
+  `--width` caps shipped as the freeze's one documented `Breaking`;
+  issue 0004 (TTY wrap on narrow terminals) found and fixed in the
+  same release. Issue 0001 formally deferred past 1.0.0.
 
 Post-v1.0 work lives in a future "Beyond v1.0" roadmap section
 (not yet scoped). Candidate items if/when picked up:
