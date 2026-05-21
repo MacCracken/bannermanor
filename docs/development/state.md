@@ -5,6 +5,21 @@
 
 ## Version
 
+**1.0.0** — tagged 2026-05-20. **M8 — v1.0 freeze.** CLI flag
+surface (`--font`/`-f`, `--width`/`-w`, `--align`, `--pad`,
+`--color`, `--list-fonts`, `--help`/`-h`, `--version`), CYML font
+format (schema 1), default font set (`block` / `slim` / `big`), and
+the `.flf` adapter contract are all frozen at their 0.9.0 shape.
+The freeze itself is the contract change — no signatures move.
+Issue 0002's `--pad` / `--width` caps land as the freeze's one
+documented `Breaking`: `--pad` rejects > 64 with
+`bnrmr: --pad max 64` exit 1, `--width` rejects > 4096 with
+`bnrmr: --width max 4096` exit 1. Pre-1.0 these were accepted and
+produced unbounded output (issue 0002's filing). `WIDTH_CAP` /
+`PAD_CAP` named in `src/layout.cyr`'s `LayoutLimits` enum. Issue
+0001 (keystroke interleave) formally deferred past 1.0.0. All M7
++ M8 acceptance criteria met; v1.0 ships.
+
 **0.9.0** — tagged 2026-05-20. Closes M7. Fixes
 [`issue 0003`](issues/0003-flf-crlf-endmarks-bleed.md) — CRLF-line
 `.flf` fonts (common from Windows authoring tools; the
@@ -120,7 +135,14 @@ Single-shot CLI: text in, banner bytes out, exit.
   `render_layout(font, text, len, width, align, pad, color)`.
   0.8.0 audit hardening: `parse_uint` rejects values over
   `PARSER_INT_CAP` (F-002); `term_width_ioctl` clamps at
-  `WS_COL_CAP = 4096` (F-008).
+  `WS_COL_CAP = 4096` (F-008). 1.0.0 M8 freeze: adds
+  `WIDTH_CAP = 4096` and `PAD_CAP = 64` named constants used by
+  `src/main.cyr` to reject CLI input that would produce unbounded
+  output (issue 0002). 1.0.0 also wires TTY-aware default
+  truncation in `render_layout`: when `width == 0`, the effective
+  clamp comes from `term_width_ioctl()` (issue 0004 fix). Pipes
+  return 0 from the ioctl and `fit_chars(0, ...)` is a no-op, so
+  the M1 byte-identity contract for piped output is preserved.
 - `src/color.cyr` — M5 `--color` plumbing. `parse_color(name)` maps
   ANSI 16-color names + `rainbow` to SGR codes / sentinels;
   `rainbow_color_for_row(r)` returns the SGR code for row `r` in
@@ -233,20 +255,25 @@ _None yet._ BannerManor is end-user-facing; consumers will be:
 
 ## Next
 
-M7 closed at 0.9.0:
+v1.0 shipped 2026-05-20. M7 and M8 both closed:
 
-- [x] Security audit pass (0.7.0)
-- [x] Audit defense-in-depth follow-ups F-002 + F-008 (0.8.0)
-- [x] Maintainer-MOTD dogfooding — one release cycle complete. Issues
-  filed and resolved: [`0001`](issues/0001-keystroke-interleave-during-render.md)
-  (keystroke interleave, deferred past v1.0 — cost/benefit unfavorable),
-  [`0002`](issues/0002-unbounded-pad-and-width.md) (unbounded
-  `--pad`/`--width`, deferred to M8 freeze),
-  [`0003`](issues/0003-flf-crlf-endmarks-bleed.md) (CRLF `.flf`
-  endmark bleed — **fixed in 0.9.0**).
-- [x] 3-point benchmark trend captured (0.7.0 baseline, 0.8.0
-  no-regression, 0.9.0 flat). See [`docs/benchmarks.md`](../benchmarks.md).
+- [x] M7 — Security audit (0.7.0), defense-in-depth follow-ups
+  (0.8.0), maintainer-MOTD dogfood loop (closed at 0.9.0 with issue
+  0003 fixed; 0001 and 0002 deferred with rationale), and the 3-point
+  benchmark trend (0.7.0 / 0.8.0 / 0.9.0, flat-or-faster).
+- [x] M8 — v1.0 freeze. CLI flags, CYML format, default font set,
+  `.flf` adapter contract all frozen. Issue 0002's `--pad` /
+  `--width` caps shipped as the freeze's one documented `Breaking`.
+  Issue 0001 formally deferred past 1.0.0.
 
-M8 cuts v1.0.0 with the CLI flag surface frozen and issue 0002's
-cap landed as a documented `Breaking`. See [`roadmap.md`](roadmap.md)
-for sequence.
+Post-v1.0 work lives in a future "Beyond v1.0" roadmap section
+(not yet scoped). Candidate items if/when picked up:
+
+- Variable per-glyph widths in the `.flf` adapter (kerning/smushing
+  is a separate, larger question).
+- Unicode / multi-byte rendering — explicitly v2.0 per the v1.0
+  out-of-scope list; carries serious font-coverage implications.
+- Issue 0001 (keystroke interleave during render) if the
+  cost/benefit shifts.
+
+See [`roadmap.md`](roadmap.md) for the shipped milestone log.

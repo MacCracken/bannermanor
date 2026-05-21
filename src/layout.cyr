@@ -32,6 +32,18 @@ enum LayoutLimits {
                               # an allocation from cols, but a future
                               # caller that did could be tripped by a
                               # `resize -s 65535 65535` attack.
+    WIDTH_CAP    = 4096;      # v1.0 M8 freeze (issue 0002) — upper cap
+                              # on `--width N`. Coincides with WS_COL_CAP
+                              # by design: a banner wider than the cap on
+                              # the terminal's own column count is absurd.
+                              # Kept as a separate named constant because
+                              # the *reason* differs (one clamps ioctl
+                              # output, the other rejects user CLI input).
+    PAD_CAP      = 64;        # v1.0 M8 freeze (issue 0002) — upper cap
+                              # on `--pad N` (top and bottom blank lines).
+                              # 64 lines is taller than any reasonable
+                              # terminal; the user can wrap in literal
+                              # newlines if they want more.
 }
 # F-002 — shared overflow cap for hand-written integer parsers
 # (parse_uint here, _font_get_int in font.cyr, _flf_take_int in
@@ -209,10 +221,19 @@ fn render_layout(font, text, len, width, align, pad, color): i64 {
     var h = font_height(font);
     var g = font_gap(font);
 
-    var draw_len = len;
-    if (width > 0) {
-        draw_len = fit_chars(width, w, g, len);
-    }
+    # Effective truncation width.
+    #   - Explicit `--width N`  → use N (M4 contract).
+    #   - No `--width`, TTY out → clamp to TIOCGWINSZ cols so the
+    #                             banner doesn't wrap into itself
+    #                             on narrow terminals (issue 0004).
+    #   - No `--width`, pipe out → `term_width_ioctl` returns 0,
+    #                             `fit_chars(0, ...)` returns `len`
+    #                             unchanged — preserves the M1
+    #                             byte-identity contract for
+    #                             `bnrmr ... | cat` and the test suite.
+    var clamp_w = width;
+    if (clamp_w == 0) { clamp_w = term_width_ioctl(); }
+    var draw_len = fit_chars(clamp_w, w, g, len);
 
     # Frame width for alignment. Left-align with width=0 means we
     # never resolve a frame at all (preserves M1 byte-identity).

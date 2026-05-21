@@ -3,7 +3,7 @@
 **Reported**: 2026-05-20
 **Version**: 0.8.0-pre (during ad-hoc stress sweep)
 **Reporter**: maintainer (M7 ad-hoc fuzz-by-hand)
-**Status**: observed, deferred to v1.0 review
+**Status**: **fixed in 1.0.0** (2026-05-20)
 **Severity**: cosmetic / user-DoS-of-self
 
 ## Observation
@@ -60,6 +60,32 @@ intentionally being locked. Adding the cap is a small breaking
 behavior change (previously-valid invocations start exiting 1), which
 is exactly what the M8 `Breaking` CHANGELOG section is for. Filing
 this issue so the cap doesn't get forgotten during the freeze pass.
+
+## Resolution (2026-05-20)
+
+Shipped in 1.0.0. Caps applied as suggested:
+
+- `--width N`: cap `WIDTH_CAP = 4096` in `src/layout.cyr`'s
+  `LayoutLimits` enum. `src/main.cyr` rejects `> WIDTH_CAP` with
+  `bnrmr: --width max 4096` and exits 1. Matches the F-008
+  `WS_COL_CAP` numeric value by design; the two are kept as separate
+  named constants because the *reason* differs (CLI input rejection
+  vs. ioctl output clamping).
+- `--pad N`: cap `PAD_CAP = 64`. `src/main.cyr` rejects `> PAD_CAP`
+  with `bnrmr: --pad max 64` and exits 1.
+
+The reject-path mirrors the existing negative-value rejections one
+block above in `main.cyr` — same `println` + `return 1` shape, same
+error-string style. Smoke-verified post-build:
+
+- `--width 4097 "X"` → exit 1, `bnrmr: --width max 4096`
+- `--width 4096 "X"` → renders (no regression at the boundary)
+- `--pad 65 "X"`     → exit 1, `bnrmr: --pad max 64`
+- `--pad 64 "X"`     → renders 133 lines (64 + 5 + 64)
+- `--pad 0 --width 0 "X"` → renders 5 lines (default behavior unchanged)
+- Negative values still rejected with the pre-1.0 messages.
+
+This is the single `Breaking` documented in the 1.0.0 CHANGELOG.
 
 ## Test cases that surfaced this
 

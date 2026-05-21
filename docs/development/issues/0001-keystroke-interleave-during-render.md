@@ -3,7 +3,7 @@
 **Reported**: 2026-05-20
 **Version**: 0.7.0
 **Reporter**: maintainer (M7 dogfood)
-**Status**: observed, deferred (not blocking v1.0)
+**Status**: deferred past v1.0.0 (final — see Decision)
 **Severity**: cosmetic
 
 ## Observation

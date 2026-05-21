@@ -289,7 +289,7 @@ fn main(): i64 {
         return 0;
     }
     if (flags_get_bool(fs, f_version) == 1) {
-        println("bnrmr 0.9.0");
+        println("bnrmr 1.0.0");
         return 0;
     }
     if (flags_get_bool(fs, f_list) == 1) {
@@ -309,9 +309,17 @@ fn main(): i64 {
         println("bnrmr: --width must be non-negative");
         return 1;
     }
+    if (width > WIDTH_CAP) {
+        println("bnrmr: --width max 4096");
+        return 1;
+    }
     var pad = flags_get_int(fs, f_pad);
     if (pad < 0) {
         println("bnrmr: --pad must be non-negative");
+        return 1;
+    }
+    if (pad > PAD_CAP) {
+        println("bnrmr: --pad max 64");
         return 1;
     }
 

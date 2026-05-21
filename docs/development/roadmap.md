@@ -5,17 +5,16 @@
 > in what order, against what dependency gates. State lives in
 > [`state.md`](state.md).
 
-**Currently shipped**: v0.9.0 — M1–M7 complete. M1–M6 cover the
-render pipeline, CYML font format, default font set, layout flags,
-color, and legacy `.flf` read adapter. M7 closes at 0.9.0 with the
-security audit pass (0.7.0), its defense-in-depth follow-ups (0.8.0),
-the issue-0003 CRLF `.flf` endmark-bleed fix (0.9.0), and a 3-point
-benchmark trend (0.7.0 / 0.8.0 / 0.9.0). See CHANGELOG for per-release
+**Currently shipped**: **v1.0.0** — M1–M8 complete. v1.0 ships with
+the CLI flag surface, CYML font format (schema 1), default font set
+(block / slim / big), and `.flf` adapter contract all frozen.
+Issue 0002's `--pad ≤ 64` / `--width ≤ 4096` caps landed at 1.0.0 as
+the freeze's one documented `Breaking`. See CHANGELOG for per-release
 details.
 
-**Next**: M8 — v1.0 freeze. Land issue 0002's `--pad` / `--width`
-caps as a documented `Breaking` change, lock the CLI flag surface,
-cut v1.0.0.
+**Next**: Post-v1.0 — no committed milestones. Future work (e.g.
+variable per-glyph `.flf` widths, Unicode/v2.0) would be scoped into
+a "Beyond v1.0" section as it firms up.
 
 ## v1.0 criteria
 
@@ -30,9 +29,9 @@ format. Frozen CLI flag surface.
 - [x] CLI layout flags: `--align`, `--width`, `--pad` (shipped v0.4.0)
 - [x] Color via darshana: `--color NAME`, `--color rainbow`, TTY
       auto-suppression (shipped v0.5.0)
-- [ ] CLI flag surface frozen — current set is `--font`, `--width`,
-      `--align`, `--pad`, `--color`, `--list-fonts`, `--help`,
-      `--version` (plus `-f`/`-w`/`-h` short forms). M8 freeze.
+- [x] CLI flag surface frozen at v1.0.0 — `--font` (`-f`),
+      `--width` (`-w`), `--align`, `--pad`, `--color`,
+      `--list-fonts`, `--help` (`-h`), `--version`. (M8 — shipped v1.0.0)
 - [x] Optional .flf read path for legacy figlet fonts (shipped v0.6.0 —
       uniform-width fit, no smushing; renders ASCII 32..126 from any
       figlet font that fits the 64-col / 32-row geometry envelope)
@@ -74,12 +73,15 @@ see CHANGELOG). Versions are targets, not commitments — ship-when-ready.
       points 1 (0.7.0), 2 (0.8.0), 3 (0.9.0) captured; flat-or-faster
       across the trend
 
-### M8 — v1.0.0
+### M8 — v1.0.0 (shipped 2026-05-20)
 
-- CLI flags frozen, font format frozen, default font set finalized
-- CHANGELOG `Breaking` section for the freeze (no signature
-  changes — the freeze is the contract change)
-- v1.0.0 cut
+- [x] CLI flags frozen, CYML font format frozen (schema 1), default
+      font set finalized (block / slim / big), `.flf` adapter
+      contract frozen
+- [x] CHANGELOG `Breaking` section for the freeze: `--pad` cap at 64,
+      `--width` cap at 4096 (issue 0002's resolution). No signature
+      changes; the freeze itself is the contract change.
+- [x] v1.0.0 cut
 
 ## Out of scope (for v1.0)
 

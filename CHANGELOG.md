@@ -4,6 +4,85 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.0.0] — 2026-05-20
+
+**v1.0**. The CLI flag surface, the CYML font format, and the default
+in-tree font set are frozen — no signature changes from 0.9.0 to 1.0.0
+in any of the three. The freeze itself is the contract change.
+
+What the freeze locks:
+
+- **CLI flags**: `--font` (`-f`), `--width` (`-w`), `--align`, `--pad`,
+  `--color`, `--list-fonts`, `--help` (`-h`), `--version`. No flags
+  added, no flags removed, no exit-code or stdout-byte changes for
+  any valid invocation. New flags after 1.0.0 are an SCHEMA-MAJOR
+  question, not a minor.
+- **CYML font format**: schema = 1 (see `docs/adr/0001-cyml-font-format.md`).
+  Body convention (`.` background, `#` stroke), `[font]` header
+  fields, per-glyph entries — frozen. Schema 2 is the next-major
+  question.
+- **Default font set**: `block`, `slim`, `big`. Frozen as the in-tree
+  trio. Additional fonts can ship in 1.x without breaking the
+  contract (presence is additive, never subtractive).
+- **`.flf` adapter contract**: read-only, uniform-width fit, no
+  smushing, ASCII 32..126, 1 MB cap, C0/C1/DEL scrub. Bug fixes (like
+  0.9.0's CRLF handling) are non-breaking; the documented limitations
+  in CHANGELOG 0.6.0 are intentional and stay.
+
+Issue 0002's `--pad` / `--width` caps land here as the freeze's one
+documented `Breaking`. Issue 0001 (keystroke interleave) stays
+deferred — the cost/risk analysis in its filing is unchanged.
+
+### Breaking
+- **`--pad N` capped at 64**; values 65..PARSER_INT_CAP are rejected
+  with `bnrmr: --pad max 64` and exit 1. Pre-1.0 these were accepted
+  and produced unbounded blank lines around the banner.
+- **`--width N` capped at 4096**; values 4097..PARSER_INT_CAP are
+  rejected with `bnrmr: --width max 4096` and exit 1. Pre-1.0 these
+  were accepted and produced unbounded line lengths. The cap matches
+  `WS_COL_CAP` (the 0.8.0 F-008 terminal-cols clamp) by design —
+  a `--width` larger than the largest column count any terminal will
+  ever report is by definition unreasonable. Issue 0002 documents
+  the rationale; this closes it.
+
+### Fixed
+- **Banner wraps into itself on narrow terminals (issue 0004).**
+  `render_layout` previously only called `fit_chars` when `--width N`
+  was set explicitly. With the default (`--width 0`), the banner was
+  emitted at full width regardless of terminal size; the terminal's
+  soft-wrap broke row alignment when the banner was wider than the
+  TTY (caught dogfooding `bnrmr --font modular.flf "BANNERMANOR 1.0"`
+  on a 129-col terminal: 15 glyphs × ~9 cols ≈ 135 cols, ~6 cols
+  over). The renderer now resolves an effective truncation width
+  from `term_width_ioctl()` when `--width` is unset; whole-glyph
+  truncation rules are identical to `--width N`. **Piped output is
+  byte-identical to pre-1.0**: `term_width_ioctl()` returns 0 when
+  stdout isn't a TTY, `fit_chars(0, ...)` returns `len` unchanged, so
+  `bnrmr ... | cat` still emits the full untruncated banner — the M1
+  byte-identity contract is preserved. The
+  `t_layout_render_layout_default_matches_render` test (which runs
+  non-TTY) still passes for this reason. Found and fixed in 1.0.0.
+
+### Added
+- `src/layout.cyr` — `WIDTH_CAP = 4096` and `PAD_CAP = 64` in
+  `LayoutLimits`. Kept as separate constants from `WS_COL_CAP`
+  because the *reason* differs (CLI input rejection vs. ioctl
+  output clamping), even though the numeric value happens to match.
+
+### Changed
+- `src/main.cyr` — `--width` and `--pad` validation grows an
+  upper-bound check immediately after the existing
+  non-negative check. Error message style matches the existing
+  negative-rejection messages (`bnrmr: <flag> max N`, exit 1).
+- `VERSION` and the `--version` string bumped to `1.0.0`.
+
+### Closed (out of M7 / M8)
+- Issue 0002 (`--pad` / `--width` unbounded) — fixed in this release.
+- Issue 0001 (keystroke interleave) — formally deferred past 1.0.0.
+  Documented in the issue file; revisit in a future minor if the
+  cost/benefit shifts.
+- Issue 0003 (CRLF `.flf` endmark bleed) — fixed in 0.9.0.
+
 ## [0.9.0] — 2026-05-20
 
 Closes **M7**. Fixes the one real bug surfaced by the maintainer-MOTD
