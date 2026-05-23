@@ -16,7 +16,13 @@ stdlib = ["string", "fmt", "alloc", "io", "vec", "str", "syscalls", "assert", "b
 
 [deps.darshana]
 # SGR primitives (tty_sgr, tty_sgr_reset, TTY_FG_*) for --color.
-# Pinned at the version that first shipped the SGR surface.
+# Re-pinned to 0.5.3 (2026-05-23) to align with the rest of the AGNOS
+# ecosystem (agora 0.2.x M2-B consumes the same surface for telnet
+# MOTD coloring). 0.5.3 keeps the v0.3.x `tty_sgr` / `tty_sgr_reset`
+# / `TTY_FG_*` symbols byte-stable; the addition is the `_buf` family
+# (tty_sgr_buf, tty_fg_rgb_buf, ...) which bannermanor doesn't use
+# yet — adopting it is a future bite if bnrmr ever wants single-write
+# frame emission for piped output.
 git = "https://github.com/MacCracken/darshana.git"
-tag = "0.3.5"
+tag = "0.5.3"
 modules = ["dist/darshana.cyr"]

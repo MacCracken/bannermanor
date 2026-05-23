@@ -5,6 +5,8 @@
 
 ## Version
 
+**1.0.1** — 2026-05-23. Ecosystem-alignment patch: darshana pin `0.3.5 → 0.5.3` to match agora's M2-B consumption of the same surface. No API or behavior changes; the `tty_sgr` / `tty_sgr_reset` / `TTY_FG_*` symbols bannermanor uses are byte-stable across the 0.3 → 0.5 range. See `CHANGELOG.md` [1.0.1].
+
 **1.0.0** — tagged 2026-05-20. **M8 — v1.0 freeze.** CLI flag
 surface (`--font`/`-f`, `--width`/`-w`, `--align`, `--pad`,
 `--color`, `--list-fonts`, `--help`/`-h`, `--version`), CYML font
@@ -246,7 +248,7 @@ Direct (declared in `cyrius.cyml`):
 
 - stdlib — string, fmt, alloc, io, vec, str, syscalls, assert, bench,
   args, cyml, result, flags
-- `darshana ≥ 0.3.5` — SGR primitives (`tty_sgr`, `tty_sgr_reset`,
+- `darshana = 0.5.3` (pinned, 1.0.1) — SGR primitives (`tty_sgr`, `tty_sgr_reset`,
   `TTY_FG_*` constants) for `--color`. Currently resolved via
   `path = "../darshana"` for development; flips to `git + tag`
   at release-cut time.

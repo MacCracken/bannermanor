@@ -4,6 +4,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.0.1] — 2026-05-23 (darshana pin bump — ecosystem alignment)
+
+### Changed
+
+- **`cyrius.cyml [deps.darshana]`** — pin moved from `0.3.5` → `0.5.3` so every AGNOS consumer of darshana is on the same release. Triggered by agora's M2-B work landing the same alignment for the telnet-MOTD coloring path; consolidating the ecosystem on one darshana version means a single audit surface when darshana 1.0 freezes.
+- **`src/main.cyr`** — `--version` literal bumped to `bnrmr 1.0.1`.
+
+### Notes
+
+- **No API or behavior changes.** The `tty_sgr` / `tty_sgr_reset` / `TTY_FG_*` symbols bannermanor consumes are byte-stable from darshana 0.3.5 through 0.5.3 — the 0.5.x additions are the `_buf` family (e.g. `tty_sgr_buf` for buffer-targeted SGR emission), which bannermanor doesn't use yet. Adopting the `_buf` variants for single-write piped-output rendering is a future bite, not blocking.
+- v1.0 frozen surface (CLI flags, CYML font schema, default font set) unchanged. The "freeze is the contract change" framing from [1.0.0] still holds.
+
 ## [1.0.0] — 2026-05-20
 
 **v1.0**. The CLI flag surface, the CYML font format, and the default
