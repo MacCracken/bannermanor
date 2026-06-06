@@ -45,9 +45,10 @@ jobs:
           cyrius build src/main.cyr build/bnrmr
 
       - name: Test
-        # `cyrius tests` recursively discovers + runs tests/*.tcyr (the
-        # bannermanor.tcyr harness). The bare `cyrius test` form took a single
-        # <test.cyr> arg in v5.6.28 and stopped auto-discovering .tcyr in the
-        # 6.0.x line — it now hard-fails with "No .tcyr files found", so use the
-        # plural `tests` subcommand for harness discovery.
-        run: cyrius tests
+        # Explicit .tcyr path (matches patra + mihi/iam/chakshu) — the version-
+        # stable form across the 6.0.x line. Bare `cyrius test` stopped auto-
+        # discovering .tcyr (fails "No .tcyr files"), and the `cyrius tests`
+        # discovery subcommand only exists in cyrius AFTER 6.0.56 (the pin) — so
+        # the CI's pinned toolchain rejects it ("Unknown command"). `cyrius test
+        # <file.tcyr>` works on every 6.0.x.
+        run: cyrius test tests/bannermanor.tcyr
