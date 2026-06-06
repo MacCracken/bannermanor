@@ -86,6 +86,12 @@ fn parse_uint(cstr): i64 {
 # so a `resize -s 65535 65535` attack can't propagate hostile width
 # into anything downstream that sizes from cols.
 fn term_width_ioctl(): i64 {
+    # AGNOS has no ioctl/TIOCGWINSZ — return 0 so callers fall back to the
+    # default width (the fb console size isn't queryable from userland yet).
+    #ifdef CYRIUS_TARGET_AGNOS
+    return 0;
+    #endif
+    #ifndef CYRIUS_TARGET_AGNOS
     var ws[8];                          # 4×u16: rows, cols, xpix, ypix
     store64(&ws, 0);
     var r = syscall(SYS_IOCTL, 1, TIOCGWINSZ, &ws);
@@ -94,6 +100,7 @@ fn term_width_ioctl(): i64 {
     if (cols <= 0) { return 0; }
     if (cols > WS_COL_CAP) { return WS_COL_CAP; }
     return cols;
+    #endif
 }
 
 # Is stdout attached to a TTY? Returns 1 if yes, 0 if piped /
@@ -101,11 +108,19 @@ fn term_width_ioctl(): i64 {
 # `isatty(3)` uses under the hood. Cheap; safe to call on every
 # render path.
 fn stdout_is_tty(): i64 {
+    # AGNOS: no TTY probe (no ioctl). Treat stdout as non-TTY so auto-color
+    # stays off — the fb console renders glyphs literally and doesn't interpret
+    # ANSI escapes, so a plain banner is correct.
+    #ifdef CYRIUS_TARGET_AGNOS
+    return 0;
+    #endif
+    #ifndef CYRIUS_TARGET_AGNOS
     var ws[8];
     store64(&ws, 0);
     var r = syscall(SYS_IOCTL, 1, TIOCGWINSZ, &ws);
     if (r == 0) { return 1; }
     return 0;
+    #endif
 }
 
 # Read the COLUMNS env var; return parsed value or 0 on miss/error.

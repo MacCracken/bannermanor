@@ -4,6 +4,20 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.1.0] — 2026-06-06 (AGNOS as a build target — builds + renders on both Linux and agnos)
+
+### Added
+
+- **AGNOS platform support** (VERSION → 1.1.0; cyrius pin 6.0.1 → 6.0.56). `bnrmr` now builds under `cyrius build --agnos` and renders ASCII banners on AGNOS (MOTD / splash text in the agnsh environment, output via the agnos `write` syscall). The only Linux-ism was terminal-size detection (`ioctl`/`TIOCGWINSZ`), gated inline with `#ifdef CYRIUS_TARGET_AGNOS` in `src/layout.cyr`:
+  - `term_width_ioctl` → returns 0 on agnos so callers fall back to the default banner width;
+  - `stdout_is_tty` → returns 0 (non-TTY) on agnos, keeping auto-color off (the fb console renders glyphs literally and doesn't interpret ANSI).
+  - **The real fb-console-size query (`ioctl`/`TIOCGWINSZ` equivalent) is deferred to the 1.43.x graphics work** — terminal geometry is a console/graphics concern, so it lands with that arc (alongside the GPU surface). Until then, the default width is correct for banners.
+- Inline gating, no shared platform-abstraction layer (extract later only if needed). The Linux path is unchanged (verified: Linux build OK + renders correctly).
+
+### Validated
+
+- `cyrius build --agnos src/main.cyr` → **OK** (`bnrmr_agnos`, 169 KB; darshana color dep builds for agnos too). Linux build + render unaffected (`./bnrmr AGNOS` renders the banner).
+
 ## [1.0.1] — 2026-05-23 (darshana pin bump — ecosystem alignment)
 
 ### Changed
