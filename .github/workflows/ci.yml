@@ -45,9 +45,9 @@ jobs:
           cyrius build src/main.cyr build/bnrmr
 
       - name: Test
-        # v5.6.28: bare `cyrius test` picks up the [build].test entry
-        # AND auto-discovers tests/*.tcyr — avoids the previous
-        # `cyrius test src/test.cyr` form that hard-failed when the
-        # stub didn't exist (Issue 1) and also wouldn't ever exercise
-        # tests/${proj}.tcyr.
-        run: cyrius test
+        # `cyrius tests` recursively discovers + runs tests/*.tcyr (the
+        # bannermanor.tcyr harness). The bare `cyrius test` form took a single
+        # <test.cyr> arg in v5.6.28 and stopped auto-discovering .tcyr in the
+        # 6.0.x line — it now hard-fails with "No .tcyr files found", so use the
+        # plural `tests` subcommand for harness discovery.
+        run: cyrius tests
