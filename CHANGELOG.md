@@ -4,6 +4,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.1.1] — 2026-06-08 (agnos argv fix)
+
+### Changed
+
+- cyrius toolchain pin 6.0.56 → 6.1.14.
+
+### Fixed
+
+- **agnos: `bnrmr TEXT` printed help instead of rendering.** `argc()`/`argv()` returned 0/null because the `var r = main();` entry idiom runs `main` as a module-global initializer — *before* cyrius's init-stack capture — so the command-line args were never seen. `main` is now called from a bare top-level statement (`_agnos_entry();`), which runs after the capture, so native `argc`/`argv` resolve and `bnrmr agnos` renders. Root cause + reproducer filed as a cyrius issue (agnos argv init-rsp capture).
+
 ## [1.1.0] — 2026-06-06 (AGNOS as a build target — builds + renders on both Linux and agnos)
 
 ### Added
