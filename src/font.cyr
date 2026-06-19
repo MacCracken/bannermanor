@@ -8,7 +8,8 @@
 # with `char = "X"` in the entry's TOML header and a body of HEIGHT
 # rows × WIDTH bytes using `.` (background) and `#` (stroke).
 
-include "lib/cyml.cyr"
+# cyml parser moved out of the core stdlib into `bayan` as of cyrius 6.2.x.
+include "lib/bayan.cyr"
 include "lib/string.cyr"
 
 # Font struct layout (48 bytes):

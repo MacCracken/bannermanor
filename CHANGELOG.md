@@ -4,6 +4,19 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.1.2] — 2026-06-19 (toolchain + dep refresh — cyrius 6.2.24, cyml → bayan)
+
+### Changed
+
+- **cyrius toolchain pin 6.1.14 → 6.2.24.** Re-synced the vendored stdlib snapshot into `lib/` with `cyrius lib sync`. The 6.2.x stdlib reorg dropped several modules from the core snapshot (`base64`, `bigint`, `csv`, `json`, `linalg`, `matrix`, `toml`, `u128`, and `cyml`); the stale copies were pruned from `lib/`.
+- **CYML parser moved out of the core stdlib into `bayan`.** `cyml.cyr` no longer ships in the cyrius snapshot as of 6.2.x — the `cyml_parse` / `cyml_doc_*` / `cyml_entry_*` surface bannermanor's font loader depends on now lives in `bayan`. Updated `[deps].stdlib` (`cyml` → `bayan`) and `src/font.cyr`'s `include "lib/cyml.cyr"` → `include "lib/bayan.cyr"`. The consumed symbols are unchanged, so the font loader is byte-stable.
+- **`cyrius.cyml [deps.darshana]`** — pin bumped `0.5.3` → `0.7.1` to track the latest release. The `tty_sgr` / `tty_sgr_reset` / `TTY_FG_*` symbols bannermanor consumes remain present and byte-stable.
+- **`src/main.cyr`** — `--version` literal bumped to `bnrmr 1.1.2`.
+
+### Notes
+
+- **No API or behavior changes.** Build clean, full suite green (2762 tests). The CYML font-load path (now via `bayan`) and the `--color` darshana path were smoke-checked.
+
 ## [1.1.1] — 2026-06-08 (agnos argv fix)
 
 ### Changed

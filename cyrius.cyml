@@ -4,7 +4,7 @@ version = "${file:VERSION}"
 description = "BannerManor — figlet-equivalent ASCII-art banner generator for MOTDs, script intros, splash text. Heraldic welcome ceremony at the gate of your digital manor. Binary: bnrmr."
 license = "GPL-3.0-only"
 language = "cyrius"
-cyrius = "6.1.14"
+cyrius = "6.2.24"
 
 [build]
 entry = "src/main.cyr"
@@ -12,17 +12,15 @@ test = "src/test.cyr"
 output = "bnrmr"
 
 [deps]
-stdlib = ["string", "fmt", "alloc", "io", "vec", "str", "syscalls", "assert", "bench", "args", "cyml", "result", "flags"]
+stdlib = ["string", "fmt", "alloc", "io", "vec", "str", "syscalls", "assert", "bench", "args", "bayan", "result", "flags"]
 
 [deps.darshana]
 # SGR primitives (tty_sgr, tty_sgr_reset, TTY_FG_*) for --color.
-# Re-pinned to 0.5.3 (2026-05-23) to align with the rest of the AGNOS
-# ecosystem (agora 0.2.x M2-B consumes the same surface for telnet
-# MOTD coloring). 0.5.3 keeps the v0.3.x `tty_sgr` / `tty_sgr_reset`
-# / `TTY_FG_*` symbols byte-stable; the addition is the `_buf` family
-# (tty_sgr_buf, tty_fg_rgb_buf, ...) which bannermanor doesn't use
-# yet — adopting it is a future bite if bnrmr ever wants single-write
-# frame emission for piped output.
+# Bumped to 0.7.1 (2026-06-19). The `tty_sgr` / `tty_sgr_reset`
+# / `TTY_FG_*` symbols bannermanor consumes remain present and
+# byte-stable; the `_buf` family (tty_sgr_buf, tty_fg_rgb_buf, ...)
+# is still unused here — adopting it is a future bite if bnrmr ever
+# wants single-write frame emission for piped output.
 git = "https://github.com/MacCracken/darshana.git"
-tag = "0.5.3"
+tag = "0.7.1"
 modules = ["dist/darshana.cyr"]

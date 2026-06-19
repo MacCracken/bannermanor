@@ -5,6 +5,8 @@
 
 ## Version
 
+**1.1.2** — 2026-06-19. Toolchain + dep refresh. cyrius pin `6.1.14 → 6.2.24` (stdlib re-synced via `cyrius lib sync`); the CYML parser moved out of the core stdlib into `bayan` (`cyml.cyr` no longer ships in the snapshot), so `[deps].stdlib` and `src/font.cyr`'s include flip `cyml → bayan`. darshana pin `0.5.3 → 0.7.1`. No API or behavior changes — consumed `cyml_*` and `tty_sgr*` symbols are byte-stable. See `CHANGELOG.md` [1.1.2].
+
 **1.0.1** — 2026-05-23. Ecosystem-alignment patch: darshana pin `0.3.5 → 0.5.3` to match agora's M2-B consumption of the same surface. No API or behavior changes; the `tty_sgr` / `tty_sgr_reset` / `TTY_FG_*` symbols bannermanor uses are byte-stable across the 0.3 → 0.5 range. See `CHANGELOG.md` [1.0.1].
 
 **1.0.0** — tagged 2026-05-20. **M8 — v1.0 freeze.** CLI flag
@@ -116,7 +118,7 @@ M1 (first render path, hardcoded block font, 1 KB input cap, flags
 
 ## Toolchain
 
-- **Cyrius pin**: `6.0.1` (in `cyrius.cyml [package].cyrius`)
+- **Cyrius pin**: `6.2.24` (in `cyrius.cyml [package].cyrius`)
 
 ## Shape
 
@@ -247,8 +249,10 @@ authoring walkthrough at [`docs/guides/fonts.md`](../guides/fonts.md).
 Direct (declared in `cyrius.cyml`):
 
 - stdlib — string, fmt, alloc, io, vec, str, syscalls, assert, bench,
-  args, cyml, result, flags
-- `darshana = 0.5.3` (pinned, 1.0.1) — SGR primitives (`tty_sgr`, `tty_sgr_reset`,
+  args, bayan, result, flags
+  (`bayan` provides the CYML parser — `cyml_parse` / `cyml_doc_*` /
+  `cyml_entry_*` — which moved out of the core stdlib in cyrius 6.2.x)
+- `darshana = 0.7.1` (pinned, 1.1.2) — SGR primitives (`tty_sgr`, `tty_sgr_reset`,
   `TTY_FG_*` constants) for `--color`. Currently resolved via
   `path = "../darshana"` for development; flips to `git + tag`
   at release-cut time.
