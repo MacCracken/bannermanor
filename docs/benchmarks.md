@@ -142,6 +142,67 @@ Verdict: **no regression**. M7's 3-point benchmark trend is now
 complete; across 0.7.0 → 0.8.0 → 0.9.0 the CPU hot paths have stayed
 flat-or-faster, well inside batch noise.
 
+### Point 4 — 1.1.3
+
+**Captured**: 2026-08-25
+**Toolchain**: cyrius 6.5.35
+**Host**: archaemenid (AMD Ryzen 7 5800H, Linux 7.1.9)
+**Code delta vs 0.9.0**: none in bnrmr's own source — the render and
+CYML-load paths are untouched from 0.9.0 through 1.1.3. What moved is
+underneath: three toolchain generations (6.0.1 → 6.1.14 → 6.2.24 →
+6.5.35), the CYML parser's relocation into `bayan`, and `bayan` itself
+folding forward 1.0.1 → 1.5.2.
+
+| ID | Subject | 1.1.3 avg | Δ vs 0.9.0 | iters |
+|----|---------|-----------|------------|-------|
+| B1 | `block_font_embed` | **7 ns** | 0 ns (flat) | 10 000 |
+| B2 | `font_load_file(block.cyml)` | **87 µs** | +29 µs (+50%) | 1 000 |
+| B3 | `fit_chars ×100` | **610 ns** | +38 ns (+7%) | 100 000 |
+
+Three back-to-back runs: B1 7 / 7 / 8 ns, B2 88.3 / 86.3 / 86.8 µs,
+B3 624 / 609 / 610 ns. B2's spread is under 3%, so the +29 µs is real,
+not batch noise.
+
+#### The regression is NOT from this release
+
+B2 is measured through the CYML parser, which changed owner and version
+in this window — the obvious suspect. It is the wrong one. Holding the
+compiler fixed at 6.5.35 and swapping only the vendored `lib/`:
+
+| `lib/` snapshot | B2 (3 runs) |
+|-----------------|-------------|
+| cyrius 6.2.24 + darshana 0.7.1 (pre-upgrade) | 87.4 / 86.6 / 87.6 µs |
+| cyrius 6.5.35 + darshana 1.0.0 (post-upgrade) | 88.3 / 86.3 / 86.8 µs |
+
+Identical. **The 1.1.3 dep bump is bench-flat**; `bayan` 1.5.2 parses
+`block.cyml` no slower than 1.0.1 did despite quadrupling in size.
+
+The +29 µs therefore entered somewhere across 6.0.1 → 6.2.24 — the
+1.1.0, 1.1.1 and 1.1.2 releases, none of which captured a bench point.
+That is the gap: Point 3 was measured on cyrius 6.0.1 and the trend was
+declared complete at v1.0, so three toolchain bumps shipped unmeasured.
+Attributing the drift to a specific one would need a bisect over those
+snapshots, which is filed as follow-up rather than done here.
+
+#### Reading the deltas
+
+- **B1 is flat.** Embedded-font construction touches no stdlib that
+  moved.
+- **B2 is the only real mover**, and the A/B above localises it away
+  from this release.
+- **B3's +38 ns** is ~6%, close enough to the batch-to-batch spread
+  (609–624 ns within a single sitting) that it is not worth a claim
+  either way.
+
+Note the bench harness now prints a `[timer floor …]` line and
+subtracts a runtime-calibrated clock-read cost from every sample, so
+Point 4's absolute numbers are not strictly comparable to Points 1–3.
+The A/B table above is, because both of its rows were measured under
+the same harness.
+
+Verdict: **no regression from 1.1.3**; a pre-existing, previously
+unmeasured B2 drift is now on the record.
+
 ## Re-running
 
 ```sh

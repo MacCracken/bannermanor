@@ -3,6 +3,24 @@
 **Status**: Accepted
 **Date**: 2026-05-19
 
+> **Amendment — 1.1.3 (2026-08-25).** The decision stands; two facts it
+> rests on have since moved, and the body below is left as written for
+> the record.
+>
+> 1. **`lib/cyml.cyr` no longer exists.** The CYML parser folded into
+>    `bayan` in the cyrius 6.2.x stdlib reorg. Every `lib/cyml.cyr`
+>    reference below should be read as `lib/bayan.cyr`. The symbols
+>    (`cyml_parse`, `cyml_doc_*`, `cyml_entry_*`, `_cyml_trim`) kept
+>    their names, so the reasoning is unaffected.
+> 2. **The parser's 256-entry cap is gone.** bayan replaced the fixed
+>    256-slot scan (which silently truncated past 256) with a counted
+>    heap allocation, so consequence (2) below — "a hard wall for any
+>    future Unicode-coverage goal" — is no longer imposed by the
+>    parser. BannerManor still enforces its own 256 cap in
+>    `font_load_file` (`src/font.cyr`), now as deliberate policy rather
+>    than an inherited limit. A Unicode story is therefore a bnrmr
+>    glyph-encoding question only; no parser upgrade is a prerequisite.
+
 ## Context
 
 BannerManor needs a font format. The two real options were the legacy

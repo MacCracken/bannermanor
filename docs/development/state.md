@@ -5,6 +5,8 @@
 
 ## Version
 
+**1.1.3** — 2026-08-25. Toolchain + dep refresh. cyrius pin `6.2.24 → 6.5.35` (stdlib re-synced via `cyrius lib sync --full`; `lib/agnosys.cyr` retired upstream and pruned, four modules new to the snapshot: `async_macos`, `async_win`, `thread_macos`, `yantra`). darshana pin `0.7.1 → 1.0.0` — darshana's v1.0 API freeze, so the `tty_sgr` / `tty_sgr_reset` / `TTY_FG_*` surface bnrmr consumes is now contractually frozen. `bayan` folded forward `1.0.1 → 1.5.2`; all nine consumed `cyml_*` symbols keep their arity, and the CYML load path is byte-stable. `[deps].stdlib` gained `atomic`, `fs` and `fnptr` — a pre-existing declaration gap, not new. CI's hand-rolled toolchain install replaced with the tarball's `install.sh` (6.5.25 made the versioned layout mandatory). Render output byte-identical to 1.1.2 except the `--version` literal. See `CHANGELOG.md` [1.1.3].
+
 **1.1.2** — 2026-06-19. Toolchain + dep refresh. cyrius pin `6.1.14 → 6.2.24` (stdlib re-synced via `cyrius lib sync`); the CYML parser moved out of the core stdlib into `bayan` (`cyml.cyr` no longer ships in the snapshot), so `[deps].stdlib` and `src/font.cyr`'s include flip `cyml → bayan`. darshana pin `0.5.3 → 0.7.1`. No API or behavior changes — consumed `cyml_*` and `tty_sgr*` symbols are byte-stable. See `CHANGELOG.md` [1.1.2].
 
 **1.0.1** — 2026-05-23. Ecosystem-alignment patch: darshana pin `0.3.5 → 0.5.3` to match agora's M2-B consumption of the same surface. No API or behavior changes; the `tty_sgr` / `tty_sgr_reset` / `TTY_FG_*` symbols bannermanor uses are byte-stable across the 0.3 → 0.5 range. See `CHANGELOG.md` [1.0.1].
@@ -118,7 +120,7 @@ M1 (first render path, hardcoded block font, 1 KB input cap, flags
 
 ## Toolchain
 
-- **Cyrius pin**: `6.2.24` (in `cyrius.cyml [package].cyrius`)
+- **Cyrius pin**: `6.5.35` (in `cyrius.cyml [package].cyrius`)
 
 ## Shape
 
@@ -248,14 +250,19 @@ authoring walkthrough at [`docs/guides/fonts.md`](../guides/fonts.md).
 
 Direct (declared in `cyrius.cyml`):
 
-- stdlib — string, fmt, alloc, io, vec, str, syscalls, assert, bench,
-  args, bayan, result, flags
+- stdlib — string, fmt, alloc, atomic, io, vec, str, syscalls, assert,
+  bench, args, bayan, result, flags, fs, fnptr
+  (`atomic`, `fs` and `fnptr` were added at 1.1.3 — `src/main.cyr`
+  includes `lib/fs.cyr` directly, and `fs`/`alloc` pull `fnptr`/`atomic`
+  transitively. Without them a non-`--full` `cyrius lib sync` produced a
+  `lib/` that could not build.)
   (`bayan` provides the CYML parser — `cyml_parse` / `cyml_doc_*` /
   `cyml_entry_*` — which moved out of the core stdlib in cyrius 6.2.x)
-- `darshana = 0.7.1` (pinned, 1.1.2) — SGR primitives (`tty_sgr`, `tty_sgr_reset`,
-  `TTY_FG_*` constants) for `--color`. Currently resolved via
-  `path = "../darshana"` for development; flips to `git + tag`
-  at release-cut time.
+- `darshana = 1.0.0` (pinned, 1.1.3) — SGR primitives (`tty_sgr`,
+  `tty_sgr_reset`, `TTY_FG_*` constants) for `--color`. Resolved via
+  `git` + `tag` against https://github.com/MacCracken/darshana.git.
+  1.0.0 is darshana's API freeze: the symbols bnrmr consumes cannot
+  move without a major bump.
 
 ## Consumers
 

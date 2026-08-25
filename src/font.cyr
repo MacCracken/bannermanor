@@ -34,7 +34,14 @@ enum FontLimits {
     MAX_FILE_BYTES = 65536;     # 64 KB cap on font files (ADR 0001)
     MAX_WIDTH = 64;
     MAX_HEIGHT = 32;
-    MAX_GLYPHS = 256;           # capped by lib/cyml.cyr parser
+    MAX_GLYPHS = 256;           # bnrmr policy cap, enforced at the
+                                # `count > 256` guard below. Previously
+                                # documented as the CYML parser's own
+                                # limit; that rationale is stale twice
+                                # over — lib/cyml.cyr folded into bayan,
+                                # and bayan then replaced its fixed
+                                # 256-entry scan with a counted heap
+                                # alloc. The cap is ours alone now.
     SUPPORTED_SCHEMA = 1;
     HDR_NAME_CAP = 64;          # font name buffer (NUL-terminated)
     HDR_DESC_CAP = 256;         # font description buffer (NUL-terminated)
@@ -362,7 +369,7 @@ fn font_load_file(path): i64 {
     if (total <= 0) { return 0; }
     if (total >= 65536) { return 0; }       # over cap (no trailing room)
 
-    # Parse via lib/cyml.cyr
+    # Parse via lib/bayan.cyr
     var doc = cyml_parse(buf, total);
     if (doc == 0) { return 0; }
 
@@ -383,6 +390,10 @@ fn font_load_file(path): i64 {
 
     var count = cyml_doc_entry_count(doc);
     if (count <= 0) { return 0; }
+    # MAX_GLYPHS. bayan used to stop its own scan at 256 entries (silent
+    # truncation) so this could not fire; it no longer caps. No observable
+    # change for bnrmr — the shipped fonts carry 69 entries, and a
+    # >256-entry file is still rejected here rather than loading short.
     if (count > 256) { return 0; }
 
     var f = font_new(width, height, gap, count);

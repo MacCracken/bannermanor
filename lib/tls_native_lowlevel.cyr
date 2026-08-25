@@ -262,6 +262,7 @@ fn tls_native_transcript_init_in(a, hash_algo): i64 {
     return state;
 }
 
+# Global-bump transcript ctor (the a==0 case of tls_native_transcript_init_in).
 fn tls_native_transcript_init(hash_algo): i64 {
     return tls_native_transcript_init_in(0, hash_algo);
 }

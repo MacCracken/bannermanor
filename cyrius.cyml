@@ -4,7 +4,7 @@ version = "${file:VERSION}"
 description = "BannerManor — figlet-equivalent ASCII-art banner generator for MOTDs, script intros, splash text. Heraldic welcome ceremony at the gate of your digital manor. Binary: bnrmr."
 license = "GPL-3.0-only"
 language = "cyrius"
-cyrius = "6.2.24"
+cyrius = "6.5.35"
 
 [build]
 entry = "src/main.cyr"
@@ -12,15 +12,18 @@ test = "src/test.cyr"
 output = "bnrmr"
 
 [deps]
-stdlib = ["string", "fmt", "alloc", "io", "vec", "str", "syscalls", "assert", "bench", "args", "bayan", "result", "flags"]
+stdlib = ["string", "fmt", "alloc", "atomic", "io", "vec", "str", "syscalls", "assert", "bench", "args", "bayan", "result", "flags", "fs", "fnptr"]
 
 [deps.darshana]
 # SGR primitives (tty_sgr, tty_sgr_reset, TTY_FG_*) for --color.
-# Bumped to 0.7.1 (2026-06-19). The `tty_sgr` / `tty_sgr_reset`
-# / `TTY_FG_*` symbols bannermanor consumes remain present and
-# byte-stable; the `_buf` family (tty_sgr_buf, tty_fg_rgb_buf, ...)
-# is still unused here — adopting it is a future bite if bnrmr ever
-# wants single-write frame emission for piped output.
+# Bumped to 1.0.0 (2026-08-25) — darshana's API freeze. The
+# `tty_sgr` / `tty_sgr_reset` / `TTY_FG_*` symbols bannermanor
+# consumes are now part of darshana's frozen surface (ADR 0003):
+# names, arity, return contract, and emitted bytes cannot move
+# without a major bump. The `_buf` family (tty_sgr_buf,
+# tty_fg_rgb_buf, ...) is still unused here — adopting it is a
+# future bite if bnrmr ever wants single-write frame emission for
+# piped output.
 git = "https://github.com/MacCracken/darshana.git"
-tag = "0.7.1"
+tag = "1.0.0"
 modules = ["dist/darshana.cyr"]

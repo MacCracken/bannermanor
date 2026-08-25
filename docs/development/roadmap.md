@@ -5,9 +5,10 @@
 > in what order, against what dependency gates. State lives in
 > [`state.md`](state.md).
 
-**Currently shipped**: **v1.0.0** — M1–M8 complete. v1.0 ships with
+**Milestones**: M1–M8 complete as of the v1.0.0 freeze, which locked
 the CLI flag surface, CYML font format (schema 1), default font set
-(block / slim / big), and `.flf` adapter contract all frozen.
+(block / slim / big), and `.flf` adapter contract. The shipped version
+is tracked in [`state.md`](state.md), not here.
 Issue 0002's `--pad ≤ 64` / `--width ≤ 4096` caps landed at 1.0.0 as
 the freeze's one documented `Breaking`. See CHANGELOG for per-release
 details.

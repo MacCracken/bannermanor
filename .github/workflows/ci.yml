@@ -19,16 +19,26 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install Cyrius toolchain
+        # Pulls the version pinned in cyrius.cyml [package].cyrius and runs
+        # the install.sh that ships inside the release tarball. The bundled
+        # installer builds the VERSIONED layout (~/.cyrius/versions/<ver>/)
+        # and repoints the version-agnostic bin/lib symlinks at it.
+        #
+        # Do NOT hand-roll a flat ~/.cyrius/{bin,lib} copy. That worked
+        # before 6.5.25 only by accident: `_dep_find_stdlib_dir()` branch (a)
+        # tested `file_exists("src/main.cyr")`, which is true for essentially
+        # every cyrius project, so bannermanor's OWN vendored ./lib was
+        # returned as "the stdlib" and the pinned-snapshot branch never ran.
+        # 6.5.25 replaced that probe with `_dep_is_cyrius_source_repo()`, so a
+        # manifest with [package].cyrius set now REQUIRES
+        # ~/.cyrius/versions/<pin>/lib and hard-errors otherwise:
+        #   error: cyrius.cyml pins version X but it is not installed at ...
         run: |
           CYRIUS_VERSION="${CYRIUS_VERSION:-$(grep 'cyrius *= *"' cyrius.cyml 2>/dev/null | head -1 | sed 's/.*"\(.*\)"/\1/')}"
           echo "Installing Cyrius $CYRIUS_VERSION"
           curl -sLO "https://github.com/MacCracken/cyrius/releases/download/$CYRIUS_VERSION/cyrius-$CYRIUS_VERSION-x86_64-linux.tar.gz"
           tar xzf "cyrius-$CYRIUS_VERSION-x86_64-linux.tar.gz"
-          CYRIUS_DIR="cyrius-$CYRIUS_VERSION-x86_64-linux"
-          mkdir -p "$HOME/.cyrius/bin" "$HOME/.cyrius/lib"
-          cp "$CYRIUS_DIR/bin/"* "$HOME/.cyrius/bin/" 2>/dev/null || true
-          cp -r "$CYRIUS_DIR/lib/"* "$HOME/.cyrius/lib/" 2>/dev/null || true
-          chmod +x "$HOME/.cyrius/bin/"* 2>/dev/null || true
+          CYRIUS_VERSION="$CYRIUS_VERSION" sh "cyrius-$CYRIUS_VERSION-x86_64-linux/install.sh"
           echo "$HOME/.cyrius/bin" >> $GITHUB_PATH
           echo "CYRIUS_HOME=$HOME/.cyrius" >> $GITHUB_ENV
 
@@ -45,10 +55,18 @@ jobs:
           cyrius build src/main.cyr build/bnrmr
 
       - name: Test
-        # Explicit .tcyr path (matches patra + mihi/iam/chakshu) — the version-
-        # stable form across the 6.0.x line. Bare `cyrius test` stopped auto-
-        # discovering .tcyr (fails "No .tcyr files"), and the `cyrius tests`
-        # discovery subcommand only exists in cyrius AFTER 6.0.56 (the pin) — so
-        # the CI's pinned toolchain rejects it ("Unknown command"). `cyrius test
-        # <file.tcyr>` works on every 6.0.x.
+        # Explicit .tcyr path (matches patra + mihi/iam/chakshu) — the
+        # version-stable form. It sidesteps the auto-discovery surface, which
+        # has changed shape more than once: bare `cyrius test` now walks
+        # tests/ recursively (`_tests_walk`, cbt/commands.cyr), skipping
+        # symlinked dirs. Naming the file keeps CI pinned to exactly what we
+        # mean to run. Add new .tcyr files here as they land.
+        #
+        # (An earlier version of this comment claimed the `cyrius tests`
+        # discovery subcommand postdates the pin. That was wrong — `cmd_tests`
+        # ships in both 6.2.24 and 6.5.35. The explicit path is a deliberate
+        # choice, not a workaround.)
+        #
+        # Each .tcyr runs under a 300 s deadline; override with
+        # CYRIUS_TEST_TIMEOUT=<seconds> (0 disables).
         run: cyrius test tests/bannermanor.tcyr

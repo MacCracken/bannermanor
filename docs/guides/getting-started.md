@@ -15,7 +15,7 @@ cyrius test                              # 2762 assertions
 cyrius bench tests/bannermanor.bcyr      # render hot-path CPU bench
 ```
 
-Toolchain pin: `cyrius = "6.0.1"` in `cyrius.cyml`.
+Toolchain pin: `cyrius = "6.5.35"` in `cyrius.cyml`.
 
 ## Source layout
 

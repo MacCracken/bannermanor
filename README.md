@@ -28,9 +28,10 @@ Fourth member of the terminal-aesthetics set:
 
 ## Status
 
-**v1.0.0**. Stable. CLI flag surface, CYML font format (schema 1),
-default font set, and `.flf` adapter contract are all frozen — see
-the v1.0.0 [`Breaking`](CHANGELOG.md) section for what locked.
+**1.1.3**. Stable. CLI flag surface, CYML font format (schema 1),
+default font set, and `.flf` adapter contract are all frozen at their
+v1.0.0 shape — see the v1.0.0 [`Breaking`](CHANGELOG.md) section for
+what locked.
 
 ## Quick usage
 
@@ -73,7 +74,7 @@ cyrius test                            # 2762 assertions
 cyrius bench tests/bannermanor.bcyr    # render hot-path CPU bench
 ```
 
-Toolchain pin: `cyrius = "6.0.1"` in `cyrius.cyml` is the source of
+Toolchain pin: `cyrius = "6.5.35"` in `cyrius.cyml` is the source of
 truth.
 
 ## Docs

@@ -122,9 +122,10 @@ Implications:
 - Unsupported chars (NUL, control characters, DEL, bytes > 127)
   render as the space glyph silently. They are not an error.
 
-There is a hard cap of 256 entries per font (the `lib/cyml.cyr`
-parser's limit). ASCII fits comfortably; non-ASCII coverage is a
-v2.0 question.
+There is a hard cap of 256 entries per font. This is BannerManor's own
+limit, enforced in `font_load_file` (`src/font.cyr`) — the CYML parser
+in `lib/bayan.cyr` no longer imposes one of its own. ASCII fits
+comfortably; non-ASCII coverage is a v2.0 question.
 
 ## Required attribution
 
