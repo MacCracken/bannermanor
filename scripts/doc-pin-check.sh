@@ -135,10 +135,13 @@ is_version "$DARSHANA_PIN" || fail "the darshana pin is not version-shaped: '$DA
 #   docs/development/issues/archive/   bugs as filed, closed, frozen
 #   docs/adr/                          decisions as made (0001 is amended in place
 #                                      with the body preserved as the record)
-#   docs/development/roadmap.md        holds no version since 1.1.3 — it defers to
-#                                      state.md rather than duplicating a number
-#                                      that goes stale every release. If a version
-#                                      ever returns there, add it to LIVE_SET.
+#   docs/development/roadmap.md        names TARGET versions (1.2.0, 1.3.0, ...)
+#                                      and deliberately never the shipped one —
+#                                      state.md owns that. Do NOT add it to
+#                                      LIVE_SET: rule (d) is an equality test
+#                                      against VERSION, and a target version is
+#                                      defined by not equalling it, so every
+#                                      heading here would read as drift.
 : > "$TMPD/live"
 for f in README.md docs/guides/*.md docs/development/state.md src/main.cyr; do
     [ -f "$f" ] && printf '%s\n' "$f" >> "$TMPD/live"

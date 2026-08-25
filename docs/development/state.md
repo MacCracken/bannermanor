@@ -317,14 +317,13 @@ v1.0 shipped 2026-05-20. M7 and M8 both closed:
   issue 0004 (TTY wrap on narrow terminals) found and fixed in the
   same release. Issue 0001 formally deferred past 1.0.0.
 
-Post-v1.0 work lives in a future "Beyond v1.0" roadmap section
-(not yet scoped). Candidate items if/when picked up:
+Post-v1.0 work is scoped in [`roadmap.md`](roadmap.md) as of 1.1.4:
+1.2.0 (prove the contract — a committed golden suite and real CI
+gates) through 1.7.0, with contract-breaking items parked under
+"Beyond 1.x". The open issue register is
+[`issues/`](issues/) — 0005 (write-per-cell syscall cost) and 0006
+(bayan's ~45% `font_load_file` regression) are filed; 0007–0017 are
+named and scheduled in the roadmap.
 
-- Variable per-glyph widths in the `.flf` adapter (kerning/smushing
-  is a separate, larger question).
-- Unicode / multi-byte rendering — explicitly v2.0 per the v1.0
-  out-of-scope list; carries serious font-coverage implications.
-- Issue 0001 (keystroke interleave during render) if the
-  cost/benefit shifts.
-
-See [`roadmap.md`](roadmap.md) for the shipped milestone log.
+See [`roadmap.md`](roadmap.md) for the forward plan; the shipped
+milestone log is its compact "Closed record" table.

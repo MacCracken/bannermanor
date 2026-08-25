@@ -83,7 +83,7 @@ truth.
 - [`docs/guides/`](docs/guides/) — getting started, font authoring
 - [`docs/adr/`](docs/adr/) — design decisions (why X over Y)
 - [`docs/development/state.md`](docs/development/state.md) — live state snapshot
-- [`docs/development/roadmap.md`](docs/development/roadmap.md) — shipped milestones
+- [`docs/development/roadmap.md`](docs/development/roadmap.md) — what ships next, and why
 - [`docs/benchmarks.md`](docs/benchmarks.md) — render-path CPU trend
 - [`docs/audit/`](docs/audit/) — security audit reports
 

@@ -106,7 +106,7 @@ cyrius test                               # run tests/*.tcyr
 - [`docs/guides/`](docs/guides/) — Task-oriented how-tos (including font authoring)
 - [`docs/examples/`](docs/examples/) — Runnable examples
 - [`docs/development/state.md`](docs/development/state.md) — Live state snapshot
-- [`docs/development/roadmap.md`](docs/development/roadmap.md) — Milestones through v1.0
+- [`docs/development/roadmap.md`](docs/development/roadmap.md) — Forward plan: 1.2.x onward, and what the v1.0 freeze permits
 - `fonts/` — In-tree default fonts (CYML)
 
 Full doc-tree convention: [first-party-documentation.md](https://github.com/MacCracken/agnosticos/blob/main/docs/development/planning/first-party-documentation.md).
