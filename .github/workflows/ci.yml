@@ -18,6 +18,31 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Documented pin consistency
+        # FIRST step, ahead of the toolchain install — it reads files and runs
+        # no cyrius, so failing here costs the runner nothing but a checkout.
+        #
+        # VERSION, cyrius.cyml [package].cyrius and cyrius.cyml [deps.darshana]
+        # own the three numbers this project pins. Every other spelling of them —
+        # README.md, docs/guides/, docs/development/state.md, src/main.cyr's
+        # --version literal — is a copy, and nothing else in CI reads prose. The
+        # build does not; the suite renders banners; the "Verify version" step in
+        # release.yml (:22) ties the git TAG to VERSION and stops at the repo root.
+        # So the copies rotted: README.md and docs/guides/getting-started.md
+        # quoted `cyrius = "6.0.1"` through the 1.1.0, 1.1.1 and 1.1.2 releases,
+        # and roadmap.md still called v1.0.0 the shipped version at 1.1.3.
+        #
+        # The gate is shape-aware, not number-aware: it matches only the forms a
+        # LIVE claim takes and leaves the deliberate history alone — CHANGELOG.md,
+        # state.md's dated `**N.N.N** —` paragraphs, benchmarks.md's per-point
+        # `**Toolchain**:` stamps, issues/archive/. It also asserts its own
+        # coverage, so a doc reworded out from under a pattern goes RED instead of
+        # quietly checking one thing fewer. Details in the script header.
+        #
+        # release.yml calls this workflow as its CI Gate, so a tag push is gated
+        # by it too.
+        run: sh scripts/doc-pin-check.sh
+
       - name: Install Cyrius toolchain
         # Pulls the version pinned in cyrius.cyml [package].cyrius and runs
         # the install.sh that ships inside the release tarball. The bundled

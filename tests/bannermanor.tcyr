@@ -591,6 +591,23 @@ fn t_header_load_malformed() {
     assert_eq(font_header_load("tests/fixtures/bad_schema.cyml"), 0, "bad schema -> 0");
 }
 
+# ---- reader I/O portability (io.cyr wrappers) ----
+#
+# All three font readers open + read + close through lib/io.cyr's
+# `file_open` / `file_read` / `file_close` rather than raw syscall
+# numbers (which were x86_64-Linux-only and mis-dispatched on agnos).
+# A directory path is the one case that separates the two guards: the
+# open SUCCEEDS (so the `fd < 0` early-out does not fire) and the
+# read then fails, which must land on the `total <= 0` return. Covers
+# the `file_read` error passthrough that the missing-file tests miss.
+
+fn t_reader_dir_path() {
+    test_group("readers / directory path (open ok, read fails)");
+    assert_eq(font_load_file("fonts"),   0, "font_load_file(dir) -> 0");
+    assert_eq(font_header_load("fonts"), 0, "font_header_load(dir) -> 0");
+    assert_eq(flf_load_file("fonts"),    0, "flf_load_file(dir) -> 0");
+}
+
 fn main() {
     alloc_init();
     t_smoke();
@@ -623,6 +640,7 @@ fn main() {
     t_header_load_block();
     t_header_load_missing();
     t_header_load_malformed();
+    t_reader_dir_path();
     t_load_tiny_flf();
     t_load_flf_missing();
     t_load_flf_malformed();

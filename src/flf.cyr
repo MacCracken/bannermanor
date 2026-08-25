@@ -23,6 +23,7 @@
 
 include "src/font.cyr"
 include "lib/string.cyr"
+include "lib/io.cyr"
 
 enum FlfLimits {
     FLF_MAX_FILE = 1048576;     # 1 MB cap per roadmap M6
@@ -39,21 +40,21 @@ enum FlfLimits {
 # Returns the buffer pointer and writes the byte count to *out_len.
 # Returns 0 on open failure, OOM, empty file, or file at/over the cap.
 fn _flf_slurp(path, out_len): i64 {
-    var fd = syscall(2, path, 0, 0);
+    var fd = file_open(path, 0, 0);
     if (fd < 0) { return 0; }
     var buf = alloc(1048576);
-    if (buf == 0) { syscall(3, fd); return 0; }
+    if (buf == 0) { file_close(fd); return 0; }
     var total = 0;
     var rgo = 1;
     while (rgo == 1) {
-        var n = syscall(0, fd, buf + total, 1048576 - total);
+        var n = file_read(fd, buf + total, 1048576 - total);
         if (n <= 0) { rgo = 0; }
         else {
             total = total + n;
             if (total >= 1048576) { rgo = 0; }
         }
     }
-    syscall(3, fd);
+    file_close(fd);
     if (total <= 0) { return 0; }
     if (total >= 1048576) { return 0; }
     store64(out_len, total);

@@ -5,6 +5,20 @@
 
 ## Version
 
+**Unreleased** — agnos font-load fix. The three font-file readers
+(`_flf_slurp`, `font_load_file`, `font_header_load`) used raw
+x86_64-Linux syscall numbers for open/read/close across 12 sites.
+On agnos those numbers are `SYS_GETPID` / `SYS_EXIT` / `SYS_SPAWN`,
+so the open returned a pid, the `fd < 0` guard never fired, and the
+following read was `exit()` — every `--font` and `--list-fonts`
+invocation died silently on agnos (broken since AGNOS became a
+target at 1.1.0). All 12 now route through `lib/io.cyr`'s
+`file_open` / `file_read` / `file_close`, which carry the agnos ABI
+bridge. Linux output is byte-identical — verified by golden diff
+across 79 invocations covering all three fonts, the `.flf` path,
+`--list-fonts` and every error path. Suite 2762 → 2765. See
+`CHANGELOG.md` [Unreleased].
+
 **1.1.3** — 2026-08-25. Toolchain + dep refresh. cyrius pin `6.2.24 → 6.5.35` (stdlib re-synced via `cyrius lib sync --full`; `lib/agnosys.cyr` retired upstream and pruned, four modules new to the snapshot: `async_macos`, `async_win`, `thread_macos`, `yantra`). darshana pin `0.7.1 → 1.0.0` — darshana's v1.0 API freeze, so the `tty_sgr` / `tty_sgr_reset` / `TTY_FG_*` surface bnrmr consumes is now contractually frozen. `bayan` folded forward `1.0.1 → 1.5.2`; all nine consumed `cyml_*` symbols keep their arity, and the CYML load path is byte-stable. `[deps].stdlib` gained `atomic`, `fs` and `fnptr` — a pre-existing declaration gap, not new. CI's hand-rolled toolchain install replaced with the tarball's `install.sh` (6.5.25 made the versioned layout mandatory). Render output byte-identical to 1.1.2 except the `--version` literal. See `CHANGELOG.md` [1.1.3].
 
 **1.1.2** — 2026-06-19. Toolchain + dep refresh. cyrius pin `6.1.14 → 6.2.24` (stdlib re-synced via `cyrius lib sync`); the CYML parser moved out of the core stdlib into `bayan` (`cyml.cyr` no longer ships in the snapshot), so `[deps].stdlib` and `src/font.cyr`'s include flip `cyml → bayan`. darshana pin `0.5.3 → 0.7.1`. No API or behavior changes — consumed `cyml_*` and `tty_sgr*` symbols are byte-stable. See `CHANGELOG.md` [1.1.2].
@@ -165,7 +179,10 @@ Single-shot CLI: text in, banner bytes out, exit.
   Validates file size, schema version, geometry bounds, and body
   shape; rejects malformed input rather than degrading. Also
   exposes `font_header_load()` — a lightweight header-only loader
-  used by `--list-fonts`.
+  used by `--list-fonts`. Both loaders open/read/close through
+  `lib/io.cyr` (`file_open` / `file_read` / `file_close`), never raw
+  syscall numbers — the raw numbers were x86_64-Linux-only and
+  mis-dispatched on agnos (Unreleased fix).
 - `src/flf.cyr` — M6 legacy figlet font reader. `flf_load_file(path)`
   validates the `flf2a$` magic, parses height/baseline/maxlen/layout/
   comment-count from the header line, skips comment lines, decodes 95
@@ -178,7 +195,9 @@ Single-shot CLI: text in, banner bytes out, exit.
   escapes through to the user's terminal. 0.9.0 issue 0003 fix:
   trailing `\r` is trimmed from each line before endmark detection
   so CRLF-line `.flf` files don't leave phantom endmark columns in
-  glyph row data.
+  glyph row data. The slurp step (`_flf_slurp`) goes through
+  `lib/io.cyr` rather than raw syscall numbers (Unreleased fix) —
+  see `src/font.cyr` above for the rationale.
 - `src/font_block.cyr` — embedded "block" font. `block_font_embed()`
   builds a `Font*` from inline glyph data; this is the default used
   when no `--font` flag is passed (CLAUDE.md self-contained rule).
@@ -215,7 +234,7 @@ authoring walkthrough at [`docs/guides/fonts.md`](../guides/fonts.md).
 
 ## Tests
 
-- `tests/bannermanor.tcyr` — 2762 assertions covering: embedded font
+- `tests/bannermanor.tcyr` — 2765 assertions covering: embedded font
   geometry, glyph-index lookup (space / digits / uppercase /
   lowercase folding / punctuation / unsupported / fold-is-fallback),
   row-shape invariant, renderer bounds, CYML loader happy path +
@@ -235,7 +254,12 @@ authoring walkthrough at [`docs/guides/fonts.md`](../guides/fonts.md).
   (`t_flf_strips_control_bytes` — ESC in a `.flf` glyph row loads as
   space, not 0x1B), and the 0.9.0 issue-0003 regression
   (`t_flf_crlf_endmarks_stripped` — CRLF fixture loads identical
-  glyph rows to the LF fixture, no embedded endmark bytes). Runs clean.
+  glyph rows to the LF fixture, no embedded endmark bytes), and the
+  Unreleased reader-I/O regression (`t_reader_dir_path` — a directory
+  pushed through all three readers; the open succeeds so the `fd < 0`
+  early-out does not fire, and the read fails `EISDIR`, covering the
+  `file_read` error passthrough that the missing-file tests miss).
+  Runs clean.
 - `tests/fixtures/` — malformed-font fixtures consumed by the loader
   rejection tests (both CYML and .flf variants).
 - `tests/bannermanor.bcyr` — render hot-path CPU benchmarks (B1
