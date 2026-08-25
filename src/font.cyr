@@ -352,6 +352,16 @@ fn _font_decode_body(body, blen, width, height, dst): i64 {
 # Errors are bounded — file size, schema, geometry, body shape are all validated.
 fn font_load_file(path): i64 {
     # Read up to MAX_FILE_BYTES (64 KB)
+    # 1.1.4 — reject anything that is not a regular file before we
+    # commit to a read. A character device (`--font /dev/zero`) would
+    # otherwise be read up to the size cap, and a FIFO would block the
+    # process indefinitely. STAT_MODE (not a hardcoded 24) because the
+    # st_mode offset differs per arch — 24 on x86_64-Linux, 16 on
+    # aarch64-Linux. S_IFMT 0xF000, S_IFREG 0x8000.
+    var st[144];
+    if (xstat(path, &st) != 0) { return 0; }
+    var mode = load32(&st + STAT_MODE);
+    if (mode & 0xF000 != 0x8000) { return 0; }
     var fd = file_open(path, 0, 0);
     if (fd < 0) { return 0; }
     var buf = alloc(65536);
@@ -430,6 +440,21 @@ fn font_load_file(path): i64 {
 # bytes into dst (NUL-terminated, capped at dst_cap-1). Returns the
 # value length on success, -1 if not found or value exceeds the cap.
 # Used by font_header_load for `name = "..."` and `description = "..."`.
+# Map a control byte to a space. Same predicate as the .flf glyph-row
+# scrub in src/flf.cyr (F-001): C0 (0x00-0x1F), DEL (0x7F) and C1
+# (0x80-0x9F). Applied to any font-supplied string that reaches stdout.
+#
+# The C1 arm means a UTF-8 continuation byte in this range becomes a
+# space. That is deliberate: the CYML font schema is ASCII-only through
+# v1.0 (ADR 0001), and a Latin-1 terminal would read those bytes as
+# control codes.
+fn _scrub_ctl(b): i64 {
+    if (b < 32) { return 32; }
+    if (b == 127) { return 32; }
+    if (b >= 128 && b <= 159) { return 32; }
+    return b;
+}
+
 fn _font_get_str(hdr, hlen, key, key_len, dst, dst_cap): i64 {
     var i = 0;
     var found_len = 0 - 1;
@@ -480,7 +505,23 @@ fn _font_get_str(hdr, hlen, key, key_len, dst, dst_cap): i64 {
                                         if (load8(hdr + p) == 34) {
                                             var vlen = p - start;
                                             if (vlen < dst_cap) {
-                                                memcpy(dst, hdr + start, vlen);
+                                                # Scrub control bytes on the way
+                                                # out (F-011). These strings are
+                                                # printed verbatim by
+                                                # --list-fonts, so an ESC here
+                                                # is an ANSI-injection vector
+                                                # exactly like the .flf glyph
+                                                # rows F-001 closed. Copy byte by
+                                                # byte instead of memcpy so the
+                                                # filter cannot be bypassed.
+                                                # Length-preserving, so column
+                                                # alignment is unaffected.
+                                                var ci = 0;
+                                                while (ci < vlen) {
+                                                    var vb = load8(hdr + start + ci);
+                                                    store8(dst + ci, _scrub_ctl(vb));
+                                                    ci = ci + 1;
+                                                }
                                                 store8(dst + vlen, 0);
                                                 found_len = vlen;
                                             }
@@ -512,6 +553,16 @@ fn _font_get_str(hdr, hlen, key, key_len, dst, dst_cap): i64 {
 # loaded here is "trustworthy enough to print." Missing optional fields
 # (description) become empty strings.
 fn font_header_load(path): i64 {
+    # 1.1.4 — reject anything that is not a regular file before we
+    # commit to a read. A character device (`--font /dev/zero`) would
+    # otherwise be read up to the size cap, and a FIFO would block the
+    # process indefinitely. STAT_MODE (not a hardcoded 24) because the
+    # st_mode offset differs per arch — 24 on x86_64-Linux, 16 on
+    # aarch64-Linux. S_IFMT 0xF000, S_IFREG 0x8000.
+    var st[144];
+    if (xstat(path, &st) != 0) { return 0; }
+    var mode = load32(&st + STAT_MODE);
+    if (mode & 0xF000 != 0x8000) { return 0; }
     var fd = file_open(path, 0, 0);
     if (fd < 0) { return 0; }
     var buf = alloc(65536);

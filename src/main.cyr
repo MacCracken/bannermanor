@@ -80,10 +80,12 @@ fn print_usage(): i64 {
     println("      --align V         left | center | right (default: left)");
     println("  -w, --width N         truncate at glyph boundary at N columns");
     println("                        (default: 0 = unlimited; if N is smaller");
-    println("                        than one glyph, nothing renders)");
+    println("                        than one glyph, no glyphs render — the");
+    println("                        banner comes out as blank rows)");
     println("      --pad N           N blank lines above and below banner (default: 0)");
-    println("      --color NAME      colorize: red, green, yellow, blue, magenta,");
-    println("                        cyan, white (or bright_<name>), or 'rainbow'");
+    println("      --color NAME      colorize: black, red, green, yellow, blue,");
+    println("                        magenta, cyan, white (or bright_<name> /");
+    println("                        bright-<name>), or 'rainbow'");
     println("                        for per-row cycling. Suppressed on non-TTY stdout.");
     println("      --list-fonts      list available fonts and exit");
     println("      --version         print version and exit");
@@ -134,6 +136,33 @@ fn _sort_paths(v): i64 {
     return 0;
 }
 
+# Write `n` bytes of `buf` to stdout with control bytes folded to
+# spaces (F-012). Mirrors _scrub_ctl in src/font.cyr; used for strings
+# that reach stdout without passing through the font parser.
+fn _write_scrubbed(buf, n): i64 {
+    # Emit maximal runs of clean bytes directly from the caller's buffer
+    # and substitute a literal space for each control byte. No scratch
+    # buffer, and the common all-clean case costs one write.
+    var i = 0;
+    var run = 0;
+    while (i < n) {
+        var b = load8(buf + i);
+        var bad = 0;
+        if (b < 32) { bad = 1; }
+        if (b == 127) { bad = 1; }
+        if (b >= 128 && b <= 159) { bad = 1; }
+        if (bad == 1) {
+            if (run > 0) { syscall(1, 1, buf + i - run, run); run = 0; }
+            syscall(1, 1, " ", 1);
+        } else {
+            run = run + 1;
+        }
+        i = i + 1;
+    }
+    if (run > 0) { syscall(1, 1, buf + n - run, run); }
+    return 0;
+}
+
 # Print a cstring padded with trailing spaces to width `w`. If the
 # cstring is already >= w bytes, prints it as-is followed by a single
 # space (so adjacent columns don't collide).
@@ -176,7 +205,12 @@ fn cmd_list_fonts(): i64 {
         var h = font_header_load(path_cstr);
         if (h == 0) {
             syscall(1, 1, "  ", 2);
-            syscall(1, 1, str_data(path_str), str_len(path_str));
+            # Scrub the path before echoing it (F-012). This branch runs
+            # precisely because the parser REJECTED the file, so the
+            # parser-boundary scrub in _font_get_str cannot cover it, and
+            # the bytes here come straight from the filename. A font file
+            # named "ev<ESC>[31mil.cyml" would otherwise emit live SGR.
+            _write_scrubbed(str_data(path_str), str_len(path_str));
             println("  (malformed — skipped)");
         } else {
             syscall(1, 1, "  ", 2);
@@ -245,6 +279,50 @@ fn build_argv_array(arr): i64 {
     return ac;
 }
 
+# _parse_count_flag sentinels (negative, so they cannot collide with a
+# parsed count). Written inline as `0 - N` per this file's existing
+# convention — cyrius enum members take literals only.
+#
+#   0 - 2  COUNT_BAD   empty, or contains a non-digit
+#   0 - 3  COUNT_NEG   a real negative (leading '-', nonzero)
+#   0 - 4  COUNT_OVER  all-digit but past PARSER_INT_CAP
+
+# Parse a --width/--pad token. Returns the value, or a COUNT_* sentinel.
+#
+# Absent flag -> 0 (the pre-1.1.4 default from flags_get_int).
+# "-0"/"-00"  -> 0, which _flags_parse_int accepted before, so keep it.
+# "007"       -> 7; leading zeros worked before and must keep working.
+# huge digits -> COUNT_OVER so the caller still prints its `max` message
+#                rather than a generic parse error (matches the
+#                pre-1.1.4 behavior of `--width 1048577`).
+fn _parse_count_flag(tok): i64 {
+    if (tok == 0) { return 0; }
+    var p = tok;
+    var neg = 0;
+    if (load8(p) == 45) { neg = 1; p = p + 1; }     # '-'
+    var n = parse_uint(p);
+    if (n < 0) {
+        # Distinguish "too big" from "not a number": re-scan for digits.
+        var i = 0;
+        var alldigit = 1;
+        var any = 0;
+        var c = load8(p);
+        while (c != 0) {
+            if (c < 48 || c > 57) { alldigit = 0; }
+            any = 1;
+            i = i + 1;
+            c = load8(p + i);
+        }
+        if (any == 1 && alldigit == 1) { return 0 - 4; }
+        return 0 - 2;
+    }
+    if (neg == 1) {
+        if (n == 0) { return 0; }                   # "-0" == 0
+        return 0 - 3;
+    }
+    return n;
+}
+
 fn main(): i64 {
     alloc_init();
     args_init();
@@ -268,8 +346,14 @@ fn main(): i64 {
     var f_list       = flags_add_bool(fs, 0,   "list-fonts", 0, "list available fonts and exit");
     var f_font       = flags_add_str (fs, 102, "font",       0, "font name (default: embedded block)");  # 'f'
     var f_align      = flags_add_str (fs, 0,   "align",      0, "left | center | right");
-    var f_width      = flags_add_int (fs, 119, "width",      0, "truncate at N columns (0 = unlimited)"); # 'w'
-    var f_pad        = flags_add_int (fs, 0,   "pad",        0, "N blank lines above and below");
+    # --width/--pad are taken as STRINGS and parsed here via parse_uint.
+    # lib/flags.cyr's _flags_parse_int accumulates n*10+d with no
+    # overflow guard, so `--pad 18446744073709551617` wrapped to 1 and
+    # rendered instead of erroring, silently defeating the caps issue
+    # 0002 froze at v1.0. parse_uint carries the F-002 PARSER_INT_CAP
+    # guard; the cap messages below are unchanged.
+    var f_width      = flags_add_str (fs, 119, "width",      0, "truncate at N columns (0 = unlimited)"); # 'w'
+    var f_pad        = flags_add_str (fs, 0,   "pad",        0, "N blank lines above and below");
     var f_color      = flags_add_str (fs, 0,   "color",      0, "name (red/cyan/...) or 'rainbow'");
 
     if (flags_parse(fs, ac, &argv_arr) != 0) {
@@ -289,7 +373,7 @@ fn main(): i64 {
         return 0;
     }
     if (flags_get_bool(fs, f_version) == 1) {
-        println("bnrmr 1.1.3");
+        println("bnrmr 1.1.4");
         return 0;
     }
     if (flags_get_bool(fs, f_list) == 1) {
@@ -304,21 +388,29 @@ fn main(): i64 {
         return 1;
     }
 
-    var width = flags_get_int(fs, f_width);
-    if (width < 0) {
+    var width = _parse_count_flag(flags_get_str(fs, f_width));
+    if (width == 0 - 2) {
+        println("bnrmr: bad integer value");
+        return 1;
+    }
+    if (width == 0 - 3) {
         println("bnrmr: --width must be non-negative");
         return 1;
     }
-    if (width > WIDTH_CAP) {
+    if (width == 0 - 4 || width > WIDTH_CAP) {
         println("bnrmr: --width max 4096");
         return 1;
     }
-    var pad = flags_get_int(fs, f_pad);
-    if (pad < 0) {
+    var pad = _parse_count_flag(flags_get_str(fs, f_pad));
+    if (pad == 0 - 2) {
+        println("bnrmr: bad integer value");
+        return 1;
+    }
+    if (pad == 0 - 3) {
         println("bnrmr: --pad must be non-negative");
         return 1;
     }
-    if (pad > PAD_CAP) {
+    if (pad == 0 - 4 || pad > PAD_CAP) {
         println("bnrmr: --pad max 64");
         return 1;
     }

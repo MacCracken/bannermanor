@@ -19,4 +19,9 @@ Decisions about bannermanor — what we chose, the context, and the consequences
 
 ## Index
 
-_No ADRs yet. Add the first as `0001-kebab-case-title.md`._
+| ADR | Decision | Status |
+|-----|----------|--------|
+| [0001](0001-cyml-font-format.md) | CYML as the in-tree font format, `.` for background, `.flf` as a read-only adapter | Accepted (amended 1.1.3, 1.1.4) |
+
+Add the next as `0002-kebab-case-title.md`. Never renumber an
+existing ADR.

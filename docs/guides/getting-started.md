@@ -11,7 +11,7 @@ orientation for someone who's about to read or change the source.
 cyrius deps                              # resolve stdlib + darshana
 cyrius build src/main.cyr build/bnrmr    # compile (binary: bnrmr)
 ./build/bnrmr "AGNOS"                    # smoke render
-cyrius test                              # 2762 assertions
+cyrius test                              # 2775 assertions
 cyrius bench tests/bannermanor.bcyr      # render hot-path CPU bench
 ```
 

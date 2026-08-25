@@ -5,6 +5,12 @@
 
 ## Version
 
+**1.1.4** — 2026-08-25. **P(-1) hardening pass.** Ten repairs, no change to any rendered banner byte — the golden suite (79 invocations across every font, alignment, color, `.flf` and error path) is byte-identical to 1.1.3 except the `--version` literal. Security: **F-011 (HIGH)** — `--list-fonts` printed a font's `name`/`description` straight to the terminal, so a font file could inject ANSI (screen clear, OSC title-set, OSC 8 hyperlink); this is the metadata half of the F-001 vector the 0.7.0 audit closed for `.flf` glyph rows only, and it needed no `--font` opt-in. **F-012 (MEDIUM)** — the malformed-font branch echoed the raw filesystem path, reachable via a filename. Both now scrub C0/DEL/C1 to space at the parser boundary. **F-013** — `$COLUMNS` was the only frame-width source without a ceiling (and the only one at all on AGNOS); now clamped at `WS_COL_CAP`. **F-015** — `--width`/`--pad` accepted i64 modular wraparound (`--pad 18446744073709551617` rendered with pad=1), defeating the caps issue 0002 froze at v1.0; both now parse through `parse_uint`'s F-002 guard. Compatibility: the `.flf` hardblank range widened from 33..126 to the FIGfont v2 rule (17 of 1052 reference fonts were rejected, including three shipped with figlet), and endmark detection now trims trailing whitespace as figlet's `readfontchar()` does (7 of 379 archive fonts stopped leaking literal `@` into rendered art). Hardening: font readers reject non-regular files, so a FIFO no longer blocks forever. Suite 2765 → 2775. Full report: [`docs/audit/2026-08-25-audit.md`](../audit/2026-08-25-audit.md). See `CHANGELOG.md` [1.1.4].
+
+**1.1.1** — 2026-06-08. agnos argv fix: `bnrmr TEXT` printed help instead of rendering, because the `var r = main();` entry idiom ran `main` as a module-global initializer — before cyrius's init-stack capture — so `argc()`/`argv()` returned 0/null. `main` is now called from a bare top-level statement. cyrius pin `6.0.56 → 6.1.14`. See `CHANGELOG.md` [1.1.1].
+
+**1.1.0** — 2026-06-06. **AGNOS as a build target.** `bnrmr` builds under `cyrius build --agnos` and renders on AGNOS. The only Linux-ism was terminal-size detection, gated inline with `#ifdef CYRIUS_TARGET_AGNOS` in `src/layout.cyr`: `term_width_ioctl` returns 0 (callers fall back to the default width) and `stdout_is_tty` returns 0 (auto-color stays off — the fb console renders glyphs literally). cyrius pin `6.0.1 → 6.0.56`. See `CHANGELOG.md` [1.1.0].
+
 **Unreleased** — agnos font-load fix. The three font-file readers
 (`_flf_slurp`, `font_load_file`, `font_header_load`) used raw
 x86_64-Linux syscall numbers for open/read/close across 12 sites.
@@ -234,7 +240,7 @@ authoring walkthrough at [`docs/guides/fonts.md`](../guides/fonts.md).
 
 ## Tests
 
-- `tests/bannermanor.tcyr` — 2765 assertions covering: embedded font
+- `tests/bannermanor.tcyr` — 2775 assertions covering: embedded font
   geometry, glyph-index lookup (space / digits / uppercase /
   lowercase folding / punctuation / unsupported / fold-is-fallback),
   row-shape invariant, renderer bounds, CYML loader happy path +

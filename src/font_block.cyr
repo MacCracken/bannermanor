@@ -625,8 +625,17 @@ fn block_font_embed(): i64 {
     var f = font_new(5, 5, 1, 69);
     if (f == 0) { return 0; }
     var i = 0;
+    var bad = 0;
     while (i < 69) {
-        font_set_char(f, i, _block_glyph_char(i));
+        # font_set_char rejects an out-of-range or duplicate char. The
+        # seven ranges _block_glyph_char produces are disjoint, so this
+        # cannot fire today — but the table is hand-maintained, and a
+        # future edit that collides two entries would otherwise drop a
+        # glyph silently. main.cyr already handles a 0 return with
+        # "failed to build embedded font"; wire it up. Flag, not break:
+        # `break` in a while with var declarations is unreliable
+        # (CLAUDE.md).
+        if (font_set_char(f, i, _block_glyph_char(i)) < 0) { bad = 1; }
         var r = 0;
         while (r < 5) {
             font_set_row(f, i, r, _block_raw_row(i, r));
@@ -634,6 +643,7 @@ fn block_font_embed(): i64 {
         }
         i = i + 1;
     }
+    if (bad == 1) { return 0; }
     _block_font_cache = f;
     return f;
 }

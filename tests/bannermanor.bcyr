@@ -2,8 +2,13 @@
 #
 # Captures the CPU side of bnrmr's render pipeline so a trend can detect
 # regressions between releases (the M7 / docs/benchmarks.md goal). The
-# stdout-write side is bounded by terminal/pipe throughput, not bnrmr's
-# code, so we benchmark only the work bnrmr actually controls:
+# stdout-write side is NOT benchmarked here. That is a gap, not a
+# principle: the earlier claim that it is "bounded by terminal/pipe
+# throughput, not bnrmr's code" is false — render_layout issues one
+# write(2) per glyph cell and per pad space (28,637 calls to emit
+# 28,679 bytes for a wide banner), so the ceiling is bnrmr's own
+# syscall rate. A B4 subject for it is deferred; see docs/benchmarks.md
+# Point 5. What follows is the CPU-side work:
 #
 #   B1 — block_font_embed   build the embedded font (alloc + glyph copy)
 #   B2 — font_load_file     parse fonts/block.cyml end-to-end

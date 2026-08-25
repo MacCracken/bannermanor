@@ -580,6 +580,100 @@ fn t_flf_crlf_endmarks_stripped() {
     assert_eq(same, 1, "CRLF and LF fixtures produce identical glyph rows");
 }
 
+# ---- 1.1.4 P(-1) hardening regressions ----
+
+fn t_header_strings_scrubbed() {
+    test_group("font_header_load / control bytes scrubbed (F-011)");
+    # `--list-fonts` prints `name` and `description` verbatim, so an ESC
+    # in either is an ANSI-injection vector — the same CWE-150 class
+    # F-001 closed for .flf glyph rows, on the CYML metadata path the
+    # 0.7.0 audit did not cover.
+    var h = font_header_load("tests/fixtures/ctl_header.cyml");
+    assert(h != 0, "control-byte header fixture still loads");
+
+    var nm = font_hdr_name(h);
+    var i = 0;
+    var n = strlen(nm);
+    var clean = 1;
+    while (i < n) {
+        var b = load8(nm + i);
+        if (b < 32) { clean = 0; }
+        if (b == 127) { clean = 0; }
+        if (b >= 128 && b <= 159) { clean = 0; }
+        i = i + 1;
+    }
+    assert_eq(clean, 1, "name carries no control bytes");
+    # Length-preserving: column alignment in --list-fonts is unaffected.
+    assert_eq(n, 10, "name length preserved (ESC folded to space, not dropped)");
+
+    var d = font_hdr_desc(h);
+    var j = 0;
+    var dn = strlen(d);
+    var dclean = 1;
+    while (j < dn) {
+        var db = load8(d + j);
+        if (db < 32) { dclean = 0; }
+        if (db == 127) { dclean = 0; }
+        if (db >= 128 && db <= 159) { dclean = 0; }
+        j = j + 1;
+    }
+    assert_eq(dclean, 1, "description carries no control bytes");
+}
+
+fn t_columns_env_clamped() {
+    test_group("layout / COLUMNS clamped at WS_COL_CAP (F-013)");
+    # COLUMNS was the only frame-width source without a ceiling:
+    # --width is rejected above WIDTH_CAP and TIOCGWINSZ is clamped by
+    # F-008, but the env leg could drive the frame 256x past both.
+    # On AGNOS this is the only frame source at all.
+    assert(WS_COL_CAP == 4096, "WS_COL_CAP is 4096");
+    # parse_uint still rejects past PARSER_INT_CAP, so the clamp only
+    # has to cover the band between the cap and PARSER_INT_CAP.
+    assert_eq(parse_uint("1048577"), 0 - 1, "past PARSER_INT_CAP still rejected");
+    assert_eq(parse_uint("5000"), 5000, "in-band value parses");
+}
+
+fn t_flf_control_hardblank() {
+    test_group("flf_load_file / control-byte hardblank (F-014)");
+    # FIGfont v2 allows any hardblank except NUL/LF/CR/space. The old
+    # 33..126 window rejected 17 of 1052 reference fonts, including
+    # three shipped with figlet itself. Widening only admits fonts.
+    var f = flf_load_file("tests/fixtures/flf_c1_hardblank.flf");
+    assert(f != 0, "C1 hardblank (0x85) font now loads");
+
+    # And it must still be safe: the hardblank -> space substitution
+    # runs before the F-001 scrub, so no control byte survives.
+    var h = font_height(f);
+    var c = font_count(f);
+    var gi = 0;
+    var clean = 1;
+    while (gi < c) {
+        var r = 0;
+        while (r < h) {
+            var row = font_row(f, gi, r);
+            var k = 0;
+            while (k < font_width(f)) {
+                var b = load8(row + k);
+                if (b < 32) { clean = 0; }
+                if (b == 127) { clean = 0; }
+                if (b >= 128 && b <= 159) { clean = 0; }
+                k = k + 1;
+            }
+            r = r + 1;
+        }
+        gi = gi + 1;
+    }
+    assert_eq(clean, 1, "no control byte survives into any glyph row");
+}
+
+fn t_flf_space_hardblank_rejected() {
+    test_group("flf_load_file / hardblank exclusions still hold");
+    # The four bytes the spec forbids must still be rejected. tiny.flf
+    # with byte 5 rewritten to a space is the canonical case.
+    assert_eq(flf_load_file("tests/fixtures/flf_space_hardblank.flf"), 0,
+              "space hardblank rejected");
+}
+
 fn t_header_load_malformed() {
     test_group("font_header_load / malformed");
     # The header loader validates schema + geometry — same gates as the
@@ -646,6 +740,10 @@ fn main() {
     t_load_flf_malformed();
     t_flf_strips_control_bytes();
     t_flf_crlf_endmarks_stripped();
+    t_header_strings_scrubbed();
+    t_columns_env_clamped();
+    t_flf_control_hardblank();
+    t_flf_space_hardblank_rejected();
     return assert_summary();
 }
 

@@ -28,7 +28,7 @@ Fourth member of the terminal-aesthetics set:
 
 ## Status
 
-**1.1.3**. Stable. CLI flag surface, CYML font format (schema 1),
+**1.1.4**. Stable. CLI flag surface, CYML font format (schema 1),
 default font set, and `.flf` adapter contract are all frozen at their
 v1.0.0 shape — see the v1.0.0 [`Breaking`](CHANGELOG.md) section for
 what locked.
@@ -70,7 +70,7 @@ The frozen surface:
 ```sh
 cyrius deps                            # resolve stdlib + darshana
 cyrius build src/main.cyr build/bnrmr  # compile (binary: bnrmr)
-cyrius test                            # 2762 assertions
+cyrius test                            # 2775 assertions
 cyrius bench tests/bannermanor.bcyr    # render hot-path CPU bench
 ```
 

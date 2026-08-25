@@ -40,6 +40,16 @@ enum FlfLimits {
 # Returns the buffer pointer and writes the byte count to *out_len.
 # Returns 0 on open failure, OOM, empty file, or file at/over the cap.
 fn _flf_slurp(path, out_len): i64 {
+    # 1.1.4 — reject anything that is not a regular file before we
+    # commit to a read. A character device (`--font /dev/zero`) would
+    # otherwise be read up to the size cap, and a FIFO would block the
+    # process indefinitely. STAT_MODE (not a hardcoded 24) because the
+    # st_mode offset differs per arch — 24 on x86_64-Linux, 16 on
+    # aarch64-Linux. S_IFMT 0xF000, S_IFREG 0x8000.
+    var st[144];
+    if (xstat(path, &st) != 0) { return 0; }
+    var mode = load32(&st + STAT_MODE);
+    if (mode & 0xF000 != 0x8000) { return 0; }
     var fd = file_open(path, 0, 0);
     if (fd < 0) { return 0; }
     var buf = alloc(1048576);
@@ -127,8 +137,18 @@ fn flf_load_file(path): i64 {
     if (hdr_end < 7) { return 0; }                # need at least flf2aX + 1
     if (memeq(buf, "flf2a", 5) != 1) { return 0; }
     var hardblank = load8(buf + 5);
-    if (hardblank < 33) { return 0; }             # must be printable, not space
-    if (hardblank > 126) { return 0; }
+    # FIGfont v2 rule: any byte may be the hardblank except NUL, LF, CR
+    # and space. The previous 33..126 window was stricter than the spec
+    # and rejected 17 of the 1052 fonts in the reference corpus —
+    # including bubble, digital and term, three of the 18 fonts in the
+    # canonical figlet distribution. Widening only ADMITS fonts, so no
+    # font that loads today can change: the hardblank -> space
+    # substitution below runs before the F-001 control scrub, so a DEL
+    # or C1 hardblank still becomes a space and never reaches stdout.
+    if (hardblank == 0)  { return 0; }
+    if (hardblank == 10) { return 0; }            # LF
+    if (hardblank == 13) { return 0; }            # CR
+    if (hardblank == 32) { return 0; }            # space
 
     var p_box[8];
     store64(&p_box, 0);
@@ -183,8 +203,6 @@ fn flf_load_file(path): i64 {
     var scratch_bytes = 95 * height * 64;
     var rows_scratch = alloc(scratch_bytes);
     if (rows_scratch == 0) { return 0; }
-    var lens_scratch = alloc(95 * height * 8);
-    if (lens_scratch == 0) { return 0; }
     memset(rows_scratch, 32, scratch_bytes);      # default-fill with space
 
     # --- parse 95 glyph blocks ---
@@ -205,16 +223,40 @@ fn flf_load_file(path): i64 {
             # Pure-LF files are unaffected (CR check fails harmlessly).
             # cursor still advances past line_end + 1, so byte-offset
             # bookkeeping is unchanged.
+            #
+            # 1.1.4 — generalised from the single-CR walk-back above to
+            # figlet's actual rule. `readfontchar()` trims ALL trailing
+            # whitespace first, THEN takes the last remaining byte as
+            # the endmark. Trimming only CR meant a row ending in a
+            # space or TAB latched endmark = ' ', so the real `@`/`#`
+            # bytes survived into the rendered art. Measured against a
+            # 397-font corpus: 7 fonts change, all 7 misparse today,
+            # and none changes its load/reject status. The in-tree
+            # fixtures contain no trailing whitespace, so tiny.flf and
+            # flf_crlf.flf are unaffected.
+            #
+            # ISSPACE set: space, TAB, CR, VT, FF.
             var eff_end = line_end;
-            if (eff_end > line_start && load8(buf + eff_end - 1) == 13) {
-                eff_end = eff_end - 1;
+            var trim_done = 0;
+            while (eff_end > line_start && trim_done == 0) {
+                var tb = load8(buf + eff_end - 1);
+                if (tb == 32 || tb == 9 || tb == 13 || tb == 11 || tb == 12) {
+                    eff_end = eff_end - 1;
+                } else {
+                    trim_done = 1;
+                }
             }
             var llen = eff_end - line_start;
             if (llen <= 0) { return 0; }          # empty line not allowed
 
-            # Endmark = last byte of glyph's first row; applied to all
-            # rows of this glyph. Per-glyph (not per-font) so we tolerate
-            # fonts with mixed endmarks (rare, but the spec allows it).
+            # Endmark = last byte of the glyph's first row, applied to
+            # every row of that glyph. Note this is LESS tolerant than
+            # figlet, which recomputes the endmark per LINE — a glyph
+            # whose rows end in different marks parses there and not
+            # here. Kept deliberately: a 376-font differential showed
+            # per-line detection changes 7 fonts and corrects none of
+            # them, while the whitespace trim above achieves exact
+            # figlet parity across all 376.
             if (r == 0) {
                 endmark = load8(buf + eff_end - 1);
             }
@@ -237,8 +279,14 @@ fn flf_load_file(path): i64 {
             # with space: a malicious .flf could otherwise smuggle an
             # ESC (0x1B) into a glyph row and emit ANSI to the user's
             # TTY when rendered (CWE-150 / category B in the 0.7.0
-            # audit). Hardblank is substituted before this filter, so
-            # legitimate hardblank=0x01 fonts still work.
+            # audit). Order matters: the hardblank -> space
+            # substitution on the line above runs FIRST, so a font
+            # whose hardblank is itself a control byte still renders
+            # correctly rather than having its hardblanks scrubbed as
+            # controls. Reachable since 1.1.4 widened the header's
+            # hardblank guard to the FIGfont v2 rule; before that the
+            # header rejected any hardblank < 33, so this path was
+            # dead and the comment here claimed otherwise.
             var dst = rows_scratch + (gi * height + r) * 64;
             var col = 0;
             while (col < llen) {
@@ -250,7 +298,9 @@ fn flf_load_file(path): i64 {
                 store8(dst + col, b);
                 col = col + 1;
             }
-            store64(lens_scratch + (gi * height + r) * 8, llen);
+            # (Per-row lengths are intentionally not retained: every glyph
+            # row is stored space-padded to a fixed stride. Variable-width
+            # glyph output would need them back.)
             if (llen > max_width) { max_width = llen; }
 
             # Advance past line. _flf_eol returns `total` if no \n found,

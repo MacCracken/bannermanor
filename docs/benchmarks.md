@@ -163,26 +163,52 @@ Three back-to-back runs: B1 7 / 7 / 8 ns, B2 88.3 / 86.3 / 86.8 µs,
 B3 624 / 609 / 610 ns. B2's spread is under 3%, so the +29 µs is real,
 not batch noise.
 
-#### The regression is NOT from this release
+#### CORRECTION (1.1.4) — the A/B published here at 1.1.3 was invalid
 
-B2 is measured through the CYML parser, which changed owner and version
-in this window — the obvious suspect. It is the wrong one. Holding the
-compiler fixed at 6.5.35 and swapping only the vendored `lib/`:
+The original Point 4 claimed "the 1.1.3 dep bump is bench-flat", on the
+strength of an A/B that swapped the vendored `lib/` and re-ran the
+bench. **That A/B did not measure what it claimed**, and the conclusion
+was wrong.
 
-| `lib/` snapshot | B2 (3 runs) |
-|-----------------|-------------|
-| cyrius 6.2.24 + darshana 0.7.1 (pre-upgrade) | 87.4 / 86.6 / 87.6 µs |
-| cyrius 6.5.35 + darshana 1.0.0 (post-upgrade) | 88.3 / 86.3 / 86.8 µs |
+`cyrius bench` (and `cyrius build`) run dep resolution first, which
+restores any `lib/` file whose hash does not match `cyrius.lock` —
+including stdlib modules. Reproduced directly:
 
-Identical. **The 1.1.3 dep bump is bench-flat**; `bayan` 1.5.2 parses
-`block.cyml` no slower than 1.0.1 did despite quadrupling in size.
+```
+$ cp <bayan-1.0.1> lib/bayan.cyr && md5sum lib/bayan.cyr
+ce3f73319a570f11fd14f80e71dbf5a6  lib/bayan.cyr     # 1.0.1
+$ cyrius bench tests/bannermanor.bcyr >/dev/null && md5sum lib/bayan.cyr
+17bb46bf6c86bbc41dd5f23b8e5b6c72  lib/bayan.cyr     # 1.5.2 — silently restored
+```
 
-The +29 µs therefore entered somewhere across 6.0.1 → 6.2.24 — the
-1.1.0, 1.1.1 and 1.1.2 releases, none of which captured a bench point.
-That is the gap: Point 3 was measured on cyrius 6.0.1 and the trend was
-declared complete at v1.0, so three toolchain bumps shipped unmeasured.
-Attributing the drift to a specific one would need a bisect over those
-snapshots, which is filed as follow-up rather than done here.
+Both rows of the old table therefore compiled against bayan 1.5.2. It
+compared the current library against itself, which is why it came out
+flat. Passing `--no-deps` does not prevent the restore either.
+
+#### The corrected A/B — bayan 1.5.2 *is* the regression
+
+Re-run by pointing `CYRIUS_HOME` at a snapshot whose `lib/bayan.cyr` is
+the version under test, so the restore reinstates the intended library
+rather than undoing the swap. Compiler, source, fixtures and host all
+held fixed; only bayan differs:
+
+| `lib/bayan.cyr` | B2 `font_load_file(block.cyml)`, 3 runs |
+|-----------------|------------------------------------------|
+| 1.0.1 (shipped through 1.1.2) | **59.1 / 58.8 / 61.6 µs** |
+| 1.5.2 (shipped at 1.1.3)      | **86.2 / 85.5 / 87.0 µs** |
+
+**bayan 1.5.2 costs ~27 µs — a ~45% regression in `font_load_file`** —
+and it arrived in the 1.1.3 toolchain bump. The 1.0.1 figure also
+lands within noise of the 58 µs recorded at Point 3 on cyrius 6.0.1,
+which retires the other half of the original story: there was no
+gradual drift across 6.0.1 → 6.2.24. B2 was flat for three toolchain
+generations and then stepped once, here.
+
+Root cause is not diagnosed. bayan 1.5.2 folded in PDF, YAML and
+Grisu2 `dtoa`; whether the cost is a changed CYML scan, worse locality
+in a much larger module, or the two-pass entry count that replaced the
+fixed 256-slot scan is open. Filed as follow-up — the parse is 62–65%
+of B2, so it is the only thing worth profiling.
 
 #### Reading the deltas
 
@@ -200,8 +226,42 @@ Point 4's absolute numbers are not strictly comparable to Points 1–3.
 The A/B table above is, because both of its rows were measured under
 the same harness.
 
-Verdict: **no regression from 1.1.3**; a pre-existing, previously
-unmeasured B2 drift is now on the record.
+Verdict (as corrected at 1.1.4): **1.1.3 regressed B2 by ~45%**, via
+the bayan 1.0.1 → 1.5.2 fold-forward. Not a code change in bnrmr — the
+render and CYML-load paths are byte-identical — but a real cost, and
+the original "bench-flat" verdict published here was an artifact of a
+broken A/B, not a measurement.
+
+### Point 5 — 1.1.4
+
+**Captured**: 2026-08-25
+**Toolchain**: cyrius 6.5.35
+**Host**: archaemenid (AMD Ryzen 7 5800H, Linux 7.1.9)
+**Code delta vs 1.1.3**: the P(-1) hardening repairs — control-byte
+scrubbing on CYML header strings and the malformed-font path echo, a
+`COLUMNS` clamp, `--width`/`--pad` parsed through `parse_uint`, the
+dead `lens_scratch` allocation removed, `.flf` hardblank widened to the
+spec rule, and the two TTY probes reconciled.
+
+| ID | Subject | 1.1.4 avg | Δ vs 1.1.3 | iters |
+|----|---------|-----------|------------|-------|
+| B1 | `block_font_embed` | **7 ns** | 0 ns (flat) | 10 000 |
+| B2 | `font_load_file(block.cyml)` | **85 µs** | 0 µs (flat) | 1 000 |
+| B3 | `fit_chars ×100` | **606 ns** | 0 ns (flat) | 100 000 |
+
+Three runs: B1 7 / 6 / 7 ns, B2 85.3 / 84.8 / 85.8 µs, B3 607 / 604 /
+608 ns. Nothing moved, which is the expected result — none of the
+repairs touch a benchmarked path. B2 remains at the elevated level the
+corrected Point 4 attributes to bayan 1.5.2.
+
+Not covered by any benchmark: the stdout write path. `render_layout`
+issues one `write(2)` per space and per glyph cell, so a banner's cost
+scales with its width — measured at 0.67 ms for a natural-width render
+against 5.49 ms at `--width 4096`, an 8× difference that is almost
+entirely syscall overhead. A B4 subject for it, and the buffering that
+would fix it, are deferred past 1.1.4 (see `docs/development/issues/`).
+
+Verdict: **no regression**. The hardening is free.
 
 ## Re-running
 

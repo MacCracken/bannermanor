@@ -118,8 +118,16 @@ fn stdout_is_tty(): i64 {
     var ws[8];
     store64(&ws, 0);
     var r = syscall(SYS_IOCTL, 1, TIOCGWINSZ, &ws);
-    if (r == 0) { return 1; }
-    return 0;
+    if (r != 0) { return 0; }
+    # Agree with term_width_ioctl about what counts as a usable TTY.
+    # A successful ioctl reporting ws_col == 0 (a pty before
+    # TIOCSWINSZ, some serial consoles) made the two probes disagree:
+    # term_width_ioctl returned 0, disabling issue-0004's narrow-
+    # terminal truncation, while this returned 1 and kept emitting
+    # SGR — the wrapping-colored-banner case 0004 exists to prevent.
+    var cols = load16(&ws + WS_COL_OFF);
+    if (cols <= 0) { return 0; }
+    return 1;
     #endif
 }
 
@@ -129,6 +137,14 @@ fn term_width_env(): i64 {
     if (v == 0) { return 0; }
     var n = parse_uint(v);
     if (n <= 0) { return 0; }
+    # F-013: clamp at WS_COL_CAP, matching the F-008 clamp on the
+    # TIOCGWINSZ leg. COLUMNS was the only frame source without a
+    # ceiling — `--width` is rejected above WIDTH_CAP in main.cyr and
+    # the ioctl leg is clamped above, so an env var could drive the
+    # frame 256x past both. On AGNOS this is the ONLY frame source
+    # (term_width_ioctl hard-returns 0), so the cap only takes effect
+    # here on that target.
+    if (n > WS_COL_CAP) { return WS_COL_CAP; }
     return n;
 }
 
