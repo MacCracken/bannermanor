@@ -25,7 +25,7 @@ across 79 invocations covering all three fonts, the `.flf` path,
 `--list-fonts` and every error path. Suite 2762 → 2765. See
 `CHANGELOG.md` [Unreleased].
 
-**1.1.3** — 2026-08-25. Toolchain + dep refresh. cyrius pin `6.2.24 → 6.5.35` (stdlib re-synced via `cyrius lib sync --full`; `lib/agnosys.cyr` retired upstream and pruned, four modules new to the snapshot: `async_macos`, `async_win`, `thread_macos`, `yantra`). darshana pin `0.7.1 → 1.0.0` — darshana's v1.0 API freeze, so the `tty_sgr` / `tty_sgr_reset` / `TTY_FG_*` surface bnrmr consumes is now contractually frozen. `bayan` folded forward `1.0.1 → 1.5.2`; all nine consumed `cyml_*` symbols keep their arity, and the CYML load path is byte-stable. `[deps].stdlib` gained `atomic`, `fs` and `fnptr` — a pre-existing declaration gap, not new. CI's hand-rolled toolchain install replaced with the tarball's `install.sh` (6.5.25 made the versioned layout mandatory). Render output byte-identical to 1.1.2 except the `--version` literal. See `CHANGELOG.md` [1.1.3].
+**1.1.3** — 2026-08-25. Toolchain + dep refresh. cyrius pin `6.2.24 → 6.6.2` (stdlib re-synced via `cyrius lib sync --full`; `lib/agnosys.cyr` retired upstream and pruned, four modules new to the snapshot: `async_macos`, `async_win`, `thread_macos`, `yantra`). darshana pin `0.7.1 → 1.0.0` — darshana's v1.0 API freeze, so the `tty_sgr` / `tty_sgr_reset` / `TTY_FG_*` surface bnrmr consumes is now contractually frozen. `bayan` folded forward `1.0.1 → 1.5.2`; all nine consumed `cyml_*` symbols keep their arity, and the CYML load path is byte-stable. `[deps].stdlib` gained `atomic`, `fs` and `fnptr` — a pre-existing declaration gap, not new. CI's hand-rolled toolchain install replaced with the tarball's `install.sh` (6.5.25 made the versioned layout mandatory). Render output byte-identical to 1.1.2 except the `--version` literal. See `CHANGELOG.md` [1.1.3].
 
 **1.1.2** — 2026-06-19. Toolchain + dep refresh. cyrius pin `6.1.14 → 6.2.24` (stdlib re-synced via `cyrius lib sync`); the CYML parser moved out of the core stdlib into `bayan` (`cyml.cyr` no longer ships in the snapshot), so `[deps].stdlib` and `src/font.cyr`'s include flip `cyml → bayan`. darshana pin `0.5.3 → 0.7.1`. No API or behavior changes — consumed `cyml_*` and `tty_sgr*` symbols are byte-stable. See `CHANGELOG.md` [1.1.2].
 
@@ -140,7 +140,7 @@ M1 (first render path, hardcoded block font, 1 KB input cap, flags
 
 ## Toolchain
 
-- **Cyrius pin**: `6.5.35` (in `cyrius.cyml [package].cyrius`)
+- **Cyrius pin**: `6.6.2` (in `cyrius.cyml [package].cyrius`)
 
 ## Shape
 
