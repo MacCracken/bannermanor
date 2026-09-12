@@ -360,9 +360,9 @@ fn main(): i64 {
         var err = flags_error(fs);
         if (err == FLAG_ERR_UNKNOWN) { println("bnrmr: unknown flag"); }
         else { if (err == FLAG_ERR_MISSING_VALUE) { println("bnrmr: flag missing value"); }
-        else { if (err == FLAG_ERR_BAD_INT) { println("bnrmr: bad integer value"); }
-        else { if (err == FLAG_ERR_BUNDLED) { println("bnrmr: bundled short flags not supported"); }
-        else { println("bnrmr: argument parse error"); } } } }
+            else { if (err == FLAG_ERR_BAD_INT) { println("bnrmr: bad integer value"); }
+                else { if (err == FLAG_ERR_BUNDLED) { println("bnrmr: bundled short flags not supported"); }
+                    else { println("bnrmr: argument parse error"); } } } }
         println("");
         print_usage();
         return 1;
@@ -373,7 +373,7 @@ fn main(): i64 {
         return 0;
     }
     if (flags_get_bool(fs, f_version) == 1) {
-        println("bnrmr 1.1.4");
+        println("bnrmr 1.1.5");
         return 0;
     }
     if (flags_get_bool(fs, f_list) == 1) {

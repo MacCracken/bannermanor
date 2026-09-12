@@ -136,7 +136,7 @@ fn t_glyph_fold_is_fallback() {
     var u = 65;
     while (c <= 122) {
         assert_eq(font_glyph_index(f, c), font_glyph_index(f, u),
-                  "lowercase falls back to uppercase when no lowercase glyph");
+          "lowercase falls back to uppercase when no lowercase glyph");
         c = c + 1;
         u = u + 1;
     }
@@ -212,7 +212,7 @@ fn t_loaded_matches_embedded() {
     var c = 0;
     while (c < 128) {
         assert_eq(font_glyph_index(ldr, c), font_glyph_index(emb, c),
-                  "glyph index per char matches");
+          "glyph index per char matches");
         c = c + 1;
     }
 
@@ -290,7 +290,7 @@ fn t_load_big_cyml() {
 
     # Fold-fallback: 'a' must resolve to 'A''s glyph.
     assert_eq(font_glyph_index(f, 97), font_glyph_index(f, 65),
-              "'a' folds to 'A' on big");
+      "'a' folds to 'A' on big");
 }
 
 fn t_load_slim_cyml() {
@@ -319,7 +319,7 @@ fn t_load_slim_cyml() {
     # Fold-fallback should still kick in: slim has no lowercase glyphs,
     # so 'a' must resolve to the same index as 'A'.
     assert_eq(font_glyph_index(f, 97), font_glyph_index(f, 65),
-              "'a' folds to 'A' on slim");
+      "'a' folds to 'A' on slim");
 }
 
 # ---- M4 layout ----
@@ -671,7 +671,7 @@ fn t_flf_space_hardblank_rejected() {
     # The four bytes the spec forbids must still be rejected. tiny.flf
     # with byte 5 rewritten to a space is the canonical case.
     assert_eq(flf_load_file("tests/fixtures/flf_space_hardblank.flf"), 0,
-              "space hardblank rejected");
+      "space hardblank rejected");
 }
 
 fn t_header_load_malformed() {

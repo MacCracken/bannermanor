@@ -28,22 +28,22 @@ enum LayoutLimits {
     WS_ROW_OFF   = 0;
     WS_COL_OFF   = 2;
     WS_COL_CAP   = 4096;      # F-008 — clamp terminal cols. Defense in
-                              # depth: nothing in bnrmr currently sizes
-                              # an allocation from cols, but a future
-                              # caller that did could be tripped by a
-                              # `resize -s 65535 65535` attack.
+    # depth: nothing in bnrmr currently sizes
+    # an allocation from cols, but a future
+    # caller that did could be tripped by a
+    # `resize -s 65535 65535` attack.
     WIDTH_CAP    = 4096;      # v1.0 M8 freeze (issue 0002) — upper cap
-                              # on `--width N`. Coincides with WS_COL_CAP
-                              # by design: a banner wider than the cap on
-                              # the terminal's own column count is absurd.
-                              # Kept as a separate named constant because
-                              # the *reason* differs (one clamps ioctl
-                              # output, the other rejects user CLI input).
+    # on `--width N`. Coincides with WS_COL_CAP
+    # by design: a banner wider than the cap on
+    # the terminal's own column count is absurd.
+    # Kept as a separate named constant because
+    # the *reason* differs (one clamps ioctl
+    # output, the other rejects user CLI input).
     PAD_CAP      = 64;        # v1.0 M8 freeze (issue 0002) — upper cap
-                              # on `--pad N` (top and bottom blank lines).
-                              # 64 lines is taller than any reasonable
-                              # terminal; the user can wrap in literal
-                              # newlines if they want more.
+    # on `--pad N` (top and bottom blank lines).
+    # 64 lines is taller than any reasonable
+    # terminal; the user can wrap in literal
+    # newlines if they want more.
 }
 # F-002 — shared overflow cap for hand-written integer parsers
 # (parse_uint here, _font_get_int in font.cyr, _flf_take_int in

@@ -4,6 +4,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.1.5] - 2026-09-11
+
+### Changed
+
+- **Toolchain `6.5.35` → `6.6.2`.** No source change; the value form needed none.
+  Build, tests, and any bench/fuzz/distlib target the repo ships re-verified at the new pin.
+
+
 ## [1.1.4] — 2026-08-25 (P(-1) hardening — security, bounds, `.flf` fidelity)
 
 The P(-1) hardening pass. Ten repairs; **no rendered banner byte changes**.
