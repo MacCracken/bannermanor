@@ -135,7 +135,7 @@ is_version "$DARSHANA_PIN" || fail "the darshana pin is not version-shaped: '$DA
 #   docs/development/issues/archive/   bugs as filed, closed, frozen
 #   docs/adr/                          decisions as made (0001 is amended in place
 #                                      with the body preserved as the record)
-#   docs/development/roadmap.md        names TARGET versions (1.2.0, 1.3.0, ...)
+#   docs/development/roadmap.md        names TARGET versions (1.3.0, 1.4.0, ...)
 #                                      and deliberately never the shipped one —
 #                                      state.md owns that. Do NOT add it to
 #                                      LIVE_SET: rule (d) is an equality test

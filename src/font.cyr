@@ -448,6 +448,13 @@ fn font_load_file(path): i64 {
 # space. That is deliberate: the CYML font schema is ASCII-only through
 # v1.0 (ADR 0001), and a Latin-1 terminal would read those bytes as
 # control codes.
+#
+# Not darshana's `tty_sanitize_buf`: its TTY_SANITIZE_LATIN1 mode
+# neutralizes exactly this byte set (it was modeled on this rule) but
+# replaces with '?', and darshana's ADR 0004 records that the space was
+# deliberately not reproduced. A '?' would move frozen `.flf` glyph-row
+# bytes, so bnrmr keeps its own loop. tests/bannermanor.tcyr pins the
+# two byte sets equal (t_scrub_matches_darshana_latin1).
 fn _scrub_ctl(b): i64 {
     if (b < 32) { return 32; }
     if (b == 127) { return 32; }

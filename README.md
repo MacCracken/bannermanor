@@ -28,7 +28,7 @@ Fourth member of the terminal-aesthetics set:
 
 ## Status
 
-**1.1.5**. Stable. CLI flag surface, CYML font format (schema 1),
+**1.2.0**. Stable. CLI flag surface, CYML font format (schema 1),
 default font set, and `.flf` adapter contract are all frozen at their
 v1.0.0 shape — see the v1.0.0 [`Breaking`](CHANGELOG.md) section for
 what locked.
@@ -44,8 +44,10 @@ bnrmr --font ./modular.flf "BNRMR"     # legacy .flf path
 bnrmr --list-fonts                     # what's available
 ```
 
-The banner clamps to the terminal width by default; piped output
-(`bnrmr ... | cat`) emits the full untruncated banner.
+The banner clamps to the terminal width by default; on Linux, piped
+output (`bnrmr ... | cat`) emits the full untruncated banner. On AGNOS
+the width is the framebuffer console's even when stdout is redirected,
+because agnos cannot tell bnrmr whether fd 1 is the console (1.2.0).
 
 ## v1.0 contract
 
@@ -63,18 +65,19 @@ The frozen surface:
   font that fits the 64-col × 32-row envelope. Uniform-width fit,
   no smushing, ASCII 32..126, 1 MB file cap.
 - **Color via [darshana](https://github.com/MacCracken/darshana)** —
-  16 ANSI named colors + `rainbow`. Auto-suppressed on pipes.
+  16 ANSI named colors + `rainbow`. Auto-suppressed on pipes, and off
+  on AGNOS for the same reason as the width note above.
 
 ## Build
 
 ```sh
 cyrius deps                            # resolve stdlib + darshana
 cyrius build src/main.cyr build/bnrmr  # compile (binary: bnrmr)
-cyrius test                            # 2775 assertions
+cyrius test                            # 2828 assertions
 cyrius bench tests/bannermanor.bcyr    # render hot-path CPU bench
 ```
 
-Toolchain pin: `cyrius = "6.6.2"` in `cyrius.cyml` is the source of
+Toolchain pin: `cyrius = "6.7.9"` in `cyrius.cyml` is the source of
 truth.
 
 ## Docs

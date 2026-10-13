@@ -5,6 +5,10 @@
 
 ## Version
 
+**1.2.0** — 2026-10-12. **Toolchain, darshana, and the stdout probes.** cyrius pin `6.6.2 → 6.7.9` (the 6.7 language minor) with `lib/` re-vendored from `[deps].stdlib` (`rm -rf lib/ && cyrius deps`: 109 files → 32 — the old tree was a full-snapshot `lib sync --full`; 79 modules nothing includes are gone, `alloc_cx` and `poison` are new) and `cyrius.lock` regenerated. No source change was needed for the language bump: no compile error and no warning on any target. darshana pin `1.0.0 → 1.3.0` (1.3.0 needs cyrius ≥ 6.7.2, which is why the toolchain moved first). `src/layout.cyr`'s two hand-rolled `TIOCGWINSZ` probes now ride darshana's `tty_winsize` ([issue 0019](issues/archive/0019-darshana-probes-hand-rolled.md)); the local `TIOCGWINSZ` re-declaration is gone. **AGNOS behavior change, deliberate**: the width probe now returns the framebuffer console grid instead of a hard 0 ([issue 0018](issues/archive/0018-agnos-console-width-never-queried.md)), so AGNOS banners truncate and align to the console — redirected stdout included, because agnos has no per-fd terminal query; `--color` stays off on AGNOS for that same reason. Linux output is byte-identical — a 224-invocation golden matrix (112 piped, 112 on a pty) on x86_64 and aarch64 — except the `--version` literal. Suite 2775 → 2828, the first tests of either probe. See `CHANGELOG.md` [1.2.0].
+
+**1.1.5** — 2026-09-11. Toolchain-only: cyrius pin `6.5.35 → 6.6.2`, no source change. See `CHANGELOG.md` [1.1.5].
+
 **1.1.4** — 2026-08-25. **P(-1) hardening pass.** Ten repairs, no change to any rendered banner byte — the golden suite (79 invocations across every font, alignment, color, `.flf` and error path) is byte-identical to 1.1.3 except the `--version` literal. Security: **F-011 (HIGH)** — `--list-fonts` printed a font's `name`/`description` straight to the terminal, so a font file could inject ANSI (screen clear, OSC title-set, OSC 8 hyperlink); this is the metadata half of the F-001 vector the 0.7.0 audit closed for `.flf` glyph rows only, and it needed no `--font` opt-in. **F-012 (MEDIUM)** — the malformed-font branch echoed the raw filesystem path, reachable via a filename. Both now scrub C0/DEL/C1 to space at the parser boundary. **F-013** — `$COLUMNS` was the only frame-width source without a ceiling (and the only one at all on AGNOS); now clamped at `WS_COL_CAP`. **F-015** — `--width`/`--pad` accepted i64 modular wraparound (`--pad 18446744073709551617` rendered with pad=1), defeating the caps issue 0002 froze at v1.0; both now parse through `parse_uint`'s F-002 guard. Compatibility: the `.flf` hardblank range widened from 33..126 to the FIGfont v2 rule (17 of 1052 reference fonts were rejected, including three shipped with figlet), and endmark detection now trims trailing whitespace as figlet's `readfontchar()` does (7 of 379 archive fonts stopped leaking literal `@` into rendered art). Hardening: font readers reject non-regular files, so a FIFO no longer blocks forever. Suite 2765 → 2775. Full report: [`docs/audit/2026-08-25-audit.md`](../audit/2026-08-25-audit.md). See `CHANGELOG.md` [1.1.4].
 
 **1.1.1** — 2026-06-08. agnos argv fix: `bnrmr TEXT` printed help instead of rendering, because the `var r = main();` entry idiom ran `main` as a module-global initializer — before cyrius's init-stack capture — so `argc()`/`argv()` returned 0/null. `main` is now called from a bare top-level statement. cyrius pin `6.0.56 → 6.1.14`. See `CHANGELOG.md` [1.1.1].
@@ -140,7 +144,7 @@ M1 (first render path, hardcoded block font, 1 KB input cap, flags
 
 ## Toolchain
 
-- **Cyrius pin**: `6.6.2` (in `cyrius.cyml [package].cyrius`)
+- **Cyrius pin**: `6.7.9` (in `cyrius.cyml [package].cyrius`)
 
 ## Shape
 
@@ -161,10 +165,16 @@ Single-shot CLI: text in, banner bytes out, exit.
   `render_layout` (in `src/layout.cyr`) with neutral options
   (width=0, align=left, pad=0). Preserves the M1+M2 byte-identical
   output contract for callers that don't opt into layout flags.
-- `src/layout.cyr` — M4 layout orchestrator. Detects terminal
-  width via `TIOCGWINSZ` with COLUMNS env + 80-col fallback.
-  Pure helpers: `banner_width`, `fit_chars`, `align_pad`,
-  `parse_uint`, `stdout_is_tty` (M5). Public renderer:
+- `src/layout.cyr` — M4 layout orchestrator. Detects the terminal
+  width of stdout through darshana's `tty_winsize` (TIOCGWINSZ on
+  Linux, the framebuffer console grid on AGNOS — since 1.2.0) with
+  COLUMNS env + 80-col fallback. Pure helpers: `banner_width`,
+  `fit_chars`, `align_pad`, `parse_uint`, `_usable_cols` (1.2.0 — the
+  zero-column rule and the F-008 clamp over a `tty_winsize` answer).
+  `stdout_is_tty` (M5) is `term_width_ioctl() > 0` on Linux, so the two
+  probes cannot disagree; on AGNOS it returns 0 (color off), because
+  agnos cannot say whether fd 1 is the console. `src/` issues no ioctl
+  of its own. Public renderer:
   `render_layout(font, text, len, width, align, pad, color)`.
   0.8.0 audit hardening: `parse_uint` rejects values over
   `PARSER_INT_CAP` (F-002); `term_width_ioctl` clamps at
@@ -240,7 +250,7 @@ authoring walkthrough at [`docs/guides/fonts.md`](../guides/fonts.md).
 
 ## Tests
 
-- `tests/bannermanor.tcyr` — 2775 assertions covering: embedded font
+- `tests/bannermanor.tcyr` — 2828 assertions covering: embedded font
   geometry, glyph-index lookup (space / digits / uppercase /
   lowercase folding / punctuation / unsupported / fold-is-fallback),
   row-shape invariant, renderer bounds, CYML loader happy path +
@@ -264,16 +274,26 @@ authoring walkthrough at [`docs/guides/fonts.md`](../guides/fonts.md).
   Unreleased reader-I/O regression (`t_reader_dir_path` — a directory
   pushed through all three readers; the open succeeds so the `fd < 0`
   early-out does not fire, and the read fails `EISDIR`, covering the
-  `file_read` error passthrough that the missing-file tests miss).
-  Runs clean.
+  `file_read` error passthrough that the missing-file tests miss),
+  and the 1.2.0 probe regressions (issues 0018 / 0019): `t_usable_cols`
+  (the pure width rule), `t_probes_non_tty` and `t_probes_pty` (fd 1
+  pointed at `/dev/null`, a pipe, and a pty slave at seven window
+  sizes — width and TTY verdict for each), `t_render_pty_vs_pipe`
+  (`render_layout` on a pty against the same render on a pipe, byte
+  for byte: SGR wrapping for a color and `rainbow`, a 0-column pty,
+  narrow-pty truncation, center on the pty width) and
+  `t_scrub_matches_darshana_latin1` (bnrmr's control-byte scrub
+  neutralizes exactly darshana's `TTY_SANITIZE_LATIN1` byte set).
+  Runs clean on x86_64 and on aarch64 under qemu.
 - `tests/fixtures/` — malformed-font fixtures consumed by the loader
   rejection tests (both CYML and .flf variants).
 - `tests/bannermanor.bcyr` — render hot-path CPU benchmarks (B1
   `block_font_embed`, B2 `font_load_file(block.cyml)`, B3
   `fit_chars` ×100). Run via `cyrius bench tests/bannermanor.bcyr`.
-  Trend lives in [`docs/benchmarks.md`](../benchmarks.md); all three
-  points (0.7.0, 0.8.0, 0.9.0) captured — flat-or-faster across
-  releases, M7's trend item closed.
+  Trend lives in [`docs/benchmarks.md`](../benchmarks.md) — six points,
+  0.7.0 through 1.2.0. Point 4 records bayan 1.5.2's ~45%
+  `font_load_file` regression (issue 0006); Point 6 is an A/B of the
+  1.2.0 toolchain move, flat but for B3 +4.5%.
 - `tests/bannermanor.fcyr` — fuzz stub
 
 ## Dependencies
@@ -288,11 +308,15 @@ Direct (declared in `cyrius.cyml`):
   `lib/` that could not build.)
   (`bayan` provides the CYML parser — `cyml_parse` / `cyml_doc_*` /
   `cyml_entry_*` — which moved out of the core stdlib in cyrius 6.2.x)
-- `darshana = 1.0.0` (pinned, 1.1.3) — SGR primitives (`tty_sgr`,
-  `tty_sgr_reset`, `TTY_FG_*` constants) for `--color`. Resolved via
+- `darshana = 1.3.0` (pinned, 1.2.0) — SGR primitives (`tty_sgr`,
+  `tty_sgr_reset`, `TTY_FG_*` constants) for `--color`, and
+  `tty_winsize` for the stdout width / TTY probes. Resolved via
   `git` + `tag` against https://github.com/MacCracken/darshana.git.
-  1.0.0 is darshana's API freeze: the symbols bnrmr consumes cannot
-  move without a major bump.
+  Every symbol bnrmr consumes is in darshana's frozen v1.0 surface and
+  cannot move without a major bump. 1.3.0 needs cyrius ≥ 6.7.2.
+- `lib/` is the output of `cyrius deps` over the stdlib list above plus
+  darshana — 32 files since 1.2.0 (`rm -rf lib/ && cyrius deps`), not a
+  full stdlib snapshot.
 
 ## Consumers
 
@@ -317,13 +341,14 @@ v1.0 shipped 2026-05-20. M7 and M8 both closed:
   issue 0004 (TTY wrap on narrow terminals) found and fixed in the
   same release. Issue 0001 formally deferred past 1.0.0.
 
-Post-v1.0 work is scoped in [`roadmap.md`](roadmap.md) as of 1.1.4:
-1.2.0 (prove the contract — a committed golden suite and real CI
-gates) through 1.7.0, with contract-breaking items parked under
-"Beyond 1.x". The open issue register is
-[`issues/`](issues/) — 0005 (write-per-cell syscall cost) and 0006
-(bayan's ~45% `font_load_file` regression) are filed; 0007–0017 are
-named and scheduled in the roadmap.
+Post-v1.0 work is scoped in [`roadmap.md`](roadmap.md) as of 1.2.0:
+1.3.0 (prove the contract — a committed golden suite and real CI
+gates) through 1.8.0, with contract-breaking items parked under
+"Beyond 1.x". 1.2.0 took the next minor for the toolchain and darshana
+move, so every planned release moved down one. The open issue register
+is [`issues/`](issues/) — 0005, 0006, 0010, 0015, 0016 and 0017 are
+filed; 0007–0014 are named and scheduled in the roadmap; 0018 and 0019
+were filed and closed in 1.2.0.
 
 See [`roadmap.md`](roadmap.md) for the forward plan; the shipped
 milestone log is its compact "Closed record" table.

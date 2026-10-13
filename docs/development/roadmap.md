@@ -11,7 +11,10 @@ CLI flag surface, the CYML font format (schema 1), the default font set
 (block / slim / big), and the `.flf` adapter contract. Everything below
 is post-freeze work, and the freeze is what shapes it.
 
-**Next**: 1.2.0 — *Prove the contract*. See [Planned releases](#planned-releases).
+**Next**: 1.3.0 — *Prove the contract*. See [Planned releases](#planned-releases).
+Every planned release below moved down one minor when the cyrius 6.7 /
+darshana 1.3.0 move took the next one (see [`state.md`](state.md)); the
+issue files carry the new targets.
 
 ## What the freeze permits
 
@@ -22,7 +25,7 @@ Every item on this roadmap was classified against one sentence in
 > **for any valid invocation**.
 
 Three readings of that sentence are load-bearing and none of them is
-written down. **1.2.0 files an ADR settling all three**, because six
+written down. **1.3.0 files an ADR settling all three**, because six
 later items are gated on the answers:
 
 1. **Error-path output.** Every diagnostic today goes to fd 1
@@ -51,9 +54,9 @@ subtractive)."*
 ## Planned releases
 
 Versions are targets, not commitments — ship-when-ready. Sequencing is
-by dependency, then by value. 1.2.0 and 1.2.1 gate everything below them.
+by dependency, then by value. 1.3.0 and 1.3.1 gate everything below them.
 
-### 1.2.0 — Prove the contract
+### 1.3.0 — Prove the contract
 
 v1.0 froze rendered output bytes and **nothing checks that contract**.
 The 79-invocation golden diff cited across the 1.1.4 CHANGELOG,
@@ -66,9 +69,10 @@ none of the claims the release notes make.
   Two tiers: **frozen** (rendered banner bytes, error stderr, exit codes)
   and **snapshot** (`--version`, `--help`, `--list-fonts`, which move
   deliberately). Needs a pty leg — `stdout_is_tty` gates color, so a pipe
-  capture records only the suppression path and the darshana half of the
-  output surface has never been verified at all. Pin `COLUMNS` and CWD,
-  which are live inputs.
+  capture records only the suppression path. The suite's
+  `t_render_pty_vs_pipe` now checks five pty renders byte for byte, which
+  is a regression test for the probes, not the golden matrix. Pin
+  `COLUMNS` and CWD, which are live inputs.
 - CI gates that are unblocked today, verified: `cyrius lint` on all eight
   `src/*.cyr`, `cyrius build --agnos`, `cyrius build --aarch64`,
   `cyrius coverage --min`, and a smoke run of the built binary. The
@@ -93,7 +97,7 @@ none of the claims the release notes make.
 lint clean; agnos and aarch64 builds clean; coverage floor set; ADR 0002
 merged. No `src/` behavior change — zero contract exposure by construction.
 
-### 1.2.1 — Documentation precision (patch)
+### 1.3.1 — Documentation precision (patch)
 
 One editorial pass, no code. Batched per CLAUDE.md Task Sizing, and the
 highest value-per-effort work in the backlog: four of these would cause a
@@ -111,7 +115,7 @@ font author to write a font that behaves differently than documented.
 - `src/color.cyr:44-45` documents a `brightX` spelling that does not parse
   and exits 1; the `--color` error text omits the dash alias `--help`
   gained in 1.1.4, so the two surfaces now disagree.
-- `src/layout.cyr:174-177` and `state.md` still promise "a clean no
+- `src/layout.cyr:197-200` and `state.md` still promise "a clean no
   output" for a sub-glyph `--width`; it emits `height` blank rows,
   SGR-wrapped on a TTY.
 - Add the `--` escape to `--help`. It works; the error a user actually
@@ -142,7 +146,7 @@ font author to write a font that behaves differently than documented.
 **Gate**: doc-pin-check green; golden suite byte-identical, which is the
 mechanical proof nothing here touched behavior.
 
-### 1.3.0 — One write per row
+### 1.4.0 — One write per row
 
 No observable behavior change. Buffering moves syscall boundaries, not
 bytes or their order.
@@ -175,7 +179,7 @@ bytes or their order.
 **Gate**: golden suite byte-identical on both tiers including the pty leg;
 B4 shows `--width 4096` within noise of natural width.
 
-### 1.3.1 — Tests, fixtures and dead code (patch)
+### 1.4.1 — Tests, fixtures and dead code (patch)
 
 No behavior change, or already-broken inputs only. Batched.
 
@@ -216,7 +220,7 @@ No behavior change, or already-broken inputs only. Batched.
 **Gate**: ADR 0002 must have ruled on already-malformed inputs before the
 `.flf` ceilings and the CYML body-consumption fix land.
 
-### 1.4.0 — Diagnostics and failure honesty
+### 1.5.0 — Diagnostics and failure honesty
 
 Gated on ADR 0002 ruling (1) and (2). If either goes the other way, the
 affected items move to [Beyond 1.x](#beyond-1x) and only the buffered
@@ -240,7 +244,7 @@ emit path ships.
 **Gate**: frozen tier byte-identical; error tier re-baselined deliberately,
 diff reviewed line by line.
 
-### 1.5.0 — Fonts findable, listing honest
+### 1.6.0 — Fonts findable, listing honest
 
 The largest genuinely 1.x-eligible user-facing gap. All five listing items
 ship together so the output moves once, not five times.
@@ -270,33 +274,38 @@ ship together so the output moves once, not five times.
 **Gate**: ADR 0002 must cover whether a shipped default font failing
 outside a checkout is a defect. Rendered-banner tier untouched.
 
-### 1.6.0 — AGNOS parity
+### 1.7.0 — AGNOS parity
 
 CLAUDE.md's Goal is *"Own ASCII-banner rendering for AGNOS userland."*
-`--color` is currently a silent no-op there and issue 0004's narrow-console
-truncation never engages.
+`--color` is a silent no-op there. The console-geometry half closed
+with [issue 0018](issues/archive/0018-agnos-console-width-never-queried.md):
+the width probe rides darshana's `tty_winsize`, which is the live
+framebuffer console grid on AGNOS, so issue 0004's truncation engages.
 
-- Wire real console geometry and TTY detection into the two
-  `#ifdef CYRIUS_TARGET_AGNOS` hard-returns. **The premise they were
-  written on is dead**: AGNOS syscall #60 returns the live framebuffer
-  console grid, and AGNOS 1.43.1 shipped a CSI parser handling SGR, so
-  both "not queryable from userland yet" and "doesn't interpret ANSI" are
-  now false. darshana's agnos-bridged `tty_winsize`/`tty_isatty` are
-  already vendored here and inside its frozen v1.0 API — this is deleting
-  two stubs and calling two already-linked functions.
-- The ADR recording the resulting rule: route through a target-bridged
-  wrapper where one exists, gate inline only where none does. The
-  "extract later only if needed" trigger has fired.
-- An aarch64 runtime check under qemu. The 1.2.0 gate catches compile
-  breakage only; the `st_mode`-offset reasoning is validated by the
-  vendored lib, not by compiling.
+- **Color on AGNOS — blocked on agnos.** The console renders SGR (agnos
+  1.43.1), but `stdout_is_tty` still returns 0 there, because nothing on
+  AGNOS can say whether fd 1 *is* the console: darshana's AGNOS
+  `tty_isatty` answers 1 whenever the console is up, redirected fd 1
+  included, and darshana has filed the per-fd query with agnos. When
+  agnos ships it and darshana's peer becomes per-fd, delete the stub and
+  derive the verdict from the probe as Linux does.
+- The ADR recording the rule the probes now follow: route through a
+  target-bridged wrapper where one exists and answers the question
+  asked, gate inline where it does not. The width probe is the first
+  case, the color stub the second.
+- An aarch64 runtime check under qemu **in CI**. The 1.3.0 gate catches
+  compile breakage only; the `st_mode`-offset reasoning is validated by
+  the vendored lib, not by compiling. (The suite passes under
+  `cyrius test --aarch64` locally; nothing gates it.)
 
-**Gate**: the new probe must return 0 when stdout is not the console, or
-`bnrmr --align center X | cat` stops matching the M1 byte-identity
-contract. Ruled out: letting `$COLUMNS` drive the TTY decision, which
-would emit SGR into a pipe.
+**Gate**: the color probe must return 0 when stdout is not the console,
+or `bnrmr --color red X > file` writes escape bytes into the file.
+Ruled out: letting `$COLUMNS` or the console-global `tty_isatty` drive
+the TTY decision, which would emit SGR into a pipe. The width probe was
+the deliberate exception: on AGNOS a redirected stdout gets the console
+geometry (plain text, no escapes), recorded in issue 0018.
 
-### 1.7.0 — The fourth font
+### 1.8.0 — The fourth font
 
 Lowest-priority scheduled release. No consumer, no request — it earns its
 place on recorded intent alone, and the intent is on three surfaces.
@@ -352,7 +361,7 @@ Contract-breaking or unrequested. Each entry states why it cannot be 1.x.
 - **Sub-glyph `--width` emitting nothing** instead of blank rows.
 - **Enforcing CYML `name` against the filename stem.** Flips `--font`
   from 0 to 1 for third-party fonts that render correctly. The audit
-  classes it `Breaking` *and* targets it at 1.2.0; resolving that
+  classes it `Breaking` *and* schedules it for a 1.x minor; resolving that
   contradiction toward 2.0 is the most consequential call in the backlog,
   because the same reasoning governs the two entries above.
 - **A `[lib]` distlib surface.** Not a contract question — a Project
@@ -367,14 +376,14 @@ Filed, with a written-up reproducer and acceptance criteria:
 
 | # | Title | Scheduled |
 |---|---|---|
-| [0005](issues/0005-write-per-cell-syscall-cost.md) | One `write(2)` per glyph cell and per pad space — 8x cost at `--width 4096` | 1.3.0 |
-| [0006](issues/0006-bayan-cyml-parse-regression.md) | bayan 1.5.2 made `font_load_file` ~45% slower | 1.3.0 (investigate) |
-| [0010](issues/0010-fuzz-harness-is-a-no-op.md) | The fuzz harness verifies nothing and reports green | 1.3.1 |
-| [0015](issues/0015-fonts-not-findable-when-installed.md) | An installed `bnrmr` cannot find any font | 1.5.0 |
-| [0016](issues/0016-diagnostics-go-to-stdout.md) | Every diagnostic goes to stdout, corrupting redirected output | 1.4.0 (gated on ADR 0002) |
-| [0017](issues/0017-docs-precision-pass.md) | Documentation precision pass deferred from the 1.1.4 audit | 1.2.1 |
+| [0005](issues/0005-write-per-cell-syscall-cost.md) | One `write(2)` per glyph cell and per pad space — 8x cost at `--width 4096` | 1.4.0 |
+| [0006](issues/0006-bayan-cyml-parse-regression.md) | bayan 1.5.2 made `font_load_file` ~45% slower | 1.4.0 (investigate) |
+| [0010](issues/0010-fuzz-harness-is-a-no-op.md) | The fuzz harness verifies nothing and reports green | 1.4.1 |
+| [0015](issues/0015-fonts-not-findable-when-installed.md) | An installed `bnrmr` cannot find any font | 1.6.0 |
+| [0016](issues/0016-diagnostics-go-to-stdout.md) | Every diagnostic goes to stdout, corrupting redirected output | 1.5.0 (gated on ADR 0002) |
+| [0017](issues/0017-docs-precision-pass.md) | Documentation precision pass deferred from the 1.1.4 audit | 1.3.1 |
 
-Named in the release plan above but **not yet written up** — 1.2.0 files
+Named in the release plan above but **not yet written up** — 1.3.0 files
 them, and until it does they are described only here and in
 [`../audit/2026-08-25-audit.md`](../audit/2026-08-25-audit.md):
 0007 (positionals past the 128th silently discarded), 0008 (CYML body
@@ -388,7 +397,9 @@ Archived: [0001](issues/archive/0001-keystroke-interleave-during-render.md)
 (deferred past v1.0, still open in principle),
 [0002](issues/archive/0002-unbounded-pad-and-width.md),
 [0003](issues/archive/0003-flf-crlf-endmarks-bleed.md),
-[0004](issues/archive/0004-tty-wrap-on-narrow-terminal.md) — all closed.
+[0004](issues/archive/0004-tty-wrap-on-narrow-terminal.md),
+[0018](issues/archive/0018-agnos-console-width-never-queried.md),
+[0019](issues/archive/0019-darshana-probes-hand-rolled.md) — all closed.
 
 ## Out of scope
 

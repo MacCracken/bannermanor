@@ -623,9 +623,10 @@ fn t_header_strings_scrubbed() {
 fn t_columns_env_clamped() {
     test_group("layout / COLUMNS clamped at WS_COL_CAP (F-013)");
     # COLUMNS was the only frame-width source without a ceiling:
-    # --width is rejected above WIDTH_CAP and TIOCGWINSZ is clamped by
-    # F-008, but the env leg could drive the frame 256x past both.
-    # On AGNOS this is the only frame source at all.
+    # --width is rejected above WIDTH_CAP and the terminal width is
+    # clamped by F-008, but the env leg could drive the frame 256x past
+    # both. On AGNOS it is the frame source whenever the framebuffer
+    # console is down (through 1.1.5, always — issue 0018).
     assert(WS_COL_CAP == 4096, "WS_COL_CAP is 4096");
     # parse_uint still rejects past PARSER_INT_CAP, so the clamp only
     # has to cover the band between the cap and PARSER_INT_CAP.
@@ -702,6 +703,335 @@ fn t_reader_dir_path() {
     assert_eq(flf_load_file("fonts"),    0, "flf_load_file(dir) -> 0");
 }
 
+# ---- 1.2.0: stdout probes through darshana (issues 0018 / 0019) ----
+#
+# term_width_ioctl / stdout_is_tty now ride darshana's tty_winsize
+# instead of a local TIOCGWINSZ ioctl. Nothing tested either probe
+# before 1.2.0: the suite's own stdout is whatever the runner gave it,
+# so a live call is not deterministic. The Linux tests below point
+# fd 1 at a fd they control — /dev/null, a pipe, a pty slave with a
+# window size they set — call the probes, and put fd 1 back BEFORE
+# asserting (every assert writes to fd 1).
+
+fn t_usable_cols() {
+    test_group("layout / _usable_cols (tty_winsize answer -> width)");
+    assert_eq(_usable_cols(0, 80),     80,         "80 cols -> 80");
+    assert_eq(_usable_cols(0, 1),      1,          "1 col -> 1");
+    assert_eq(_usable_cols(0, 0),      0,          "0 cols -> 0 (F-020: size unknown)");
+    assert_eq(_usable_cols(0 - 1, 80), 0,          "failed query -> 0, whatever cols holds");
+    assert_eq(_usable_cols(0, 4096),   4096,       "at WS_COL_CAP -> 4096");
+    assert_eq(_usable_cols(0, 4097),   WS_COL_CAP, "past WS_COL_CAP -> clamped (F-008)");
+    assert_eq(_usable_cols(0, 65535),  WS_COL_CAP, "u16 max -> clamped (F-008)");
+}
+
+# bannermanor keeps its own control-byte scrub (space, length-preserving)
+# rather than darshana's tty_sanitize_buf, whose replacement byte is '?'
+# — darshana ADR 0004 records that bannermanor's space was deliberately
+# not reproduced. What the two must agree on is WHICH bytes are
+# neutralized: darshana's TTY_SANITIZE_LATIN1 mode is modeled on this
+# rule. Pin that, so neither can drift without this going red.
+fn t_scrub_matches_darshana_latin1() {
+    test_group("scrub / same byte set as darshana TTY_SANITIZE_LATIN1");
+    var one[8];
+    var b = 0;
+    var disagree = 0;
+    var replaced = 0;
+    while (b < 256) {
+        store64(&one, b);
+        var ours = 0;
+        if (_scrub_ctl(b) != b) { ours = 1; replaced = replaced + 1; }
+        var theirs = tty_has_ctl(&one, 1, TTY_SANITIZE_LATIN1, 0);
+        if (ours != theirs) { disagree = disagree + 1; }
+        b = b + 1;
+    }
+    assert_eq(disagree, 0, "every byte 0..255: same verdict as tty_has_ctl(LATIN1)");
+    assert_eq(replaced, 65, "65 bytes neutralized (32 C0 + DEL + 32 C1)");
+    assert_eq(_scrub_ctl(27), 32, "ESC -> space (not darshana's '?')");
+}
+
+#ifdef CYRIUS_TARGET_LINUX
+
+# ioctl requests and an open flag the stdlib does not define. All three
+# requests are asm-generic, identical on x86_64 and aarch64 Linux;
+# O_NOCTTY (0400) is not one of the four flags arm64 overrides.
+var PT_O_NOCTTY   = 0x100;
+var PT_TIOCGPTN   = 0x80045430;     # _IOR('T', 0x30, uint): slave number
+var PT_TIOCSPTLCK = 0x40045431;     # _IOW('T', 0x31, int): (un)lock slave
+var PT_TIOCSWINSZ = 0x5414;         # set window size
+
+# Open a pty pair. Master is non-blocking. Writes both fds through the
+# out-pointers; returns 0, or -1 if this host has no usable /dev/ptmx.
+fn _pt_open(out_m, out_s): i64 {
+    var m = sys_open("/dev/ptmx", O_RDWR | PT_O_NOCTTY | O_NONBLOCK, 0);
+    if (m < 0) { return 0 - 1; }
+    var lk = 0;
+    var n = 0;
+    if (sys_ioctl(m, PT_TIOCSPTLCK, &lk) < 0) { sys_close(m); return 0 - 1; }
+    if (sys_ioctl(m, PT_TIOCGPTN, &n) < 0) { sys_close(m); return 0 - 1; }
+    var path[32];
+    memcpy(&path, "/dev/pts/", 9);
+    var pend = tty_dec_buf(&path, 9, n & 0xFFFFFFFF);
+    store8(&path + pend, 0);
+    var s = sys_open(&path, O_RDWR | PT_O_NOCTTY, 0);
+    if (s < 0) { sys_close(m); return 0 - 1; }
+    store64(out_m, m);
+    store64(out_s, s);
+    return 0;
+}
+
+fn _pt_set_winsize(s, rows, cols): i64 {
+    var ws[8];
+    store64(&ws, 0);
+    store16(&ws, rows);
+    store16(&ws + 2, cols);
+    return sys_ioctl(s, PT_TIOCSWINSZ, &ws);
+}
+
+# Point fd 1 at `fd`. Returns the saved fd 1 (for _pt_restore), or -1.
+fn _pt_redirect(fd): i64 {
+    var saved = syscall(SYS_DUP, 1);
+    if (saved < 0) { return 0 - 1; }
+    if (sys_dup2(fd, 1) < 0) { sys_close(saved); return 0 - 1; }
+    return saved;
+}
+
+fn _pt_restore(saved): i64 {
+    sys_dup2(saved, 1);
+    sys_close(saved);
+    return 0;
+}
+
+fn _pt_nap(): i64 {
+    var ts[16];
+    store64(&ts, 0);
+    store64(&ts + 8, 1000000);          # 1 ms
+    sys_nanosleep(&ts, 0);
+    return 0;
+}
+
+# Read a non-blocking fd until 20 ms pass with nothing new (bounded at
+# ~1 s, so a wedged pty cannot hang the suite). Returns bytes read.
+fn _pt_drain(rd, buf, cap): i64 {
+    var got = 0;
+    var idle = 0;
+    var it = 0;
+    while (idle < 20 && it < 1000) {
+        var n = sys_read(rd, buf + got, cap - got);
+        if (n > 0) { got = got + n; idle = 0; }
+        else { _pt_nap(); idle = idle + 1; }
+        if (got >= cap) { idle = 20; }
+        it = it + 1;
+    }
+    return got;
+}
+
+# term_width_ioctl() and stdout_is_tty() with fd 1 pointed at `fd`.
+fn _pt_probe(fd, out_w, out_t): i64 {
+    var saved = _pt_redirect(fd);
+    if (saved < 0) { return 0 - 1; }
+    var w = term_width_ioctl();
+    var t = stdout_is_tty();
+    _pt_restore(saved);
+    store64(out_w, w);
+    store64(out_t, t);
+    return 0;
+}
+
+# render_layout with fd 1 on a fresh pipe; the bytes it wrote land in
+# buf. Returns the count, or -1.
+fn _pt_render_pipe(buf, cap, font, text, len, width, align, color): i64 {
+    var fds[16];
+    if (sys_pipe(&fds) < 0) { return 0 - 1; }
+    var rd = load32(&fds);
+    var wr = load32(&fds + 4);
+    var saved = _pt_redirect(wr);
+    if (saved < 0) { sys_close(rd); sys_close(wr); return 0 - 1; }
+    render_layout(font, text, len, width, align, 0, color);
+    _pt_restore(saved);
+    sys_close(wr);                      # reader now sees EOF after the data
+    var got = 0;
+    var go = 1;
+    while (go == 1) {
+        var n = sys_read(rd, buf + got, cap - got);
+        if (n > 0) { got = got + n; } else { go = 0; }
+        if (got >= cap) { go = 0; }
+    }
+    sys_close(rd);
+    return got;
+}
+
+# render_layout with fd 1 on pty slave `s`; collected off master `m`.
+fn _pt_render_pty(m, s, buf, cap, font, text, len, width, align, color): i64 {
+    var saved = _pt_redirect(s);
+    if (saved < 0) { return 0 - 1; }
+    render_layout(font, text, len, width, align, 0, color);
+    _pt_restore(saved);
+    return _pt_drain(m, buf, cap);
+}
+
+# Expected TTY bytes for a colored render: each '\n'-terminated row of
+# the plain render `p[0..n)`, wrapped as ESC[<code>m row ESC[0m '\n'.
+# `code` 0 means rainbow (rainbow_color_for_row). Every code bnrmr emits
+# is two digits (30..37, 90..97). Returns the expected length.
+fn _pt_expect_sgr(p, n, out, code): i64 {
+    var o = 0;
+    var row = 0;
+    var start = 0;
+    var i = 0;
+    while (i < n) {
+        if (load8(p + i) == 10) {
+            var c = code;
+            if (c == 0) { c = rainbow_color_for_row(row); }
+            store8(out + o, 27); store8(out + o + 1, 91);       # ESC [
+            store8(out + o + 2, 48 + c / 10);
+            store8(out + o + 3, 48 + c % 10);
+            store8(out + o + 4, 109);                           # m
+            o = o + 5;
+            memcpy(out + o, p + start, i - start);
+            o = o + (i - start);
+            memcpy(out + o, "\x1b[0m\n", 5);
+            o = o + 5;
+            row = row + 1;
+            start = i + 1;
+        }
+        i = i + 1;
+    }
+    return o;
+}
+
+fn _pt_same(a, an, b, bn): i64 {
+    if (an != bn) { return 0; }
+    if (an < 0) { return 0; }
+    return memeq(a, b, an);
+}
+
+#endif
+
+# Non-TTY stdout: both probes say "not a terminal". The Linux contract
+# that keeps `bnrmr ... | cat` untruncated and uncolored.
+fn t_probes_non_tty() {
+    test_group("layout / probes on a non-TTY stdout (darshana tty_winsize)");
+    #ifdef CYRIUS_TARGET_LINUX
+    var w = 0 - 9;
+    var t = 0 - 9;
+    var dn = sys_open("/dev/null", O_RDWR, 0);
+    assert(dn >= 0, "/dev/null opened");
+    if (dn >= 0) {
+        var rc = _pt_probe(dn, &w, &t);
+        sys_close(dn);
+        assert_eq(rc, 0, "fd 1 redirected to /dev/null");
+        assert_eq(w, 0, "/dev/null: term_width_ioctl -> 0");
+        assert_eq(t, 0, "/dev/null: stdout_is_tty -> 0");
+    }
+    var fds[16];
+    assert_eq(sys_pipe(&fds), 0, "pipe created");
+    var rd = load32(&fds);
+    var wr = load32(&fds + 4);
+    w = 0 - 9;
+    t = 0 - 9;
+    var rc2 = _pt_probe(wr, &w, &t);
+    sys_close(rd);
+    sys_close(wr);
+    assert_eq(rc2, 0, "fd 1 redirected to a pipe");
+    assert_eq(w, 0, "pipe: term_width_ioctl -> 0");
+    assert_eq(t, 0, "pipe: stdout_is_tty -> 0");
+    #endif
+}
+
+# A real terminal on fd 1, at window sizes we set. Pins F-008 (clamp),
+# F-020 (a 0-column pty is not a TTY — where darshana's tty_isatty would
+# answer 1), and that only the COLUMN count matters (where
+# tty_winsize_or would call a 0-row terminal "size unknown").
+fn t_probes_pty() {
+    test_group("layout / probes on a pty (darshana tty_winsize)");
+    #ifdef CYRIUS_TARGET_LINUX
+    var m = 0;
+    var s = 0;
+    if (_pt_open(&m, &s) != 0) {
+        println("SKIP layout probes on a pty: /dev/ptmx unavailable");
+        return 0;
+    }
+    # rows, cols, want width, want tty
+    var cases[224];                     # 7 cases x 4 i64
+    store64(&cases + 0,   24);  store64(&cases + 8,   80);   store64(&cases + 16,  80);   store64(&cases + 24,  1);
+    store64(&cases + 32,  0);   store64(&cases + 40,  80);   store64(&cases + 48,  80);   store64(&cases + 56,  1);
+    store64(&cases + 64,  0);   store64(&cases + 72,  0);    store64(&cases + 80,  0);    store64(&cases + 88,  0);
+    store64(&cases + 96,  24);  store64(&cases + 104, 0);    store64(&cases + 112, 0);    store64(&cases + 120, 0);
+    store64(&cases + 128, 24);  store64(&cases + 136, 1);    store64(&cases + 144, 1);    store64(&cases + 152, 1);
+    store64(&cases + 160, 50);  store64(&cases + 168, 5000); store64(&cases + 176, 4096); store64(&cases + 184, 1);
+    store64(&cases + 192, 24);  store64(&cases + 200, 4096); store64(&cases + 208, 4096); store64(&cases + 216, 1);
+    var k = 0;
+    while (k < 7) {
+        var base = &cases + k * 32;
+        var w = 0 - 9;
+        var t = 0 - 9;
+        var setrc = _pt_set_winsize(s, load64(base), load64(base + 8));
+        var prc = _pt_probe(s, &w, &t);
+        assert_eq(setrc, 0, "TIOCSWINSZ on the slave");
+        assert_eq(prc, 0, "fd 1 redirected to the pty slave");
+        assert_eq(w, load64(base + 16), "term_width_ioctl on the pty");
+        assert_eq(t, load64(base + 24), "stdout_is_tty on the pty");
+        k = k + 1;
+    }
+    sys_close(s);
+    sys_close(m);
+    #endif
+}
+
+# What the probes decide, end to end: render_layout on a pty against
+# the same render on a pipe. Exact bytes, so this also pins darshana's
+# SGR emission on the TTY path — never checked before 1.2.0.
+fn t_render_pty_vs_pipe() {
+    test_group("layout / render on a pty vs a pipe");
+    #ifdef CYRIUS_TARGET_LINUX
+    var m = 0;
+    var s = 0;
+    if (_pt_open(&m, &s) != 0) {
+        println("SKIP render on a pty: /dev/ptmx unavailable");
+        return 0;
+    }
+    assert_eq(tty_raw(s), 0, "slave raw (no OPOST: bytes arrive as written)");
+    var f = block_font_embed();
+    var p = alloc(4096);
+    var q = alloc(4096);
+    var e = alloc(4096);
+
+    # 24x80, --color red: every row wrapped ESC[31m ... ESC[0m.
+    var pn = _pt_render_pipe(p, 4096, f, "hi", 2, 0, ALIGN_LEFT, COLOR_NONE);
+    assert_eq(pn, 60, "pipe: 'hi' plain = 5 rows x (11 cols + LF)");
+    _pt_set_winsize(s, 24, 80);
+    var qn = _pt_render_pty(m, s, q, 4096, f, "hi", 2, 0, ALIGN_LEFT, TTY_FG_RED);
+    var en = _pt_expect_sgr(p, pn, e, TTY_FG_RED);
+    assert_eq(_pt_same(q, qn, e, en), 1, "pty 24x80 --color red: plain rows wrapped in ESC[31m / ESC[0m");
+
+    # Same pty, --color rainbow: the per-row cycle reaches the terminal.
+    qn = _pt_render_pty(m, s, q, 4096, f, "hi", 2, 0, ALIGN_LEFT, COLOR_RAINBOW);
+    en = _pt_expect_sgr(p, pn, e, 0);
+    assert_eq(_pt_same(q, qn, e, en), 1, "pty 24x80 --color rainbow: rows 31/33/32/36/34");
+
+    # 0-column pty: not a TTY (F-020) — no SGR, no truncation.
+    _pt_set_winsize(s, 24, 0);
+    qn = _pt_render_pty(m, s, q, 4096, f, "hi", 2, 0, ALIGN_LEFT, TTY_FG_RED);
+    assert_eq(_pt_same(q, qn, p, pn), 1, "pty 24x0 --color red: byte-identical to the plain pipe render");
+
+    # 11-column pty: issue 0004 truncation to 2 glyphs of "AGNOS".
+    _pt_set_winsize(s, 24, 11);
+    pn = _pt_render_pipe(p, 4096, f, "AG", 2, 0, ALIGN_LEFT, COLOR_NONE);
+    qn = _pt_render_pty(m, s, q, 4096, f, "AGNOS", 5, 0, ALIGN_LEFT, COLOR_NONE);
+    assert_eq(_pt_same(q, qn, p, pn), 1, "pty 24x11 'AGNOS': truncated to 'AG' at the glyph boundary");
+
+    # Center on an 80-column pty == center in an explicit 80-col frame.
+    _pt_set_winsize(s, 24, 80);
+    pn = _pt_render_pipe(p, 4096, f, "hi", 2, 80, ALIGN_CENTER, COLOR_NONE);
+    qn = _pt_render_pty(m, s, q, 4096, f, "hi", 2, 0, ALIGN_CENTER, COLOR_NONE);
+    assert_eq(_pt_same(q, qn, p, pn), 1, "pty 24x80 --align center == pipe --width 80 --align center");
+
+    tty_cooked();
+    sys_close(s);
+    sys_close(m);
+    #endif
+}
+
 fn main() {
     alloc_init();
     t_smoke();
@@ -744,6 +1074,11 @@ fn main() {
     t_columns_env_clamped();
     t_flf_control_hardblank();
     t_flf_space_hardblank_rejected();
+    t_usable_cols();
+    t_scrub_matches_darshana_latin1();
+    t_probes_non_tty();
+    t_probes_pty();
+    t_render_pty_vs_pipe();
     return assert_summary();
 }
 

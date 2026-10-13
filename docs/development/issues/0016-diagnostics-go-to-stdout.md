@@ -42,7 +42,7 @@ caller in the documented use case — is not.
 Moving ~20 messages from fd 1 to fd 2 changes the stdout bytes of an
 invalid invocation. Whether the v1.0 freeze covers *invalid* invocations
 is one of three unsettled readings of the freeze sentence, and ADR 0002
-(scheduled in 1.2.0) is where that gets decided. Precedent leans toward
+(scheduled in 1.3.0) is where that gets decided. Precedent leans toward
 "corrigible": 1.1.4 already changed `--help` stdout bytes inside a patch
 release on the reasoning that no test asserts them.
 
@@ -55,7 +55,7 @@ in, or deferral to 2.0.
 - Decide `--help`'s stream separately: `--help` on *request* is a
   success and conventionally goes to stdout; the usage block printed
   after an *error* should follow the error to stderr.
-- The golden suite (1.2.0) must capture stdout and stderr separately so
+- The golden suite (1.3.0) must capture stdout and stderr separately so
   the move is provable rather than asserted.
 
 ## Acceptance

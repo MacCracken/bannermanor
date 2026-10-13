@@ -10,7 +10,8 @@
 #
 # The frame width is resolved as:
 #   1. --width N if N > 0
-#   2. terminal width via TIOCGWINSZ on fd 1 if attached to a TTY
+#   2. the terminal width of fd 1, from darshana's tty_winsize
+#      (TIOCGWINSZ on Linux; the framebuffer console grid on AGNOS)
 #   3. COLUMNS env var if it parses as a positive integer
 #   4. 80 (documented fallback per `--help`)
 #
@@ -22,11 +23,13 @@ include "src/font.cyr"
 include "src/color.cyr"
 include "lib/io.cyr"
 
+# No TIOCGWINSZ / struct winsize offsets here: the probe below goes
+# through darshana (issue 0019), which owns the ioctl request code and
+# exports it into this compilation unit as a public `var`. Through 1.1.5
+# this enum declared its own `TIOCGWINSZ = 0x5413` beside darshana's —
+# silent only because the two values happen to agree.
 enum LayoutLimits {
     DEFAULT_FRAME = 80;       # fallback when neither --width nor TTY size known
-    TIOCGWINSZ   = 0x5413;    # ioctl request; struct winsize is 4×u16
-    WS_ROW_OFF   = 0;
-    WS_COL_OFF   = 2;
     WS_COL_CAP   = 4096;      # F-008 — clamp terminal cols. Defense in
     # depth: nothing in bnrmr currently sizes
     # an allocation from cols, but a future
@@ -81,53 +84,73 @@ fn parse_uint(cstr): i64 {
     return n;
 }
 
-# Detect terminal width on stdout via TIOCGWINSZ. Returns columns,
-# or 0 if stdout is not a TTY / ioctl fails. F-008: clamp at WS_COL_CAP
-# so a `resize -s 65535 65535` attack can't propagate hostile width
-# into anything downstream that sizes from cols.
-fn term_width_ioctl(): i64 {
-    # AGNOS has no ioctl/TIOCGWINSZ — return 0 so callers fall back to the
-    # default width (the fb console size isn't queryable from userland yet).
-    #ifdef CYRIUS_TARGET_AGNOS
-    return 0;
-    #endif
-    #ifndef CYRIUS_TARGET_AGNOS
-    var ws[8];                          # 4×u16: rows, cols, xpix, ypix
-    store64(&ws, 0);
-    var r = syscall(SYS_IOCTL, 1, TIOCGWINSZ, &ws);
-    if (r != 0) { return 0; }
-    var cols = load16(&ws + WS_COL_OFF);
+# The usable column count from a `tty_winsize` answer: `rc` is its
+# return, `cols` the column count it reported. 0 when the query failed
+# (`rc != 0` — not a terminal, or no console) or the terminal reports 0
+# columns; otherwise `cols` clamped at WS_COL_CAP (F-008: a
+# `resize -s 65535 65535` attack can't propagate hostile width into
+# anything downstream that sizes from cols). Only the column count
+# matters — a terminal reporting 0 ROWS but real columns is still a
+# terminal of that width, which is why this is not `tty_winsize_or`
+# (that helper treats a 0 in either dimension as "size unknown").
+# Pure, so the rule is testable on every target.
+fn _usable_cols(rc, cols): i64 {
+    if (rc != 0) { return 0; }
     if (cols <= 0) { return 0; }
     if (cols > WS_COL_CAP) { return WS_COL_CAP; }
     return cols;
-    #endif
 }
 
-# Is stdout attached to a TTY? Returns 1 if yes, 0 if piped /
-# redirected / closed. Uses TIOCGWINSZ as the probe — same syscall
-# `isatty(3)` uses under the hood. Cheap; safe to call on every
-# render path.
+# Terminal width of stdout, or 0 if stdout is not a terminal, the query
+# fails, or the terminal reports 0 columns. Routed through darshana's
+# `tty_winsize(1, ...)` (issue 0019), which bridges both targets:
+# TIOCGWINSZ on Linux, and on AGNOS the live framebuffer console grid
+# (winsize syscall #60). Through 1.1.5 the AGNOS arm hard-returned 0 on
+# the premise that the console size "isn't queryable from userland yet",
+# so every AGNOS banner fell back to $COLUMNS / 80 columns (issue 0018).
+#
+# ⚠ AGNOS: the answer is about the CONSOLE, not about fd 1 — agnos has
+# no per-fd terminal query, and darshana's AGNOS peer ignores the fd.
+# So on AGNOS a redirected or piped stdout is truncated and aligned to
+# the console width too, where Linux leaves piped output untruncated.
+# That is deliberate (1.2.0) and bounded: it changes only plain-text
+# geometry, never adds escape bytes — the color decision below does not
+# follow this probe on AGNOS.
+#
+# The name predates the darshana route; on Linux it is still the
+# TIOCGWINSZ ioctl, inside darshana.
+fn term_width_ioctl(): i64 {
+    var rows = 0;
+    var cols = 0;
+    var rc = tty_winsize(1, &rows, &cols);
+    return _usable_cols(rc, cols);
+}
+
+# Is stdout attached to a usable TTY? Returns 1 if yes, 0 if piped /
+# redirected / closed, and 0 for a terminal reporting 0 columns.
+#
+# Linux: derived from the width probe, so the two cannot disagree
+# (F-020) — a 0-column pty (before TIOCSWINSZ; some serial consoles)
+# is "not a TTY" here, where darshana's `tty_isatty(1)` would answer 1
+# and turn color back on for exactly the wrapping-colored-banner case
+# issue 0004 exists to prevent. That 0-column rule is why this is not
+# a bare `tty_isatty(1)`.
+#
+# AGNOS: 0, so auto-color stays off. NOT because the console cannot
+# render SGR — agnos 1.43.1 parses it — but because agnos cannot say
+# whether fd 1 IS the console: darshana's AGNOS `tty_isatty` answers 1
+# whenever the console is up, a redirected or piped fd 1 included
+# (darshana docs; the per-fd query is filed with agnos). Following it
+# would write escape bytes into `bnrmr --color red X > /etc/motd`, which
+# the Linux contract — plain bytes on a non-TTY — forbids. Revisit when
+# agnos exposes an fd-kind query.
 fn stdout_is_tty(): i64 {
-    # AGNOS: no TTY probe (no ioctl). Treat stdout as non-TTY so auto-color
-    # stays off — the fb console renders glyphs literally and doesn't interpret
-    # ANSI escapes, so a plain banner is correct.
     #ifdef CYRIUS_TARGET_AGNOS
     return 0;
     #endif
     #ifndef CYRIUS_TARGET_AGNOS
-    var ws[8];
-    store64(&ws, 0);
-    var r = syscall(SYS_IOCTL, 1, TIOCGWINSZ, &ws);
-    if (r != 0) { return 0; }
-    # Agree with term_width_ioctl about what counts as a usable TTY.
-    # A successful ioctl reporting ws_col == 0 (a pty before
-    # TIOCSWINSZ, some serial consoles) made the two probes disagree:
-    # term_width_ioctl returned 0, disabling issue-0004's narrow-
-    # terminal truncation, while this returned 1 and kept emitting
-    # SGR — the wrapping-colored-banner case 0004 exists to prevent.
-    var cols = load16(&ws + WS_COL_OFF);
-    if (cols <= 0) { return 0; }
-    return 1;
+    if (term_width_ioctl() > 0) { return 1; }
+    return 0;
     #endif
 }
 
@@ -138,19 +161,19 @@ fn term_width_env(): i64 {
     var n = parse_uint(v);
     if (n <= 0) { return 0; }
     # F-013: clamp at WS_COL_CAP, matching the F-008 clamp on the
-    # TIOCGWINSZ leg. COLUMNS was the only frame source without a
+    # terminal-width leg. COLUMNS was the only frame source without a
     # ceiling — `--width` is rejected above WIDTH_CAP in main.cyr and
-    # the ioctl leg is clamped above, so an env var could drive the
-    # frame 256x past both. On AGNOS this is the ONLY frame source
-    # (term_width_ioctl hard-returns 0), so the cap only takes effect
-    # here on that target.
+    # the terminal leg is clamped above, so an env var could drive the
+    # frame 256x past both. On AGNOS this is the frame source only when
+    # the framebuffer console is down (term_width_ioctl answers 0);
+    # through 1.1.5 it was the only AGNOS source at all.
     if (n > WS_COL_CAP) { return WS_COL_CAP; }
     return n;
 }
 
-# Resolve the frame width. Priority: explicit --width > TIOCGWINSZ >
-# COLUMNS env > DEFAULT_FRAME. Caller passes `requested = 0` for
-# "no --width specified."
+# Resolve the frame width. Priority: explicit --width > terminal width
+# (term_width_ioctl) > COLUMNS env > DEFAULT_FRAME. Caller passes
+# `requested = 0` for "no --width specified."
 fn resolve_frame(requested): i64 {
     if (requested > 0) { return requested; }
     var w = term_width_ioctl();
@@ -254,14 +277,17 @@ fn render_layout(font, text, len, width, align, pad, color): i64 {
 
     # Effective truncation width.
     #   - Explicit `--width N`  → use N (M4 contract).
-    #   - No `--width`, TTY out → clamp to TIOCGWINSZ cols so the
-    #                             banner doesn't wrap into itself
+    #   - No `--width`, TTY out → clamp to the terminal's cols so
+    #                             the banner doesn't wrap into itself
     #                             on narrow terminals (issue 0004).
     #   - No `--width`, pipe out → `term_width_ioctl` returns 0,
     #                             `fit_chars(0, ...)` returns `len`
     #                             unchanged — preserves the M1
     #                             byte-identity contract for
     #                             `bnrmr ... | cat` and the test suite.
+    #                             (Linux. On AGNOS the probe answers
+    #                             the console width for a pipe too —
+    #                             see term_width_ioctl.)
     var clamp_w = width;
     if (clamp_w == 0) { clamp_w = term_width_ioctl(); }
     var draw_len = fit_chars(clamp_w, w, g, len);

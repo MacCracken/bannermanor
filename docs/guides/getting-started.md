@@ -11,11 +11,11 @@ orientation for someone who's about to read or change the source.
 cyrius deps                              # resolve stdlib + darshana
 cyrius build src/main.cyr build/bnrmr    # compile (binary: bnrmr)
 ./build/bnrmr "AGNOS"                    # smoke render
-cyrius test                              # 2775 assertions
+cyrius test                              # 2828 assertions
 cyrius bench tests/bannermanor.bcyr      # render hot-path CPU bench
 ```
 
-Toolchain pin: `cyrius = "6.6.2"` in `cyrius.cyml`.
+Toolchain pin: `cyrius = "6.7.9"` in `cyrius.cyml`.
 
 ## Source layout
 
@@ -27,7 +27,9 @@ Toolchain pin: `cyrius = "6.6.2"` in `cyrius.cyml`.
   neutral options.
 - `src/layout.cyr` — layout orchestrator. Frame resolution, alignment,
   padding, color emission, TTY-aware default truncation. Pure helpers
-  for `fit_chars` / `banner_width` / `align_pad` / `parse_uint`.
+  for `fit_chars` / `banner_width` / `align_pad` / `parse_uint` /
+  `_usable_cols`. The stdout width and TTY probes go through darshana's
+  `tty_winsize`; `src/` issues no ioctl of its own.
 - `src/font.cyr` — `Font` struct + CYML loader. Validates schema,
   geometry, body shape. Also exposes the header-only loader used by
   `--list-fonts`.

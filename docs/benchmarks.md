@@ -263,6 +263,40 @@ would fix it, are deferred past 1.1.4 (see `docs/development/issues/`).
 
 Verdict: **no regression**. The hardening is free.
 
+### Point 6 — 1.2.0
+
+**Captured**: 2026-10-12
+**Toolchain**: cyrius 6.7.9 (A/B against the 1.1.5 tree at 6.6.2)
+**Host**: archaemenid (AMD Ryzen 7 5800H, Linux 7.2.8)
+**Code delta vs 1.1.5**: cyrius 6.6.2 → 6.7.9 with `lib/` re-vendored,
+darshana 1.0.0 → 1.3.0, and the two stdout probes routed through
+darshana's `tty_winsize`. None of the three subjects calls a probe.
+
+A/B, not a lib-swap: the 1.1.5 tree (`git archive HEAD`, with its own
+pin, `lib/` and lock) and the 1.2.0 tree each built and run by
+`cyrius bench` under their own pins, interleaved three-and-three,
+twice. So the Point 4 trap — `cyrius bench` restoring `lib/` to the
+lock — cannot make the rows compare one library against itself; but the
+toolchain and the library move together here, and these rows do not
+separate them.
+
+| ID | Subject | 1.2.0 median | 1.1.5 median | Δ | iters |
+|----|---------|--------------|--------------|---|-------|
+| B1 | `block_font_embed` | **7.5 ns** | 7 ns | noise (5–12 ns in both) | 10 000 |
+| B2 | `font_load_file(block.cyml)` | **90.6 µs** | 89.7 µs | +1% (flat) | 1 000 |
+| B3 | `fit_chars ×100` | **672 ns** | 642 ns | +4.5% | 100 000 |
+
+Six runs each. B2: 1.2.0 89.2–91.9 µs against 1.1.5 88.2–91.9 µs —
+overlapping, flat. B3: 1.2.0 655–683 ns against 1.1.5 635–662 ns —
+every 1.2.0 run above every 1.1.5 run, so it is real, and small: 6.4 →
+6.7 ns per `fit_chars` call. `fit_chars`' source did not change, so it
+is the toolchain (codegen, or `lib/bench.cyr`'s timing), not bnrmr.
+B2 sits above Point 5's 85 µs in BOTH rows, so that gap is the host
+(Linux 7.1.9 → 7.2.8 since Point 5), not this release.
+
+Verdict: **no regression worth acting on**. B3's +0.3 ns per call is
+recorded so the next point can tell whether it is a trend.
+
 ## Re-running
 
 ```sh

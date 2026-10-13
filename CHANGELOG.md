@@ -4,6 +4,63 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.2.0] — 2026-10-12 (cyrius 6.7.9, darshana 1.3.0, stdout probes through darshana)
+
+The cyrius 6.7 language minor, darshana's 1.3.0 surface, and the two terminal
+probes `src/layout.cyr` hand-rolled since 0.4.0 / 0.5.0 moved onto darshana. **On
+Linux no rendered byte changes**: a 224-invocation golden matrix — 112 piped
+(every font, the `.flf` path and its malformed fixtures, every alignment, width,
+pad and color spelling, every error path) and 112 on a pty (twelve renders at
+each of seven window sizes including 0×0 and 50×5000, plus every `--color`
+spelling at 24×80) — is byte-identical to 1.1.5 on x86_64, and on aarch64 under
+qemu, except the `--version` literal. **On AGNOS the output changes, on
+purpose**: banners now size to the real console (issue 0018, under Fixed).
+
+### Changed
+
+- **cyrius toolchain pin `6.6.2` → `6.7.9`** (the 6.7 language minor; 6.7.9 is the latest published release). **No source repair was needed.** Built under 6.7.9 before any other change, bnrmr compiled with zero errors and zero warnings on x86_64, `--agnos` and `--aarch64`, passed its full suite (2775) on x86_64 and on aarch64 under qemu, and rendered the golden matrix byte-identically to the 6.6.2 build. Because a clean compile cannot rule out a value that silently changed, the source was also swept for the silent-change hazards cyrius's `docs/development/ecosystem-migration.md` lists for 6.6.3–6.7.9, and none reaches it: no `!` operator (6.7.3 — bnrmr spells only `!=`), no typed pointer (so neither 6.7.8's narrow `*p` nor 6.7.9's pointer-step rules apply), no unary `-` / `~` on a constant (6.7.9 — negatives are written `0 - N` throughout), no compound assignment (6.7.5 / 6.7.6), no identifier spelled `const` / `true` / `false` / `do` / `dyn` / `trait`. No 6.7 language feature was adopted.
+- **`lib/` re-vendored from the manifest**: `rm -rf lib/ && cyrius deps`, **109 files → 32**. Thirty are the same modules at the 6.7.9 snapshot (28 changed; `args_macos` and `args_win` are byte-identical); `alloc_cx.cyr` and `poison.cyr` are new (6.7.9's `alloc.cyr` includes both); 79 are gone — `tls*`, `yukti`, `vani`, `unicode/`, `thread*` and the rest of the full snapshot `cyrius lib sync --full` left at 1.1.3, none of which bnrmr's include graph reaches. The 1.1.5 build's `./lib/ shadows version-pinned … 11 bundled lib(s) differ` warning is gone with them. `[deps].stdlib` is unchanged. `bayan` (the CYML parser) moves `1.5.5` → `1.5.13` with the snapshot; the nine `cyml_*` wrappers the font loader calls have identical signatures, and the CYML load path is byte-stable (the loaded-equals-embedded test, every fixture, and the matrix's `--font` / `--list-fonts` cases).
+- **`cyrius.lock` regenerated** for the new pin and tag — from empty, because `cyrius deps --lock` after the tag move kept the superseded `darshana … 1.0.0` commit row beside the new `1.3.0` one (6.7.9 behavior; reported to the owner). `cyrius deps --locked` passes: `lib/` and the lock are exactly what the tags resolve.
+- **darshana pin `1.0.0` → `1.3.0`.** 1.3.0's bundle declares private constants with `const`, which cyrius gained in 6.7.2, so it cannot be consumed under the old pin — reproduced: the 6.6.2 compiler stops at `error:lib/darshana.cyr:315:7: expected '=', got identifier '_TTY_RAW'`. That is why the toolchain moved first. The bump itself needed no code change: everything bnrmr already consumed (`tty_sgr`, `tty_sgr_reset`, the 16 `TTY_FG_*`) is frozen and emits identical bytes — the matrix's pty leg renders every `--color` spelling.
+  Evaluated against bnrmr and **deliberately not adopted**: `tty_sanitize_buf` in `TTY_SANITIZE_LATIN1` mode neutralizes exactly bnrmr's byte set (C0, DEL, raw 0x80–0x9F — it was modeled on bnrmr's rule) but replaces with `?` where bnrmr writes a space, which would move frozen `.flf` glyph-row bytes; darshana's ADR 0004 records that the space was not reproduced, so bnrmr keeps its own loop, and a new test pins the two byte sets equal. `tty_winsize_or` treats a 0-row terminal as size-unknown, where bnrmr reads columns only. The `_buf` SGR composers belong with issue 0005's one-write-per-row work, still scheduled. `TTY_BG_*`, 256-color and truecolor have no flag to serve, and a new flag is a major.
+- **The stdout width and TTY probes go through darshana** ([issue 0019](docs/development/issues/archive/0019-darshana-probes-hand-rolled.md)). `term_width_ioctl` and `stdout_is_tty` each issued their own `TIOCGWINSZ` ioctl and each carried an AGNOS stub. Now one call, `tty_winsize(1, …)`, feeds a pure `_usable_cols(rc, cols)` that keeps both existing rules — a 0-column terminal is not a terminal (F-020) and columns clamp at `WS_COL_CAP` (F-008) — and on Linux `stdout_is_tty` is `term_width_ioctl() > 0`, so the two probes cannot disagree. `tty_isatty(1)` was not used because it answers 1 for a 0-column pty. `src/` no longer issues an ioctl of its own.
+- **`LayoutLimits` no longer re-declares `TIOCGWINSZ`** (nor the two winsize offsets). The enum's `TIOCGWINSZ = 0x5413` sat in the same compilation unit as darshana's public `var TIOCGWINSZ = 0x5413`, after it. It was silent only because the values agree: cyrius resolves a duplicate to its LAST definition, so a differing value would have redirected darshana's own `tty_winsize` too, with only a `duplicate symbol … conflicting value` warning (verified on a minimal program under 6.7.9).
+- **`src/main.cyr`** — `--version` literal bumped to `bnrmr 1.2.0`.
+- **`cyrius.cyml [deps.darshana]`** — the comment now lists what bnrmr consumes and what it deliberately does not.
+
+### Fixed
+
+- **AGNOS: the console width was never queried** ([issue 0018](docs/development/issues/archive/0018-agnos-console-width-never-queried.md)). The AGNOS arm of `term_width_ioctl` hard-returned 0 on the premise that the console size "isn't queryable from userland yet". It is — agnos's `winsize` syscall #60, wrapped by darshana's AGNOS `tty_winsize`, already linked into every AGNOS `bnrmr`. So on AGNOS issue 0004's narrow-terminal truncation never engaged (a banner wider than the console wrapped into itself), `--align center|right` aligned inside `$COLUMNS` or 80 columns, and the F-008 clamp never ran. Routing through darshana gives AGNOS the console grid.
+  **Output-byte change on AGNOS, deliberate.** With no `--width`, an AGNOS banner now truncates at the console width on a glyph boundary, and center/right alignment uses the console width; `$COLUMNS` is read only when the framebuffer console is down. **This includes redirected and piped stdout**: agnos has no per-fd terminal query and darshana's AGNOS `tty_winsize` ignores the fd, so `bnrmr X | cat` and `bnrmr X > file` on AGNOS take the console's geometry, where Linux leaves piped output untruncated. The bytes stay plain text. Linux is unaffected.
+  **Not changed: `--color` on AGNOS stays off.** `stdout_is_tty`'s AGNOS arm still returns 0, but its comment's premise — that the console "doesn't interpret ANSI escapes" — was also false (agnos 1.43.1 parses SGR). The real reason is the per-fd gap: darshana's AGNOS `tty_isatty` answers 1 whenever the console is up, redirected fd 1 included, so following it would write SGR into `bnrmr --color red X > /etc/motd`. The width and the color decision diverge on AGNOS on purpose — a wrong width costs plain-text line length, a wrong TTY verdict puts escape bytes in a file. Color there waits for an agnos fd-kind query (filed with agnos by darshana); the roadmap's AGNOS-parity release keeps that item.
+
+### Added
+
+- **The first tests of either stdout probe** — suite **2775 → 2828** (+53). The suite's own stdout is whatever the runner gave it, so nothing could assert on the probes before; the new Linux tests point fd 1 at a descriptor they control, call the probe or the renderer, and restore fd 1 before asserting:
+  - `t_usable_cols` (7) — the pure width rule: 0 columns, a failed query, the `WS_COL_CAP` clamp at 4096 / 4097 / 65535.
+  - `t_probes_non_tty` (8) — fd 1 on `/dev/null` and on a pipe: width 0, not a TTY.
+  - `t_probes_pty` (28) — fd 1 on a pty slave at 24×80, 0×80, 0×0, 24×0, 24×1, 50×5000 and 24×4096: the width and the TTY verdict for each.
+  - `t_render_pty_vs_pipe` (7) — `render_layout` on the pty against the same render on a pipe, byte for byte: `--color red` and `--color rainbow` wrap each plain row in `ESC[<code>m … ESC[0m` (the first check anywhere of darshana's SGR bytes on bnrmr's TTY path); a 0-column pty renders exactly the plain bytes; an 11-column pty truncates `AGNOS` to `AG`; `--align center` on an 80-column pty equals `--width 80 --align center` on a pipe.
+  - `t_scrub_matches_darshana_latin1` (3) — over all 256 byte values, `_scrub_ctl` neutralizes exactly the bytes `tty_has_ctl(…, TTY_SANITIZE_LATIN1, 0)` flags (65 of them), and replaces with a space, not darshana's `?`.
+  Each was checked by mutation and seen to fail: `stdout_is_tty` as a bare `tty_isatty(1)` (3 failures — the 0×0 / 24×0 rows and the 0-column render), `tty_winsize_or` semantics (2 — the 0×80 row), the clamp removed (3), and the pre-1.2.0 AGNOS hard-0 applied on Linux (13).
+- **Issues [0018](docs/development/issues/archive/0018-agnos-console-width-never-queried.md) and [0019](docs/development/issues/archive/0019-darshana-probes-hand-rolled.md)**, filed from darshana's 2026-10-12 consumer survey and archived as fixed.
+- **`docs/benchmarks.md` Point 6** — an A/B of the 1.1.5 tree at 6.6.2 against this one at 6.7.9, six runs each: B1 noise, B2 flat (90.6 vs 89.7 µs), B3 +4.5% (672 vs 642 ns per 100 calls — every new run above every old one; `fit_chars` did not change, so it is the toolchain).
+
+### Documentation
+
+- **`docs/development/roadmap.md`** — every planned release moved down one minor (Prove the contract is now 1.3.0, … the fourth font 1.8.0), since this release took the next minor; the issue register's targets and issues 0016 / 0017 moved with them. The darshana-survey block is closed out. The AGNOS-parity release (now 1.7.0) is rewritten: console geometry is done; color on AGNOS is blocked on agnos, with the gate restated for the color probe and the width decision recorded. A stale `src/layout.cyr` line reference is updated.
+- **`README.md`** — the piped-output sentence and the color line now say what happens on AGNOS; pin and assertion count refreshed. **`docs/guides/getting-started.md`** — the same refresh, and `src/layout.cyr` is described as routing its probes through darshana.
+- **`docs/development/state.md`** — 1.2.0 entry; the skipped 1.1.5 entry backfilled; Toolchain, Source, Tests, Dependencies and Next refreshed.
+- **`src/font.cyr`** — `_scrub_ctl` says why it is not darshana's sanitizer.
+- **`scripts/doc-pin-check.sh`** — the roadmap-exclusion comment's example target versions.
+
+### Notes
+
+- **Verification**: `cyrius build` clean (0 warnings) for x86_64, `--agnos` and `--aarch64`; `cyrius lint` 0 warnings on all 8 `src/*.cyr` and the 3 harnesses; `cyrius test tests/bannermanor.tcyr` **2828 passed, 0 failed** on x86_64 and under `cyrius test --aarch64`; `cyrius bench` and `cyrius fuzz` run (fuzz: 1 passed — still the no-op stub, issue 0010); `sh scripts/doc-pin-check.sh` green; `cyrius deps --locked` green; golden matrix as above.
+- **The AGNOS change is not runtime-verified** — there is no AGNOS target here, and an `--agnos` binary cannot run on the Linux host past its first `winsize` call, because agnos syscall #60 is Linux `exit`. What is verified: the AGNOS build compiles the width probe through darshana's AGNOS arm, the rule over its answer (`_usable_cols`) is tested, and darshana tests its AGNOS decode.
+- **The golden matrix is not committed.** It is a scratch harness, like the 79-invocation diff before it; committing a golden suite with a CI pty leg is the roadmap's next release.
+- **`&` binds tighter than `!=` in cyrius**, in 6.6.2 and 6.7.9 alike — verified, because the three readers' `mode & 0xF000 != 0x8000` regular-file gate (1.1.4) depends on it and reads as a bug to anyone expecting C precedence.
+
 ## [1.1.5] - 2026-09-11
 
 ### Changed

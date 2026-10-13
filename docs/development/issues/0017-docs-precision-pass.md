@@ -3,7 +3,7 @@
 **Reported**: 2026-08-25
 **Version**: 1.1.4 (audit deferral)
 **Reporter**: maintainer
-**Status**: **open** — scheduled for 1.2.1
+**Status**: **open** — scheduled for 1.3.1 (retargeted from 1.2.1 when the toolchain and darshana move took 1.2.0)
 **Severity**: documentation — a font author would write a wrong font
 
 ## Scope
