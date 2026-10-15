@@ -462,3 +462,103 @@ maintenance rule, not a milestone, and belongs to CLAUDE.md's Work Loop.
 - [`../benchmarks.md`](../benchmarks.md) — the trend, and the
   measurement-methodology trap recorded with it
 - [`../adr/`](../adr/) — decisions
+
+## Adopting cmdit (CLI parsing)
+
+Surveyed against cmdit 1.2.6. Its next tag, `1.3.0`, has the same API.
+This is demand-gated, not a forced sweep, and it is **blocked today**.
+bnrmr does not hand-roll its parser: it drives the stdlib table parser
+(`"flags"` in `[deps].stdlib`). Since the cyrius 6.7 re-vendor (`32391f2`),
+that parser is *ahead* of cmdit on two freeze-visible points. The swap also
+waits for this roadmap's 1.3.0 golden suite, which is the only thing that
+can prove it byte-identical.
+
+Site map, all in `src/main.cyr`:
+
+- `build_argv_array` (`:272-280`) and the stack `argv_arr[2048]` (`:340-341`)
+  → `cmdit_argv(fs)`. It returns argc, so the bare-`bnrmr` usage exit 0
+  (`:330-334`) and the `> 256` exit 1 (`:335-338`) stay as guards on its
+  return value.
+- `flags_new` and the hand-registered `version`/`help` bools (`:343-345`) →
+  `cmdit_new("bnrmr")` **plus `cmdit_version_short(fs, 0)`**. cmdit
+  auto-binds `-V`, bnrmr has no `-V`, and the freeze adds no flags.
+- `list-fonts` and the five string flags (`:346-357`) → `cmdit_bool` /
+  `cmdit_str`, one for one. Validation deliberately stays with the caller:
+  - `--width`/`--pad` go through `_parse_count_flag` (`:298-324`).
+    `cmdit_int` now rejects overflow, but it reports `bad integer value`
+    where audit B-001 pinned the `max` message
+    (`../audit/2026-08-25-audit.md:154`).
+  - `--align` goes through `parse_align` (`:235-245`). `cmdit_enum` would
+    validate during the parse, ahead of `--help`/`--version`/
+    `--list-fonts`, so `--list-fonts --align x` would flip from exit 0 to
+    exit 1.
+  - `--color` goes through `parse_color`.
+- `flags_parse` and the `FLAG_ERR_*` switch (`:359-369`) → `cmdit_parse`
+  with the same switch on `cmdit_error`. It still uses `println` to stdout
+  and exits 1. `cmdit_print_error` writes to stderr with different wording,
+  which is issue 0016's change and is gated on ADR 0002.
+- Help (`:371-374`) → on `CMDIT_HELP`, call the hand-written `print_usage()`
+  (`:71-98`). Its rows wrap, and `cmdit_help_flags` writes fd 2, not the
+  stdout the snapshot tier records.
+- Version (`:375-378`) → on `CMDIT_VERSION`, keep the
+  `println("bnrmr X.Y.Z")` literal. `scripts/doc-pin-check.sh` rule (e)
+  (`:223-226`) and its `src/main.cyr:version` floor (`:160`) read it.
+- `flags_positional*` (`:250`, `:254`, `:458`) → `cmdit_positional*`.
+
+Blockers and work:
+
+- [ ] **Blocker: positionals past the 128th.** The pinned `lib/flags.cyr`
+  grows its positional array (`:51-57`, `:387-404`). cmdit still drops
+  extras silently at `CMDIT_POS_MAX = 128` (cmdit `src/cmdit.cyr:104`,
+  `:589-594`; its audit accepts this as SEC-3). bnrmr admits 255
+  positionals under the 1 KB join. Today 200 one-letter words render in
+  full into a pipe. Under cmdit the last 72 would vanish with exit 0,
+  which changes stdout for a valid invocation. The same re-vendor already
+  closed B-002, the unfiled 0007 (old cap: `git show 1a53bae:lib/flags.cyr`,
+  line 267). When 1.3.0 reconciles the register, record 0007 as fixed by
+  the toolchain, and add a >128-word row to the golden suite.
+- [ ] **Blocker: `--bool=value`.** The stdlib rejects it
+  (`FLAG_ERR_UNEXPECTED_VALUE`, `lib/flags.cyr:366`), and bnrmr then exits 1
+  with `argument parse error`. cmdit ignores the value and sets the flag
+  (`src/cmdit.cyr:569`), so `--list-fonts=0` would list fonts and exit 0.
+  This is an error path, so ADR 0002 rules on whether the freeze covers it.
+- [ ] Once both blockers close upstream: drop `"flags"` from
+  `[deps].stdlib` (keep `"args"` and `"io"`), drop
+  `include "lib/flags.cyr"` (`src/main.cyr:24`), and add:
+
+  ```toml
+  [deps.cmdit]
+  git = "https://github.com/MacCracken/cmdit.git"
+  tag = "1.3.0"
+  modules = ["dist/cmdit.cyr"]
+  ```
+- [ ] Tests: no file outside `src/main.cyr` references `flags_*` or
+  `FLAG_ERR_*` (checked `tests/bannermanor.{tcyr,bcyr,fcyr}`,
+  `src/test.cyr`, `scripts/`). `main.cyr` has no test coverage (see 1.4.1).
+  If 1.4.1's `src/cli.cyr` extraction lands first, build the flag table
+  there and test it with `cmdit_parse_argv` on synthetic argv.
+- [ ] Bar: the golden suite byte-identical on both tiers and the pty leg,
+  plus the >128-word and `--bool=value` rows.
+
+The payoff is small, about fifteen lines. Help, the version literal and
+value validation stay hand-written by design. See cmdit's `README.md` (API)
+and `docs/development/roadmap.md` (v2 backlog). kii (`src/cli.cyr`) and
+anuenue (`src/main.cyr`) are the worked migrations.
+
+### Update — cmdit 1.3.1 (2026-10-14)
+
+cmdit 1.3.1 closes both blockers above:
+
+- **Positionals past the 128th** are kept: the array doubles instead of
+  dropping, and a refused growth is `CMDIT_ERR_NOMEM`, never a silent
+  drop. Repeat flags past the 64th occurrence are kept the same way.
+  Under cmdit, 200 one-letter words render in full, as they do today.
+- **A bool given `=value`** (including `--flag=`) is
+  `CMDIT_ERR_UNEXPECTED_VALUE` instead of setting the flag, so
+  `--list-fonts=0` fails as it does under the stdlib. To keep today's
+  `argument parse error` line and exit 1, map that code in the error
+  switch.
+
+So the swap is no longer blocked on cmdit. It still waits for this
+roadmap's 1.3.0 golden suite, and the `[deps.cmdit]` block above should
+pin `tag = "1.3.1"`.
