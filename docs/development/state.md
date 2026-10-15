@@ -333,9 +333,10 @@ font is imported. A fifth font is not planned.
   B2 `font_load_file`, B3 `fit_chars`, and the B4 write path (three
   `render_layout` rows, fd 1 on `/dev/null`). The trend is in
   [`docs/benchmarks.md`](../benchmarks.md), seven points from 0.7.0 to
-  1.4.1. Point 4 records bayan 1.5.2's ~45% B2 regression (issue 0006,
-  diagnosed at 1.8.1 and filed with bayan; open until the fix is adopted). Runs are recorded with `scripts/bench-history.sh` into
-  `docs/benchmarks/history.csv`.
+  1.4.1, and Point 8 at 1.8.1. Point 4 records bayan 1.5.2's ~45% B2
+  regression (issue 0006, diagnosed at 1.8.1 and filed with bayan; open
+  until the fix is adopted). Runs are recorded with `scripts/bench-history.sh` into
+  `docs/benchmarks/history.csv`, first at 1.8.1 (a quiet host: load 1.12).
 - `tests/fixtures/` — 24 fixtures, the malformed and boundary fonts the
   tests and the fuzz seeds share.
 

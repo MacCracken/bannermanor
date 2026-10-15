@@ -386,6 +386,52 @@ width. **No regression worth acting on.** The natural path's +0.9 µs in
 process is the price of routing writes through the per-target wrapper,
 and it does not show at the process level.
 
+### Point 8 — 1.8.1
+
+**Captured**: 2026-10-15, the first run recorded in
+`docs/benchmarks/history.csv`
+**Toolchain**: cyrius 6.7.11
+**Host**: archaemenid (AMD Ryzen 7 5800H, Linux 7.2.8), timer floor
+1.347 µs per clock read. Started when the 1-minute load average fell to
+1.12, and a second run straight after agreed (below).
+**Code delta vs 1.4.1**:
+- 1.5.0 writes each banner row with one `_emit` from a composed buffer,
+  and checks every write;
+- 1.6.0 adds the font search path (not on B2's path: B2 loads by file
+  name);
+- 1.7.0 moves to cyrius 6.7.11 and gates the AGNOS width probe (compiled
+  out on Linux);
+- 1.8.0 adds a font (data only).
+
+| ID | Subject | 1.8.1 (two runs) | vs Point 7 |
+|----|---------|------------------|------------|
+| B0 | `_calibration` | **2 ns** | flat |
+| B1 | `block_font_embed` | **7 / 7 ns** | noise |
+| B2 | `font_load_file(block.cyml)` | **91.8 / 92.3 µs** | flat (87.4 / 91.2) |
+| B3 | `fit_chars ×100` | **626 / 625 ns** | flat (608 / 619) |
+| B4 | `render_layout` natural (`AGNOS`) | **3.27 / 3.28 µs** | **5.5× faster** (18.0) |
+| B4 | `--width 4096 --align center` (`AGNOS`) | **5.50 / 5.42 µs** | **3.8× faster** (20.6) |
+| B4 | `--width 4096 --align right` (`A`) | **7.09 / 7.76 µs** | 1.3–2 µs slower (5.6 / 5.8) |
+
+**B4 is 1.5.0's one write per row**, measured on a quiet host for the
+first time: five writes for a five-row banner instead of 50. The
+right-aligned row is the exception. It is one glyph after 4,091 columns
+of padding, and the padding is now filled into the row buffer
+(`_fill_spaces`, eight bytes at a time) before the write. 1.4.1 sent it
+as runs, with no fill, so composing the row costs it a little. It is the
+row with the most padding per glyph, and the only one that moved this
+way.
+
+**B2 is still issue 0006's regression**, with nothing else added: the
+cyrius 6.7.9 → 6.7.11 toolchain left it flat. 1.8.1 diagnosed the
+regression: bayan 1.5.1's two-pass `[[entries]]` scan, at one function
+call per byte. The parser-only A/B is in issue 0006, and the fix is
+filed with bayan. B2 should fall below its pre-regression 59 µs when
+1.8.2 adopts that fix. This point is the "before".
+
+Verdict: **no regression worth acting on.** B4's natural and centered
+renders are several times cheaper than at 1.4.1. B2 waits on bayan.
+
 ## Re-running
 
 ```sh

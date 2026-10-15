@@ -4,6 +4,35 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **The benchmark baseline is recorded.** `docs/benchmarks/history.csv`
+  is the first run kept since `scripts/bench-history.sh` arrived at
+  1.4.1: 7 rows, against the 1.8.1 tag's code with cyrius 6.7.11. A
+  watcher waited for the 1-minute load average to fall below 1.5 (it ran
+  at 1.12), and a second run agreed: B2 91.8 / 92.3 µs, B3 626 / 625 ns.
+  `docs/benchmarks.md` gains Point 8.
+  - B4's natural render is 3.3 µs, against 18.0 at 1.4.1: 1.5.0's one
+    write per row, measured quietly for the first time.
+  - The right-aligned wide row is 1.3–2 µs slower, because its 4,091
+    columns of padding are now filled into the row buffer before the
+    write.
+  - B2 is unchanged. It is the "before" for 1.8.2.
+
+### Changed
+
+- **Architecture note 003 is corrected, and the aarch64 padding is filed
+  with cyrius**:
+  `docs/development/issues/2026-10-15-aarch64-wx-layout-pads-every-binary-to-64k.md`.
+  - The note offered an unpadded file offset as the way to avoid the
+    padding. That layout puts data bytes in the last executable page.
+  - The padding is the price of cyrius's segment-level W^X on 64 KiB-page
+    kernels, so it is a layout trade-off, not an oversight.
+  - The issue's measurements: a one-line program is 65,888 bytes on
+    aarch64, 4,448 on x86_64, and 520 on aarch64 with W^X off.
+  - It asks for the cost to be documented, and offers a 16 KiB padding as
+    an option, with its W^X trade-off.
+
 ## [1.8.1] — 2026-10-15 (measurement debts)
 
 No code change: every target builds to the bytes 1.8.0 did, apart from the

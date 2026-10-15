@@ -35,14 +35,28 @@ code ends at 0x54578 and the padding is 47,752 bytes: 12% of the file.
 ## Where it comes from
 
 cyrius's aarch64 ELF writer (`src/backend/aarch64/fixup.cyr`, the W^X
-layout since v6.3.12) uses `p_align` 0x10000. Arm64 Linux may run with 4,
-16 or 64 KiB pages, so that is the safe value. It then rounds the data
-segment's **file offset** up to 64 KiB, and gives it a 2 MiB-aligned
-virtual address. A linker can avoid the padding by keeping the file offset
-unpadded and choosing a virtual address congruent to it modulo the
-alignment (GNU ld's `ALIGN(MAXPAGESIZE) + (. & (MAXPAGESIZE - 1))`). That
-would be a cyrius change, not a bnrmr one. The padding costs disk and
-download bytes only: it is never mapped.
+layout since v6.3.12) uses `p_align` 0x10000. It rounds the data
+segment's **file offset** up to 64 KiB and gives it a 2 MiB-aligned
+virtual address.
+
+The padding is the price of segment-level W^X. Arm64 Linux runs with 4,
+16 or 64 KiB pages, and the loader maps whole pages. Only a 64 KiB gap in
+the file guarantees that no page holds both code mapped executable and
+data mapped writable, on every one of them.
+
+A linker that does not separate code from data avoids the padding: it
+keeps the file offset unpadded and picks a congruent virtual address.
+But that puts the first data bytes in the last executable page, which is
+what W^X exists to prevent. So this is a cyrius layout trade-off, not a
+bnrmr defect.
+
+The padding costs disk and download bytes only; it is never mapped. A
+one-line program is 65,888 bytes on aarch64, 4,448 on x86_64, and 520 on
+aarch64 with `CYRIUS_WX=0`. Filed with cyrius at 1.8.1
+(`docs/development/issues/2026-10-15-aarch64-wx-layout-pads-every-binary-to-64k.md`
+there). That issue asks for the cost to be documented, and lays out a
+narrower 16 KiB padding as an option with its W^X trade-off on 64 KiB-page
+kernels.
 
 ## How to keep it in mind
 

@@ -1,0 +1,8 @@
+date,version,cyrius,host,timer_floor_ns,name,avg_ns,iters
+2026-10-15,1.8.1,6.7.11,archaemenid,1347,_calibration,2,1000000
+2026-10-15,1.8.1,6.7.11,archaemenid,1347,block_font_embed,7,10000
+2026-10-15,1.8.1,6.7.11,archaemenid,1347,font_load_file(block.cyml),91757,1000
+2026-10-15,1.8.1,6.7.11,archaemenid,1347,fit_chars x100 (banner-worth),626,100000
+2026-10-15,1.8.1,6.7.11,archaemenid,1347,render_layout natural (AGNOS),3269,2000
+2026-10-15,1.8.1,6.7.11,archaemenid,1347,render_layout width 4096 center (AGNOS),5498,2000
+2026-10-15,1.8.1,6.7.11,archaemenid,1347,render_layout width 4096 right (A),7086,2000
