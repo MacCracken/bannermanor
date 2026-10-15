@@ -1,0 +1,13 @@
+# Malformed fixture: char is a non-ASCII byte (UTF-8 for e-acute). font_load_file must reject.
+[font]
+schema = 1
+name = "char_non_ascii"
+width = 1
+height = 1
+gap = 1
+
+[[entries]]
+char = "é"
+---
+#
+

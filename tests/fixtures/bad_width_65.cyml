@@ -1,0 +1,13 @@
+# Malformed fixture: width = 65, one past schema 1's MAX_WIDTH. Both loaders must reject.
+[font]
+schema = 1
+name = "bad_width_65"
+width = 65
+height = 1
+gap = 1
+
+[[entries]]
+char = "A"
+---
+#################################################################
+

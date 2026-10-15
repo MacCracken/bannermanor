@@ -1,0 +1,29 @@
+# Golden-suite fixture (tests/golden/cases.sh). name over the 63-byte buffer: lists as malformed, still renders.
+[font]
+schema = 1
+name = "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn"
+description = "name is 64 bytes"
+width = 3
+height = 3
+gap = 1
+
+[[entries]]
+char = " "
+---
+...
+...
+...
+
+[[entries]]
+char = "H"
+---
+#.#
+###
+#.#
+
+[[entries]]
+char = "I"
+---
+###
+.#.
+###

@@ -1,0 +1,13 @@
+# Fixture: name is 64 bytes, one past what the 64-byte header buffer holds with its NUL. font_header_load rejects it (it lists as malformed); font_load_file never reads name and loads it.
+[font]
+schema = 1
+name = "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn"
+width = 1
+height = 1
+gap = 1
+
+[[entries]]
+char = "A"
+---
+#
+

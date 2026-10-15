@@ -8,39 +8,63 @@ orientation for someone who's about to read or change the source.
 ## Build
 
 ```sh
-cyrius deps                              # resolve stdlib + darshana
+cyrius deps                              # resolve stdlib + darshana + bayan-cyml
 cyrius build src/main.cyr build/bnrmr    # compile (binary: bnrmr)
 ./build/bnrmr "AGNOS"                    # smoke render
-cyrius test                              # 2828 assertions
-cyrius bench tests/bannermanor.bcyr      # render hot-path CPU bench
+cyrius test                              # 3006 assertions
+sh scripts/golden.sh                     # 285 invocations, byte for byte
+cyrius fuzz tests/bannermanor.fcyr       # font-parser regression gate
+cyrius bench tests/bannermanor.bcyr      # render path, CPU and write side
 ```
+
+CI (`.github/workflows/ci.yml`) runs all of these, plus the doc pin check,
+`cyrius deps --locked`, `cyrius lint --strict`, the AGNOS and aarch64
+cross-builds and `cyrius coverage --min 100`. A change that moves a
+rendered byte fails the golden suite's `frozen` tier. If the move is
+intended (it should not be in 1.x, see ADR 0002), re-baseline with
+`sh scripts/golden.sh --update` and review the diff.
 
 Toolchain pin: `cyrius = "6.7.9"` in `cyrius.cyml`.
 
 ## Source layout
 
-- `src/main.cyr` — entry point. CLI parsing via `lib/flags.cyr`,
-  flag dispatch, `--list-fonts` / `--version` / `--help`, input
-  length cap.
+- `src/main.cyr` — `main()` only: flag table, validation, font
+  resolution, the call to the renderer. Nothing can include it (its
+  entry statement runs at include time), so logic goes in `src/cli.cyr`.
+- `src/cli.cyr` — the testable rest of the CLI: `--font` name
+  containment, the `--width` / `--pad` / `--align` parsers, joining the
+  text under the 1 KB cap, `--help`, `--list-fonts`.
 - `src/render.cyr` — `render(font, text, len)` shim that preserves the
   M1 byte-identity contract; delegates to `render_layout` with
   neutral options.
-- `src/layout.cyr` — layout orchestrator. Frame resolution, alignment,
-  padding, color emission, TTY-aware default truncation. Pure helpers
-  for `fit_chars` / `banner_width` / `align_pad` / `parse_uint` /
-  `_usable_cols`. The stdout width and TTY probes go through darshana's
-  `tty_winsize`; `src/` issues no ioctl of its own.
+- `src/layout.cyr` — layout orchestrator and the write path. Frame
+  resolution, alignment, padding, color emission, TTY-aware default
+  truncation. Pure helpers for `fit_chars` / `banner_width` /
+  `align_pad` / `parse_uint` / `_usable_cols`. The stdout width and TTY
+  probes go through darshana's `tty_winsize`; every write goes through
+  `_emit` (`lib/io.cyr`'s `file_write`), and runs of spaces and newlines
+  go out as one write. `src/` uses no raw syscall numbers
+  ([architecture note 001](../architecture/001-no-raw-syscall-numbers.md)).
 - `src/font.cyr` — `Font` struct + CYML loader. Validates schema,
   geometry, body shape. Also exposes the header-only loader used by
-  `--list-fonts`.
+  `--list-fonts`. `_slurp` is the one file read for every font reader;
+  each loader is a read plus a parse (`_font_parse`,
+  `_font_header_parse`), and the fuzz harness drives the parse halves
+  directly.
 - `src/flf.cyr` — legacy figlet `.flf` read adapter. Read-only; same
-  `Font*` shape as the CYML loader.
+  `Font*` shape as the CYML loader (`flf_load_file` = `_slurp` +
+  `_flf_parse`).
 - `src/font_block.cyr` — embedded `block` font. Default when no
   `--font` is passed.
 - `src/color.cyr` — `--color` plumbing. SGR primitives sourced from
   darshana; no inline ANSI.
 - `fonts/<name>.cyml` — in-tree default fonts (block / slim / big).
-- `tests/bannermanor.{tcyr,bcyr,fcyr}` — tests / benchmarks / fuzz stub.
+- `tests/bannermanor.{tcyr,bcyr,fcyr}` — tests / benchmarks / fuzz
+  harness. `tests/fixtures/` holds the malformed and boundary fonts
+  they share.
+- `tests/golden/` + `scripts/golden.sh` — the golden suite: case list,
+  fixture CWDs, and the three committed record files (`frozen`, `error`,
+  `snapshot`).
 
 A deeper module-by-module description lives in
 [`../development/state.md`](../development/state.md) under "Source".
@@ -65,3 +89,5 @@ Short version:
 The v1.0 surface is frozen, but design questions that go beyond v1.0
 (variable per-glyph `.flf` widths, Unicode, smushing rules, etc.)
 should land as ADRs first. See [`../adr/template.md`](../adr/template.md).
+What the freeze covers, exactly (error paths, failed writes, malformed
+fonts), is [ADR 0002](../adr/0002-freeze-scope-error-paths-and-malformed-input.md).

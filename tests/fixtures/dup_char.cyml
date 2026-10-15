@@ -1,0 +1,18 @@
+# Malformed fixture: two entries declare char "A". font_load_file must reject.
+[font]
+schema = 1
+name = "dup_char"
+width = 1
+height = 1
+gap = 1
+
+[[entries]]
+char = "A"
+---
+#
+
+[[entries]]
+char = "A"
+---
+.
+

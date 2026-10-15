@@ -1,0 +1,28 @@
+# Golden-suite fixture (tests/golden/cases.sh). No name key: renders, but --list-fonts calls it malformed.
+[font]
+schema = 1
+description = "no name key"
+width = 3
+height = 3
+gap = 1
+
+[[entries]]
+char = " "
+---
+...
+...
+...
+
+[[entries]]
+char = "H"
+---
+#.#
+###
+#.#
+
+[[entries]]
+char = "I"
+---
+###
+.#.
+###

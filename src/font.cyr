@@ -8,10 +8,25 @@
 # with `char = "X"` in the entry's TOML header and a body of HEIGHT
 # rows × WIDTH bytes using `.` (background) and `#` (stroke).
 
-# cyml parser moved out of the core stdlib into `bayan` as of cyrius 6.2.x.
-include "lib/bayan.cyr"
+# The CYML parser: bayan's CYML-only sublib (issue 0013). It ships in
+# bayan's dist/ beside the full bundle and is pinned in cyrius.cyml
+# [deps.bayan]. Through 1.2.0 this included the whole bundle from the
+# stdlib (JSON, YAML, TOML, PDF, bigint, dtoa) to reach nine functions,
+# which was about two thirds of the binary. The parser code is the same
+# bytes: bayan 1.5.13's bayan-cyml.cyr carries the bundle's cyml.cyr
+# section unchanged. The sublib has no unprefixed `cyml_*` names (those
+# are the bundle's deprecated compat shims), so calls use `bayan_cyml_*`.
+#
+# Never call bayan_cyml_expand_value (or its old name cyml_expand_value)
+# from a font loader: `${file:}` / `${env:}` expansion is for package
+# metadata only, and a font is untrusted input (F-004; ADR 0001).
+include "lib/bayan-cyml.cyr"
 include "lib/string.cyr"
 include "lib/io.cyr"
+# fl_alloc / fl_free: the font readers' file buffers are transient, so
+# they are freed after the parse instead of left in the bump heap
+# (issue 0014). Everything that outlives the load stays on alloc().
+include "lib/freelist.cyr"
 
 # Font struct layout (48 bytes):
 #    0: width      (i64) cols per glyph
@@ -31,21 +46,33 @@ enum FontField {
     F_SIZE = 48;
 }
 
+# The CYML schema-1 limits (ADR 0001). MAX_WIDTH / MAX_HEIGHT / MAX_GAP
+# are part of the frozen v1.0 format, NOT tunables: src/flf.cyr's
+# FLF_MAX_WIDTH / FLF_MAX_HEIGHT happen to share their values and are
+# the ones a future change may raise (ADR 0002 ruling 3).
 enum FontLimits {
-    MAX_FILE_BYTES = 65536;     # 64 KB cap on font files (ADR 0001)
-    MAX_WIDTH = 64;
-    MAX_HEIGHT = 32;
-    MAX_GLYPHS = 256;           # bnrmr policy cap, enforced at the
-    # `count > 256` guard below. Previously
-    # documented as the CYML parser's own
-    # limit; that rationale is stale twice
-    # over — lib/cyml.cyr folded into bayan,
-    # and bayan then replaced its fixed
-    # 256-entry scan with a counted heap
-    # alloc. The cap is ours alone now.
+    MAX_FILE_BYTES = 65536;     # a file of this size or more is refused
+    # (`total >= MAX_FILE_BYTES`), so the
+    # largest loadable font is 65535 bytes
+    MAX_WIDTH = 64;             # schema 1: 1..64 columns per glyph
+    MAX_HEIGHT = 32;            # schema 1: 1..32 rows per glyph
+    MAX_GAP = 16;               # schema 1: 0..16 columns between glyphs
+    MAX_GLYPHS = 256;           # bnrmr policy cap on entries, enforced
+    # at the `count > MAX_GLYPHS` guard below.
+    # Previously documented as the CYML
+    # parser's own limit; that rationale is
+    # stale twice over — lib/cyml.cyr folded
+    # into bayan, and bayan then replaced its
+    # fixed 256-entry scan with a counted heap
+    # alloc. NOT the binding limit: CHARMAP_SIZE
+    # is, since every entry needs a distinct
+    # char below 128.
+    CHARMAP_SIZE = 128;         # chars 0..127; the charmap is a byte per char
     SUPPORTED_SCHEMA = 1;
-    HDR_NAME_CAP = 64;          # font name buffer (NUL-terminated)
-    HDR_DESC_CAP = 256;         # font description buffer (NUL-terminated)
+    HDR_NAME_CAP = 64;          # font name buffer (NUL-terminated, so a
+    # name of 63 bytes or fewer)
+    HDR_DESC_CAP = 256;         # description buffer (NUL-terminated, so
+    # 255 bytes or fewer)
     PARSER_INT_CAP = 1048576;   # F-002 — shared cap for hand-written
     # integer parsers (parse_uint in
     # layout.cyr, _font_get_int here,
@@ -73,18 +100,18 @@ enum FontHdrField {
     H_SIZE = 40;
 }
 
-fn font_hdr_width(h): i64  { return load64(h); }
-fn font_hdr_height(h): i64 { return load64(h + 8); }
-fn font_hdr_gap(h): i64    { return load64(h + 16); }
-fn font_hdr_name(h): i64   { return load64(h + 24); }   # cstring
-fn font_hdr_desc(h): i64   { return load64(h + 32); }   # cstring
+fn font_hdr_width(h): i64  { return load64(h + H_WIDTH); }
+fn font_hdr_height(h): i64 { return load64(h + H_HEIGHT); }
+fn font_hdr_gap(h): i64    { return load64(h + H_GAP); }
+fn font_hdr_name(h): i64   { return load64(h + H_NAME); }   # cstring
+fn font_hdr_desc(h): i64   { return load64(h + H_DESC); }   # cstring
 
 # ---- accessors ----
 
-fn font_width(f): i64  { return load64(f); }
-fn font_height(f): i64 { return load64(f + 8); }
-fn font_gap(f): i64    { return load64(f + 16); }
-fn font_count(f): i64  { return load64(f + 24); }
+fn font_width(f): i64  { return load64(f + F_WIDTH); }
+fn font_height(f): i64 { return load64(f + F_HEIGHT); }
+fn font_gap(f): i64    { return load64(f + F_GAP); }
+fn font_count(f): i64  { return load64(f + F_COUNT); }
 
 # Return glyph_idx for char c, or -1.
 #
@@ -95,8 +122,8 @@ fn font_count(f): i64  { return load64(f + 24); }
 # only, so 'a' falls back to 'A' on that font.
 fn font_glyph_index(f, c): i64 {
     if (c < 0) { return 0 - 1; }
-    if (c >= 128) { return 0 - 1; }
-    var charmap = load64(f + 40);
+    if (c >= CHARMAP_SIZE) { return 0 - 1; }
+    var charmap = load64(f + F_CHARMAP);
     var v = load8(charmap + c);
     if (v != 0) { return v - 1; }
     # Fallback: lowercase ASCII tries the uppercase slot.
@@ -111,9 +138,9 @@ fn font_glyph_index(f, c): i64 {
 
 # Pointer to the `width` bytes for (glyph_idx, row).
 fn font_row(f, idx, row): i64 {
-    var w = load64(f);
-    var h = load64(f + 8);
-    return load64(f + 32) + (idx * h + row) * w;
+    var w = load64(f + F_WIDTH);
+    var h = load64(f + F_HEIGHT);
+    return load64(f + F_ROWS) + (idx * h + row) * w;
 }
 
 # ---- font construction (used by both file loader and embedded path) ----
@@ -121,21 +148,21 @@ fn font_row(f, idx, row): i64 {
 # Allocate a zero-filled Font with reserved rows + charmap storage.
 # Returns Font* or 0 on OOM.
 fn font_new(width, height, gap, count): i64 {
-    var f = alloc(48);
+    var f = alloc(F_SIZE);
     if (f == 0) { return 0; }
     var rows_bytes = count * height * width;
     var rows = alloc(rows_bytes);
     if (rows == 0) { return 0; }
-    var charmap = alloc(128);
+    var charmap = alloc(CHARMAP_SIZE);
     if (charmap == 0) { return 0; }
-    memset(rows, 32, rows_bytes);
-    memset(charmap, 0, 128);
-    store64(f, width);
-    store64(f + 8, height);
-    store64(f + 16, gap);
-    store64(f + 24, count);
-    store64(f + 32, rows);
-    store64(f + 40, charmap);
+    memset(rows, 32, rows_bytes);               # 32: background is a space
+    memset(charmap, 0, CHARMAP_SIZE);
+    store64(f + F_WIDTH, width);
+    store64(f + F_HEIGHT, height);
+    store64(f + F_GAP, gap);
+    store64(f + F_COUNT, count);
+    store64(f + F_ROWS, rows);
+    store64(f + F_CHARMAP, charmap);
     return f;
 }
 
@@ -143,8 +170,8 @@ fn font_new(width, height, gap, count): i64 {
 # of range (0..127) or already mapped to another glyph.
 fn font_set_char(f, idx, c): i64 {
     if (c < 0) { return 0 - 1; }
-    if (c >= 128) { return 0 - 1; }
-    var charmap = load64(f + 40);
+    if (c >= CHARMAP_SIZE) { return 0 - 1; }
+    var charmap = load64(f + F_CHARMAP);
     if (load8(charmap + c) != 0) { return 0 - 1; }   # duplicate
     store8(charmap + c, idx + 1);
     return 0;
@@ -152,10 +179,63 @@ fn font_set_char(f, idx, c): i64 {
 
 # Write a single row of `width` bytes into glyph idx. Returns 0.
 fn font_set_row(f, idx, row, src): i64 {
-    var w = load64(f);
+    var w = load64(f + F_WIDTH);
     var dst = font_row(f, idx, row);
     memcpy(dst, src, w);
     return 0;
+}
+
+# ---- reading a font file ----
+
+# Read the whole of `path` into a fresh fl_alloc'd buffer of `cap`
+# bytes. Returns the buffer and stores the byte count at *out_len, or
+# returns 0 when the path is not a regular file, cannot be opened or
+# read, is empty, or holds `cap` bytes or more. The caller owns the
+# buffer and must fl_free it.
+#
+# All three font readers go through here (font_load_file and
+# font_header_load with MAX_FILE_BYTES, flf_load_file with
+# FLF_MAX_FILE). Until 1.4.1 each carried its own copy of this block,
+# and 1.1.4's regular-file gate had to be pasted into all three.
+#
+# The regular-file gate (1.1.4) runs before any open: a character
+# device (`--font /dev/zero.flf`) would otherwise be read up to the
+# cap, and open(2) on a FIFO blocks until a writer appears. STAT_MODE,
+# not a hardcoded 24, because st_mode's offset differs per arch: 24 on
+# x86_64-Linux, 16 on aarch64-Linux. S_IFMT 0xF000, S_IFREG 0x8000.
+# `&` binds tighter than `!=` in cyrius, so the test reads as written.
+#
+# Open, read and close go through lib/io.cyr (file_open / file_read /
+# file_close), never raw syscall numbers: the raw x86_64 numbers are
+# other calls on AGNOS (1.1.4). A read error ends the loop like EOF
+# does, so a file that fails on its first read is "empty" (rejected),
+# and one that fails later is a truncated buffer, which every parser
+# here rejects unless the cut falls exactly on an entry boundary (see
+# the 1.1.4 audit, refuted finding 3).
+fn _slurp(path, cap, out_len): i64 {
+    var st[144];
+    if (xstat(path, &st) != 0) { return 0; }
+    var mode = load32(&st + STAT_MODE);
+    if (mode & 0xF000 != 0x8000) { return 0; }
+    var fd = file_open(path, 0, 0);
+    if (fd < 0) { return 0; }
+    var buf = fl_alloc(cap);
+    if (buf == 0) { file_close(fd); return 0; }
+    var total = 0;
+    var rgo = 1;
+    while (rgo == 1) {
+        var n = file_read(fd, buf + total, cap - total);
+        if (n <= 0) { rgo = 0; }
+        else {
+            total = total + n;
+            if (total >= cap) { rgo = 0; }
+        }
+    }
+    file_close(fd);
+    if (total <= 0) { fl_free(buf); return 0; }
+    if (total >= cap) { fl_free(buf); return 0; }   # at or over the cap
+    store64(out_len, total);
+    return buf;
 }
 
 # ---- CYML loader ----
@@ -286,7 +366,7 @@ fn _font_get_char(hdr, hlen): i64 {
                                     if (ch >= 0) {
                                         if (close_at < hlen) {
                                             if (load8(hdr + close_at) == 34) {
-                                                if (ch < 128) { found = ch; }
+                                                if (ch < CHARMAP_SIZE) { found = ch; }
                                             }
                                         }
                                     }
@@ -338,7 +418,9 @@ fn _font_decode_body(body, blen, width, height, dst): i64 {
             pos = pos + 1;
         } else {
             # Last row — body may end here, or have trailing \n (cyml_trim
-            # actually strips that, so EOF is expected).
+            # actually strips that, so EOF is expected). Nothing after
+            # that \n is read, so surplus rows load and are ignored:
+            # issue 0008, scheduled for 1.5.0 (ADR 0002 ruling 3).
             if (pos < blen) {
                 if (load8(body + pos) != 10) { return 0 - 1; }
             }
@@ -351,61 +433,50 @@ fn _font_decode_body(body, blen, width, height, dst): i64 {
 # Load a font from a CYML file path. Returns Font* on success, 0 on error.
 # Errors are bounded — file size, schema, geometry, body shape are all validated.
 fn font_load_file(path): i64 {
-    # Read up to MAX_FILE_BYTES (64 KB)
-    # 1.1.4 — reject anything that is not a regular file before we
-    # commit to a read. A character device (`--font /dev/zero`) would
-    # otherwise be read up to the size cap, and a FIFO would block the
-    # process indefinitely. STAT_MODE (not a hardcoded 24) because the
-    # st_mode offset differs per arch — 24 on x86_64-Linux, 16 on
-    # aarch64-Linux. S_IFMT 0xF000, S_IFREG 0x8000.
-    var st[144];
-    if (xstat(path, &st) != 0) { return 0; }
-    var mode = load32(&st + STAT_MODE);
-    if (mode & 0xF000 != 0x8000) { return 0; }
-    var fd = file_open(path, 0, 0);
-    if (fd < 0) { return 0; }
-    var buf = alloc(65536);
-    if (buf == 0) { file_close(fd); return 0; }
-    var total = 0;
-    var rgo = 1;
-    while (rgo == 1) {
-        var n = file_read(fd, buf + total, 65536 - total);
-        if (n <= 0) { rgo = 0; }
-        else {
-            total = total + n;
-            if (total >= 65536) { rgo = 0; }
-        }
-    }
-    file_close(fd);
-    if (total <= 0) { return 0; }
-    if (total >= 65536) { return 0; }       # over cap (no trailing room)
+    var len_box[8];
+    store64(&len_box, 0);
+    var buf = _slurp(path, MAX_FILE_BYTES, &len_box);
+    if (buf == 0) { return 0; }
+    var f = _font_parse(buf, load64(&len_box));
+    # Safe to free: the Font copies its rows and charmap out of the
+    # buffer, and the cyml doc pointing into it is dropped here.
+    fl_free(buf);
+    return f;
+}
 
-    # Parse via lib/bayan.cyr
-    var doc = cyml_parse(buf, total);
+# Parse a CYML font held in memory (`total` bytes at `buf`) into a
+# Font*, or 0. The whole of font_load_file after the read, split out so
+# the read buffer can be freed in one place and so the fuzz harness
+# (tests/bannermanor.fcyr) can drive the parser without a file.
+fn _font_parse(buf, total): i64 {
+    if (total <= 0) { return 0; }
+    if (total >= MAX_FILE_BYTES) { return 0; }
+    # Parse via lib/bayan-cyml.cyr
+    var doc = bayan_cyml_parse(buf, total);
     if (doc == 0) { return 0; }
 
     # File header: schema, width, height, gap
-    var fhdr = cyml_doc_header(doc);
-    var fhlen = cyml_doc_header_len(doc);
+    var fhdr = bayan_cyml_doc_header(doc);
+    var fhlen = bayan_cyml_doc_header_len(doc);
     var schema = _font_get_int(fhdr, fhlen, "schema", 6);
     var width = _font_get_int(fhdr, fhlen, "width", 5);
     var height = _font_get_int(fhdr, fhlen, "height", 6);
     var gap = _font_get_int(fhdr, fhlen, "gap", 3);
-    if (schema != 1) { return 0; }
+    if (schema != SUPPORTED_SCHEMA) { return 0; }
     if (width <= 0) { return 0; }
-    if (width > 64) { return 0; }
+    if (width > MAX_WIDTH) { return 0; }
     if (height <= 0) { return 0; }
-    if (height > 32) { return 0; }
+    if (height > MAX_HEIGHT) { return 0; }
     if (gap < 0) { return 0; }
-    if (gap > 16) { return 0; }
+    if (gap > MAX_GAP) { return 0; }
 
-    var count = cyml_doc_entry_count(doc);
+    var count = bayan_cyml_doc_entry_count(doc);
     if (count <= 0) { return 0; }
     # MAX_GLYPHS. bayan used to stop its own scan at 256 entries (silent
     # truncation) so this could not fire; it no longer caps. No observable
     # change for bnrmr — the shipped fonts carry 69 entries, and a
     # >256-entry file is still rejected here rather than loading short.
-    if (count > 256) { return 0; }
+    if (count > MAX_GLYPHS) { return 0; }
 
     var f = font_new(width, height, gap, count);
     if (f == 0) { return 0; }
@@ -413,11 +484,11 @@ fn font_load_file(path): i64 {
     var ei = 0;
     var err = 0;
     while (ei < count && err == 0) {
-        var e = cyml_doc_entry(doc, ei);
-        var ehdr = cyml_entry_header(e);
-        var ehlen = cyml_entry_header_len(e);
-        var ebody = cyml_entry_body(e);
-        var eblen = cyml_entry_body_len(e);
+        var e = bayan_cyml_doc_entry(doc, ei);
+        var ehdr = bayan_cyml_entry_header(e);
+        var ehlen = bayan_cyml_entry_header_len(e);
+        var ebody = bayan_cyml_entry_body(e);
+        var eblen = bayan_cyml_entry_body_len(e);
 
         var ch = _font_get_char(ehdr, ehlen);
         if (ch < 0) { err = 1; }
@@ -556,74 +627,71 @@ fn _font_get_str(hdr, hlen, key, key_len, dst, dst_cap): i64 {
 # font_load_file: no glyph decode, no rows allocation. Used by
 # --list-fonts. Returns FontHeader* on success, 0 on error.
 #
-# Validates the same geometry bounds as font_load_file so a header
-# loaded here is "trustworthy enough to print." Missing optional fields
+# Validates the same header gates as font_load_file (schema, geometry)
+# so a header loaded here is "trustworthy enough to print". It never
+# decodes an entry, so a font with a bad body lists clean, and it
+# requires `name`, which font_load_file never reads: the two loaders
+# can disagree in both directions. Missing optional fields
 # (description) become empty strings.
+#
+# --list-fonts calls this once per font file. Through 1.2.0 each call
+# left its 64 KB read buffer in the bump heap (accepted risk A-09);
+# since 1.4.1 it is freed before returning (issue 0014), so the
+# listing's memory no longer grows with the number of fonts.
 fn font_header_load(path): i64 {
-    # 1.1.4 — reject anything that is not a regular file before we
-    # commit to a read. A character device (`--font /dev/zero`) would
-    # otherwise be read up to the size cap, and a FIFO would block the
-    # process indefinitely. STAT_MODE (not a hardcoded 24) because the
-    # st_mode offset differs per arch — 24 on x86_64-Linux, 16 on
-    # aarch64-Linux. S_IFMT 0xF000, S_IFREG 0x8000.
-    var st[144];
-    if (xstat(path, &st) != 0) { return 0; }
-    var mode = load32(&st + STAT_MODE);
-    if (mode & 0xF000 != 0x8000) { return 0; }
-    var fd = file_open(path, 0, 0);
-    if (fd < 0) { return 0; }
-    var buf = alloc(65536);
-    if (buf == 0) { file_close(fd); return 0; }
-    var total = 0;
-    var rgo = 1;
-    while (rgo == 1) {
-        var n = file_read(fd, buf + total, 65536 - total);
-        if (n <= 0) { rgo = 0; }
-        else {
-            total = total + n;
-            if (total >= 65536) { rgo = 0; }
-        }
-    }
-    file_close(fd);
-    if (total <= 0) { return 0; }
-    if (total >= 65536) { return 0; }
+    var len_box[8];
+    store64(&len_box, 0);
+    var buf = _slurp(path, MAX_FILE_BYTES, &len_box);
+    if (buf == 0) { return 0; }
+    var h = _font_header_parse(buf, load64(&len_box));
+    fl_free(buf);       # the FontHeader holds copies, never pointers into buf
+    return h;
+}
 
-    var doc = cyml_parse(buf, total);
+# The header half of font_header_load, over an in-memory buffer.
+fn _font_header_parse(buf, total): i64 {
+    if (total <= 0) { return 0; }
+    if (total >= MAX_FILE_BYTES) { return 0; }
+    var doc = bayan_cyml_parse(buf, total);
     if (doc == 0) { return 0; }
 
-    var fhdr = cyml_doc_header(doc);
-    var fhlen = cyml_doc_header_len(doc);
+    var fhdr = bayan_cyml_doc_header(doc);
+    var fhlen = bayan_cyml_doc_header_len(doc);
     var schema = _font_get_int(fhdr, fhlen, "schema", 6);
     var width  = _font_get_int(fhdr, fhlen, "width", 5);
     var height = _font_get_int(fhdr, fhlen, "height", 6);
     var gap    = _font_get_int(fhdr, fhlen, "gap", 3);
-    if (schema != 1) { return 0; }
+    if (schema != SUPPORTED_SCHEMA) { return 0; }
     if (width <= 0)  { return 0; }
-    if (width > 64)  { return 0; }
+    if (width > MAX_WIDTH)  { return 0; }
     if (height <= 0) { return 0; }
-    if (height > 32) { return 0; }
+    if (height > MAX_HEIGHT) { return 0; }
     if (gap < 0)     { return 0; }
-    if (gap > 16)    { return 0; }
+    if (gap > MAX_GAP)    { return 0; }
 
-    var h = alloc(40);
+    var h = alloc(H_SIZE);
     if (h == 0) { return 0; }
-    var name_buf = alloc(64);
+    var name_buf = alloc(HDR_NAME_CAP);
     if (name_buf == 0) { return 0; }
-    var desc_buf = alloc(256);
+    var desc_buf = alloc(HDR_DESC_CAP);
     if (desc_buf == 0) { return 0; }
     store8(name_buf, 0);
     store8(desc_buf, 0);
 
-    # name is required by the ADR; description is optional.
-    if (_font_get_str(fhdr, fhlen, "name", 4, name_buf, 64) < 0) {
+    # The listing needs a name, so this loader requires one (and one
+    # that fits HDR_NAME_CAP); font_load_file never reads it. That is
+    # why a font can render and still list as malformed. description
+    # is optional, and one too long for HDR_DESC_CAP is dropped, not
+    # truncated.
+    if (_font_get_str(fhdr, fhlen, "name", 4, name_buf, HDR_NAME_CAP) < 0) {
         return 0;
     }
-    _font_get_str(fhdr, fhlen, "description", 11, desc_buf, 256);
+    _font_get_str(fhdr, fhlen, "description", 11, desc_buf, HDR_DESC_CAP);
 
-    store64(h, width);
-    store64(h + 8, height);
-    store64(h + 16, gap);
-    store64(h + 24, name_buf);
-    store64(h + 32, desc_buf);
+    store64(h + H_WIDTH, width);
+    store64(h + H_HEIGHT, height);
+    store64(h + H_GAP, gap);
+    store64(h + H_NAME, name_buf);
+    store64(h + H_DESC, desc_buf);
     return h;
 }

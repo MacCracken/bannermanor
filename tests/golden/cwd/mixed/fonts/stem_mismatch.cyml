@@ -1,0 +1,29 @@
+# Golden-suite fixture (tests/golden/cases.sh). name differs from the file stem: lists as other, loads only as stem_mismatch.
+[font]
+schema = 1
+name = "other"
+description = "name is not the stem"
+width = 3
+height = 3
+gap = 1
+
+[[entries]]
+char = " "
+---
+...
+...
+...
+
+[[entries]]
+char = "H"
+---
+#.#
+###
+#.#
+
+[[entries]]
+char = "I"
+---
+###
+.#.
+###

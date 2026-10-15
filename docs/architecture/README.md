@@ -6,4 +6,9 @@ Not decisions (those live in [`../adr/`](../adr/)) and not guides (those live in
 
 ## Items
 
-_Empty. Add a numbered entry (`001-kebab-case-title.md`) the first time the code has a non-obvious invariant a reader can't derive. Do not write entries for decisions — those are ADRs._
+| # | Note | In short |
+|---|---|---|
+| [001](001-no-raw-syscall-numbers.md) | No raw syscall numbers in `src/` | The stdout writes were portable by a three-way coincidence; the font readers used the same pattern and were broken on AGNOS for four releases. |
+| [002](002-cyrius-restores-lib-from-the-lock.md) | `cyrius build` / `bench` restore `lib/` from the lock | Swapping a file in `lib/` to A/B a dependency silently measures the locked version twice. |
+
+Add the next as `003-kebab-case-title.md`.

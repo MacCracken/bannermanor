@@ -1,0 +1,29 @@
+# Golden-suite fixture (tests/golden/cases.sh). width = 0: both loaders reject it.
+[font]
+schema = 1
+name = "width0"
+description = "width is 0"
+width = 0
+height = 3
+gap = 1
+
+[[entries]]
+char = " "
+---
+...
+...
+...
+
+[[entries]]
+char = "H"
+---
+#.#
+###
+#.#
+
+[[entries]]
+char = "I"
+---
+###
+.#.
+###

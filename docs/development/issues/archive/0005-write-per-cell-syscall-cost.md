@@ -3,7 +3,7 @@
 **Reported**: 2026-08-25
 **Version**: 1.1.4 (P(-1) audit, O-001)
 **Reporter**: maintainer (P(-1) hardening pass)
-**Status**: **open** — deferred from 1.1.4
+**Status**: **fixed in 1.4.1** (2026-10-15), by Option 1. Option 2 remains on the roadmap with issue 0009.
 **Severity**: performance / self-inflicted
 
 ## Observation
@@ -61,3 +61,49 @@ write per frame. `cyrius.cyml` has anticipated this since 1.1.2.
 - Colored output byte-identical on a real pty (`script -qec`).
 - `--width 4096` render cost within noise of natural-width render cost.
 - A B4 benchmark subject covering the write path.
+
+## Fix (shipped 1.4.1) — Option 1
+
+`src/layout.cyr` writes runs of spaces and newlines from buffers allocated
+once per process: 4096 spaces, the most any frame source allows, and 64
+newlines, `PAD_CAP`. A left pad, a gap or a `--pad` block is therefore one
+write instead of one per byte. The inter-glyph gap is written straight from
+the space buffer. Glyph rows are still one write each, and darshana's
+`tty_sgr` / `tty_sgr_reset` calls did not move, so colored rows interleave
+exactly as before. Every write goes through `_emit` → `lib/io.cyr`'s
+`file_write` (accepted risk A-10 normalized at the same time).
+
+Measured on archaemenid, cyrius 6.7.9, against the 1.2.0 binary:
+
+| | `write(2)` calls (qemu -strace) | wall time, whole process (500 runs) |
+|---|---|---|
+| `bnrmr AGNOS` | 50 → 50 | 567–578 → 562 µs |
+| `--width 4096 --align center AGNOS` | 10,215 → 55 | 4.2 → 0.56 ms |
+| `--width 4096 --align right A` | 20,465 → 15 | 7.7 → 0.55 ms |
+| `--pad 64 --font big HI` | 156 → 30 | |
+
+In process, the new B4 bench subject (`tests/bannermanor.bcyr`, fd 1 on
+`/dev/null`) puts the 4096-column centered render at 21 µs against 18 µs
+at natural width. It was 3.3 ms before.
+
+The natural-width render did get about 0.9 µs slower in process: 18.0 µs
+against 17.1 µs. That is the cost of the extra call layers (`_emit` →
+`file_write` → `sys_write`) on each of its 50 writes. It does not show at
+the process level, where the smaller binary (issue 0013) more than pays
+for it.
+
+## Acceptance
+
+- Piped output byte-identical across the full golden suite: **yes**. The
+  frozen tier of `scripts/golden.sh` matches the 1.2.0 binary.
+- Colored output byte-identical on a real pty: **yes**. The suite's pty leg
+  is 112 cases through script(1), every `--color` spelling included.
+- `--width 4096` render cost within noise of natural width: **yes** at
+  the process level (562 vs 564 µs); 21 vs 18 µs in process.
+- A B4 benchmark subject covering the write path: **yes**, three rows.
+
+## Not done here
+
+Option 2, one write per row, is roadmap 1.5.0 together with issue 0009
+(checked writes). It needs darshana's `_buf` SGR composers so that a
+colored row can be assembled in one buffer.

@@ -1,24 +1,41 @@
-# bannermanor benchmarks — render hot-path CPU work.
+# bannermanor benchmarks — the render path, CPU side and write side.
 #
-# Captures the CPU side of bnrmr's render pipeline so a trend can detect
-# regressions between releases (the M7 / docs/benchmarks.md goal). The
-# stdout-write side is NOT benchmarked here. That is a gap, not a
-# principle: the earlier claim that it is "bounded by terminal/pipe
-# throughput, not bnrmr's code" is false — render_layout issues one
-# write(2) per glyph cell and per pad space (28,637 calls to emit
-# 28,679 bytes for a wide banner), so the ceiling is bnrmr's own
-# syscall rate. A B4 subject for it is deferred; see docs/benchmarks.md
-# Point 5. What follows is the CPU-side work:
+# A trend for catching regressions between releases (docs/benchmarks.md),
+# not an absolute performance claim. Subjects:
 #
+#   B0 — _calibration       an empty call through the same harness: the
+#                           per-op floor every other row sits on, printed
+#                           so a row near it is read as "at the floor"
 #   B1 — block_font_embed   build the embedded font (alloc + glyph copy)
-#   B2 — font_load_file     parse fonts/block.cyml end-to-end
+#   B2 — font_load_file     read + parse fonts/block.cyml end to end
 #   B3 — fit_chars          layout math hot loop (batched for clock cost)
+#   B4 — render_layout      the write path, with fd 1 on /dev/null:
+#        natural            "AGNOS", block font, no layout flags
+#        width 4096 center  the same, --width 4096 --align center
+#        width 4096 right   "A", --width 4096 --align right
 #
-# Run via `cyrius bench`. Patterns follow lib/bench.cyr header guidance
-# (batch_size large enough to amortize ~240 ns clock_gettime overhead).
+# B4 is new in 1.4.1 (issue 0005). Through 1.2.0 the write side was not
+# benchmarked, at first on the false premise that it was "bounded by
+# terminal/pipe throughput, not bnrmr's code". It is bnrmr's code: the
+# renderer issued one write(2) per pad space and per gap column, so the
+# 4096-column rows cost about 200 times the natural one. B4 is what shows
+# the fix: with chunked runs the three rows sit within a small factor of
+# each other, the bytes copied into /dev/null being the only difference.
+#
+# B4 must not write its banners where the report goes. Every timed render
+# goes to /dev/null, and fd 1 is put back before bench_report prints. A
+# render that wrote to the real stdout would put about 20 KB of banner
+# into the report and time the terminal, not bnrmr.
+#
+# Run via `cyrius bench tests/bannermanor.bcyr`; record a run with
+# `cyrius bench tests/bannermanor.bcyr | sh scripts/bench-history.sh`.
 
 include "src/layout.cyr"
 include "src/font_block.cyr"
+
+fn bench_calibration(): i64 {
+    return 0;
+}
 
 fn bench_embed(): i64 {
     return block_font_embed();
@@ -41,12 +58,57 @@ fn bench_fit_chars_hot(): i64 {
     return acc;
 }
 
+# Point fd 1 at /dev/null for a timed region. Returns the saved fd 1, or
+# -1 (and the B4 rows are skipped, loudly).
+fn _b4_mute(): i64 {
+    var dn = sys_open("/dev/null", O_WRONLY, 0);
+    if (dn < 0) { return 0 - 1; }
+    var saved = syscall(SYS_DUP, 1);
+    if (saved < 0) { sys_close(dn); return 0 - 1; }
+    if (sys_dup2(dn, 1) < 0) { sys_close(dn); sys_close(saved); return 0 - 1; }
+    sys_close(dn);
+    return saved;
+}
+
+fn _b4_unmute(saved): i64 {
+    sys_dup2(saved, 1);
+    sys_close(saved);
+    return 0;
+}
+
+# One B4 row: `iters` renders of text[0..len) with the given layout.
+fn _b4_row(name, font, text, len, width, align, iters): i64 {
+    var b = bench_new(name);
+    var saved = _b4_mute();
+    if (saved < 0) {
+        println("  B4 skipped: could not point fd 1 at /dev/null");
+        return 0;
+    }
+    bench_batch_start(b);
+    var i = 0;
+    while (i < iters) {
+        render_layout(font, text, len, width, align, 0, COLOR_NONE);
+        i = i + 1;
+    }
+    bench_batch_stop(b, iters);
+    _b4_unmute(saved);
+    bench_report(b);
+    return 0;
+}
+
 fn main(): i64 {
     alloc_init();
 
+    var b0 = bench_new("_calibration");
+    bench_batch_start(b0);
+    var i = 0;
+    while (i < 1000000) { bench_calibration(); i = i + 1; }
+    bench_batch_stop(b0, 1000000);
+    bench_report(b0);
+
     var b1 = bench_new("block_font_embed");
     bench_batch_start(b1);
-    var i = 0;
+    i = 0;
     while (i < 10000) { bench_embed(); i = i + 1; }
     bench_batch_stop(b1, 10000);
     bench_report(b1);
@@ -65,8 +127,13 @@ fn main(): i64 {
     bench_batch_stop(b3, 100000);
     bench_report(b3);
 
+    var f = block_font_embed();
+    _b4_row("render_layout natural (AGNOS)", f, "AGNOS", 5, 0, ALIGN_LEFT, 2000);
+    _b4_row("render_layout width 4096 center (AGNOS)", f, "AGNOS", 5, 4096, ALIGN_CENTER, 2000);
+    _b4_row("render_layout width 4096 right (A)", f, "A", 1, 4096, ALIGN_RIGHT, 2000);
+
     return 0;
 }
 
 var r = main();
-syscall(60, r);
+syscall(SYS_EXIT, r);

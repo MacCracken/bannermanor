@@ -29,6 +29,11 @@ include "lib/io.cyr"
 # this enum declared its own `TIOCGWINSZ = 0x5413` beside darshana's —
 # silent only because the two values happen to agree.
 enum LayoutLimits {
+    MAX_INPUT = 1024;         # the 1 KB render-text cap (M1 contract,
+    # kept through every release since):
+    # render_layout refuses more, and
+    # src/main.cyr sizes its join buffer
+    # from it
     DEFAULT_FRAME = 80;       # fallback when neither --width nor TTY size known
     WS_COL_CAP   = 4096;      # F-008 — clamp terminal cols. Defense in
     # depth: nothing in bnrmr currently sizes
@@ -194,10 +199,13 @@ fn banner_width(n, gw, gap): i64 {
 # width `gw` and inter-glyph gap `gap`. Frame=0 → unlimited (returns
 # len). Always rounds down at the glyph boundary — never partial.
 #
-# If `frame` is smaller than a single glyph (`frame < gw`), returns 0
-# and the caller emits no banner. That's the contract: a clean "no
-# output" beats a half-rendered glyph or a fixed-width attempt that
-# overflows the frame. Surfaced in --help under --width.
+# If `frame` is smaller than a single glyph (`frame < gw`), returns 0.
+# render_layout then draws no glyph, but it still writes `height` rows:
+# each is empty, SGR-wrapped on a TTY when --color is set, plus any
+# --pad lines. So the output is blank rows, not "no output". That is the
+# frozen behavior (accepted risk A-05), and --help says so under
+# --width. A blank row beats a half-rendered glyph or a row that
+# overflows the frame. (Until 1.4.1 this comment promised "no output".)
 fn fit_chars(frame, gw, gap, len): i64 {
     if (frame <= 0) { return len; }
     if (len <= 0) { return 0; }
@@ -222,25 +230,91 @@ fn align_pad(banner, frame, align): i64 {
     return 0;
 }
 
-# Emit n spaces on stdout. Cheap loop; not perf-critical (only run
-# once per banner row).
-fn _write_spaces(n): i64 {
-    var i = 0;
-    while (i < n) {
-        syscall(1, 1, " ", 1);
-        i = i + 1;
+# ---- the write path ----
+#
+# Every byte bnrmr writes to stdout outside lib/ goes through `_emit`:
+# layout's banner rows here, and src/cli.cyr's --list-fonts printers.
+# (println, fmt_int and darshana's tty_sgr write on their own.) Through
+# 1.2.0 there were 19 inline `syscall(1, 1, ...)` sites instead. They
+# were correct on every target, but only because the write syscall
+# happens to be number 1 on x86_64-Linux and AGNOS, and aarch64
+# translates it (accepted risk A-10). file_write is lib/io.cyr's
+# per-target wrapper, the same route the font readers took in 1.1.3.
+#
+# The write return is not checked yet. Issue 0009 (roadmap 1.5.0, ADR
+# 0002 ruling 2) is where that changes, and this function is where it
+# will happen.
+fn _emit(buf, n): i64 {
+    file_write(1, buf, n);
+    return 0;
+}
+
+# A run of `n` copies of one byte, written in as few writes as possible
+# (issue 0005, Option 1). Through 1.2.0, pads and gaps went out one
+# write(2) per byte, so a banner's cost scaled with its WIDTH:
+# `--width 4096 --align right A` made 4,091 one-byte writes per row.
+# The bytes and their order are unchanged. Only the syscall boundaries
+# moved, and darshana's SGR writes stay exactly where they were, so
+# colored rows interleave as before.
+#
+# The run buffers are allocated on first use (bump alloc) and kept for
+# the process, which is safe because nothing that renders ever calls
+# alloc_reset(); the fuzz harness resets, and never renders. 4096
+# spaces cover any left pad in one write, since every frame source is
+# capped at 4096 (WIDTH_CAP, WS_COL_CAP); 64 newlines cover PAD_CAP.
+# Longer runs, which no CLI input can reach, take several writes. If
+# the allocation is refused, the old one-byte loop runs instead, which
+# is slow but byte-identical.
+var _run_spaces = 0;
+var _run_newlines = 0;
+
+# The run buffer for `fill` (32 or 10), allocated on first use; 0 if the
+# allocation was refused. Stores its capacity at *cap_out.
+fn _run_buf(fill, cap_out): i64 {
+    var src = _run_spaces;
+    var cap = WS_COL_CAP;
+    if (fill == 10) { src = _run_newlines; cap = PAD_CAP; }
+    if (src == 0) {
+        src = alloc(cap);
+        if (src != 0) {
+            memset(src, fill, cap);
+            if (fill == 10) { _run_newlines = src; } else { _run_spaces = src; }
+        }
+    }
+    store64(cap_out, cap);
+    return src;
+}
+
+fn _emit_run(fill, n): i64 {
+    if (n <= 0) { return 0; }
+    var cap_box[8];
+    var src = _run_buf(fill, &cap_box);
+    var cap = load64(&cap_box);
+    if (src == 0) {
+        var one[8];
+        store8(&one, fill);
+        var k = 0;
+        while (k < n) { _emit(&one, 1); k = k + 1; }
+        return 0;
+    }
+    var left = n;
+    while (left > 0) {
+        var chunk = left;
+        if (chunk > cap) { chunk = cap; }
+        _emit(src, chunk);
+        left = left - chunk;
     }
     return 0;
 }
 
+# Emit n spaces on stdout.
+fn _write_spaces(n): i64 {
+    return _emit_run(32, n);
+}
+
 # Emit n newlines on stdout.
 fn _write_newlines(n): i64 {
-    var i = 0;
-    while (i < n) {
-        syscall(1, 1, "\n", 1);
-        i = i + 1;
-    }
-    return 0;
+    return _emit_run(10, n);
 }
 
 # Render `text[0..len-1]` with `font` honoring layout opts:
@@ -268,7 +342,7 @@ fn _write_newlines(n): i64 {
 #     after the reset so the next line's prompt isn't tinted.
 fn render_layout(font, text, len, width, align, pad, color): i64 {
     if (len < 0) { return 0 - 1; }
-    if (len > 1024) { return 0 - 1; }
+    if (len > MAX_INPUT) { return 0 - 1; }
     if (font == 0) { return 0 - 2; }
 
     var w = font_width(font);
@@ -316,6 +390,16 @@ fn render_layout(font, text, len, width, align, pad, color): i64 {
 
     _write_newlines(pad);
 
+    # The inter-glyph gap is at most MAX_GAP (16) spaces from any loader,
+    # well inside one run buffer, so the glyph loop writes it straight
+    # from there rather than through _write_spaces: a natural-width
+    # render is about half gap writes, and each helper layer costs a call
+    # per write. A gap the buffer cannot hold in one write (only a
+    # hand-built Font could have one) takes the chunked path instead.
+    var gap_cap[8];
+    var gap_src = 0;
+    if (g > 0 && g <= WS_COL_CAP) { gap_src = _run_buf(32, &gap_cap); }
+
     var r = 0;
     while (r < h) {
         _write_spaces(lpad);
@@ -331,19 +415,15 @@ fn render_layout(font, text, len, width, align, pad, color): i64 {
             var c = load8(text + i);
             var gi = font_glyph_index(font, c);
             if (gi < 0) { gi = space_idx; }
-            syscall(1, 1, font_row(font, gi, r), w);
-            if (i + 1 < draw_len) {
-                var gn = 0;
-                while (gn < g) {
-                    syscall(1, 1, " ", 1);
-                    gn = gn + 1;
-                }
+            _emit(font_row(font, gi, r), w);
+            if (i + 1 < draw_len && g > 0) {
+                if (gap_src != 0) { _emit(gap_src, g); } else { _write_spaces(g); }
             }
             i = i + 1;
         }
 
         if (emit_color == 1) { tty_sgr_reset(); }
-        syscall(1, 1, "\n", 1);
+        _emit("\n", 1);
         r = r + 1;
     }
 

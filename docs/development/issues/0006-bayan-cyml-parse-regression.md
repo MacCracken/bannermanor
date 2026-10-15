@@ -54,3 +54,14 @@ profiling — the four `_font_get_int` calls are 3.5–5%.
 bnrmr uses 9 symbols from bayan and links the whole bundle to get them,
 which is also most of its 516 KB binary. A narrower CYML-only entry point
 from bayan would address both this and the footprint.
+
+## Update — 1.4.1 (2026-10-15)
+
+1.4.1 replaced the full bayan bundle with its CYML-only sublib (issue
+0013). The parser code is byte-identical, so as expected B2 did not move:
+87–91 µs across the 1.4.1 runs, against 90.6 µs at 1.2.0
+(`docs/benchmarks.md` Point 7). The smaller module did not help, which
+counts somewhat against the instruction-cache explanation above. Still
+undiagnosed, still upstream. The next step is a profile of
+`bayan_cyml_parse` itself, or an A/B against a bayan with the two-pass
+marker scan reverted, built the way architecture note 002 describes.

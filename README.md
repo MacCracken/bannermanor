@@ -28,7 +28,7 @@ Fourth member of the terminal-aesthetics set:
 
 ## Status
 
-**1.2.0**. Stable. CLI flag surface, CYML font format (schema 1),
+**1.4.1**. Stable. CLI flag surface, CYML font format (schema 1),
 default font set, and `.flf` adapter contract are all frozen at their
 v1.0.0 shape — see the v1.0.0 [`Breaking`](CHANGELOG.md) section for
 what locked.
@@ -71,10 +71,12 @@ The frozen surface:
 ## Build
 
 ```sh
-cyrius deps                            # resolve stdlib + darshana
+cyrius deps                            # resolve stdlib + darshana + bayan-cyml
 cyrius build src/main.cyr build/bnrmr  # compile (binary: bnrmr)
-cyrius test                            # 2828 assertions
-cyrius bench tests/bannermanor.bcyr    # render hot-path CPU bench
+cyrius test                            # 3006 assertions
+sh scripts/golden.sh                   # the frozen-output contract, byte for byte
+cyrius fuzz tests/bannermanor.fcyr     # font-parser regression gate
+cyrius bench tests/bannermanor.bcyr    # render path, CPU and write side
 ```
 
 Toolchain pin: `cyrius = "6.7.9"` in `cyrius.cyml` is the source of
@@ -87,7 +89,8 @@ truth.
 - [`docs/adr/`](docs/adr/) — design decisions (why X over Y)
 - [`docs/development/state.md`](docs/development/state.md) — live state snapshot
 - [`docs/development/roadmap.md`](docs/development/roadmap.md) — what ships next, and why
-- [`docs/benchmarks.md`](docs/benchmarks.md) — render-path CPU trend
+- [`docs/benchmarks.md`](docs/benchmarks.md) — render-path benchmark trend
+- [`docs/architecture/`](docs/architecture/) — non-obvious invariants
 - [`docs/audit/`](docs/audit/) — security audit reports
 
 ## License

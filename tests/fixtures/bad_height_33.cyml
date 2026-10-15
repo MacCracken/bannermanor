@@ -1,0 +1,45 @@
+# Malformed fixture: height = 33, one past schema 1's MAX_HEIGHT. Both loaders must reject.
+[font]
+schema = 1
+name = "bad_height_33"
+width = 1
+height = 33
+gap = 1
+
+[[entries]]
+char = "A"
+---
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+

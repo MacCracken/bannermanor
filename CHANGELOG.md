@@ -4,6 +4,127 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.4.1] — 2026-10-15 (the contract checked in CI, one write per run, CYML-only bayan, a real fuzz gate)
+
+This release lands the roadmap's planned 1.3.0 (*prove the contract*),
+1.3.1 (*documentation precision*), 1.4.0 (*one write per row*, Option 1)
+and 1.4.1 (*tests, fixtures and dead code*) together, numbered 1.4.1. No
+1.3.x or 1.4.0 was tagged. Items the roadmap gated on ADR 0002 are not in
+it. ADR 0002 was proposed and accepted within this release, which
+unblocks them for 1.5.0 (under Notes).
+
+**No rendered banner byte changes.** The release commits the golden
+matrix that 1.1.3, 1.1.4 and 1.2.0 ran from shell history: 285
+invocations, 112 of them on a pty. Its frozen tier is byte-identical to
+the 1.2.0 binary on x86_64, and on aarch64 under qemu. The one stdout
+change on purpose: `--help` gains a line for the `--` terminator. The
+same usage block follows a flag-parse error, so 20 records changed, by
+exactly those two lines.
+
+### Added
+
+- **The golden suite, committed and gated** — `scripts/golden.sh` and `tests/golden/`. 285 invocations in three tiers, one file each:
+  - **frozen**: 210 valid renders, every byte of stdout and stderr plus the exit code. Every font, the `.flf` path and its malformed fixtures, every alignment / width / pad / color spelling, `COLUMNS` at 0, junk, 5000 and past the int cap, flags after text, repeated flags, `--`, 200 and 255 positionals, the 1 KB cap from both sides. Of these, 112 run on a pty through script(1) at seven window sizes (24×80, 24×40, 24×11, 24×1, 24×0, 0×0, 50×5000), plus every `--color` spelling. `stdout_is_tty` gates color and the default truncation width, so a pipe capture alone only ever recorded the suppression path.
+  - **error**: 58 invalid invocations. The exit codes are contract; the text is what ADR 0002 rules on.
+  - **snapshot**: 17 records of `--help`, `--version` and `--list-fonts` (from the repo root, from a directory with no `fonts/`, and from a fixture tree of malformed, nameless, nested, over-long and control-byte fonts). The `--version` record is checked against `VERSION`, then normalized, so a version bump doesn't churn it.
+  - Every invocation runs under `env -i` with a pinned CWD and stdin on `/dev/null`. A missing script(1) fails the suite rather than skipping the pty leg, and so does an empty tier. `--update` re-baselines.
+  - Verified red: a one-byte change to a block glyph fails the frozen tier, and so does swapping one color in the rainbow cycle (pty leg). Verified green: on x86_64, on the aarch64 build under qemu-aarch64, and under `bash --posix`.
+- **CI gates** (`.github/workflows/ci.yml`), in addition to the pin check, build and tests:
+  - `cyrius deps --locked`
+  - `cyrius lint --strict --strict-deferrals` over `src/` and the three harnesses
+  - `--agnos` and `--aarch64` cross-builds
+  - a smoke step that checks the binary's `--version` against `VERSION`
+  - the golden suite and the fuzz harness
+  - `cyrius coverage --min 100`
+
+  Each one was checked to fail when it should before it was wired in.
+- **The fuzz harness verifies something** ([issue 0010](docs/development/issues/archive/0010-fuzz-harness-is-a-no-op.md)). `tests/bannermanor.fcyr` was a 16-line stub that always passed. It now mutates 26 seeds 1,000 times each (every non-empty fixture, the three fonts, `modular.flf`) and pushes each mutant through all three parsers: 78,003 parses in about 2 s. It checks:
+  - geometry within the format's limits, and a charmap that points at real glyphs;
+  - glyph rows without control bytes (F-001), and header strings that are NUL-terminated and scrubbed (F-011);
+  - with a `PROT_NONE` page right after every input, so an over-read faults.
+
+  It checks its own oracle before trusting it, and requires that a real share of mutants load. Verified red three ways: the `.flf` C1 scrub removed, a one-byte over-read in `_flf_eol`, and the header scrub removed.
+- **`src/cli.cyr`**: everything in the CLI except `main()`, moved out of `src/main.cyr` so the suite can include it. That file ends in a bare `_agnos_entry();`, which exits the process at include time. The move was pure: golden identical, binary size identical. For the first time, tests cover `build_font_path`, the only containment on the CYML `--font` branch.
+- **Suite 2828 → 3006** (+178):
+  - the CLI helpers, including `_parse_count_flag`'s exit-code sentinels (`-0`, `007`, `+5`, u64 wrap) and the 1 KB join from both sides;
+  - `_write_scrubbed` (F-012) and `_print_padded`, captured through a pipe;
+  - a check that `--help` names every registered flag and `--`;
+  - `cmd_list_fonts` and `build_argv_array`;
+  - `resolve_frame` on a pty, and the font constructors;
+  - the size gates at 65,535 / 65,536 bytes (CYML, in memory and through a real file) and 1,048,575 / 1,048,576 (`.flf`);
+  - every schema-1 geometry limit from both sides, zero entries, the 128-entry ceiling (chars 0–127 all load; a 129th repeats), 257 entries;
+  - the `.flf` envelope (64 / 65 columns, 32 / 33 rows, 1024 / 1025 comment lines);
+  - empty files, and a FIFO made at run time (all three readers return at once).
+
+  `t_reader_dir_path` is re-documented: since 1.1.4 it tests the `S_IFREG` gate, not the read-error path its comment described.
+- **12 fixtures** in `tests/fixtures/` for the cases the 1.1.4 audit found missing: width 0 and 65, height 33, gap 17, a duplicate `char`, a non-ASCII `char`, a 64-byte `name`, surplus body rows (issue 0008, pinned as today's behavior), empty `.cyml` and `.flf`, 1025 comment lines, 65-column `.flf` rows.
+- **Write-path benchmarks**: B0 `_calibration` (the harness floor), and three B4 `render_layout` rows with fd 1 on `/dev/null`. `scripts/bench-history.sh` records a `cyrius bench` run into `docs/benchmarks/history.csv`, and fails if it parses fewer rows than the bench declares. See `docs/benchmarks.md` Point 7.
+- **[ADR 0002](docs/adr/0002-freeze-scope-error-paths-and-malformed-input.md), Accepted**: what the v1.0 freeze covers. Proposed and accepted as written on 2026-10-15.
+  1. Diagnostics are not frozen; exit codes are.
+  2. Exit 0 after a failed write is a defect.
+  3. Structurally malformed fonts are not protected; metadata rules (`name` against the stem) are 2.0; bnrmr's own limits may widen.
+- **Issue register reconciled.**
+  - 0007, 0008, 0009, 0011, 0012, 0013 and 0014 are filed; the 1.1.4 audit had named them without files.
+  - 0007 and 0011 turned out already fixed by 1.2.0's toolchain and are archived (see Notes).
+  - The audit gains a second dated errata block mapping every deferral to its issue.
+  - `docs/development/issues/README.md` states the numbering rule: never reuse, never cite a number before its file exists.
+- **`docs/architecture/`**: its first two notes. 001: why `src/` uses no raw syscall numbers, and the AGNOS reader bug that shipped for four releases. 002: `cyrius build` / `bench` silently restore `lib/` from the lock (re-verified at 6.7.9), and how to A/B a dependency correctly.
+
+### Changed
+
+- **Pads, gaps and `--pad` lines are written in runs, not a byte at a time** ([issue 0005](docs/development/issues/archive/0005-write-per-cell-syscall-cost.md), Option 1). Same bytes in the same order; darshana's SGR writes did not move. `write(2)` calls, against 1.2.0:
+
+  | invocation | calls before | calls after |
+  |---|---|---|
+  | `--width 4096 --align right A` | 20,465 | 15 |
+  | `--width 4096 --align center AGNOS` | 10,215 | 55 |
+  | `--pad 64 --font big HI` | 156 | 30 |
+  | `--list-fonts` | 55 | 40 |
+
+  Whole-process wall time for the wide renders is down from 4.2 ms (centered) and 7.7 ms (right) to ~0.56 ms. That is within noise of a natural-width render, which is 562 µs, down from ~570.
+- **Every stdout write in `src/` goes through `lib/io.cyr`'s `file_write`**, via `_emit` in `src/layout.cyr`. That replaces 19 raw `syscall(1, 1, …)` sites (accepted risk A-10), which were correct on all three targets only by coincidence (architecture note 001). The `--list-fonts` printers now use the same chunked runs.
+- **bayan: the CYML-only sublib instead of the full bundle** ([issue 0013](docs/development/issues/archive/0013-full-bayan-bundle-linked.md)).
+  - New `[deps.bayan]` pins `dist/bayan-cyml.cyr` at tag 1.5.13, the bayan the cyrius 6.7.9 stdlib bundles, so the parser code is byte-identical. `bayan` leaves `[deps].stdlib`.
+  - The nine calls are renamed to the canonical `bayan_cyml_*`; the unprefixed names were deprecated shims.
+  - Binary size: **597,040 → 244,184 bytes** (x86_64), 609,104 → 260,352 (AGNOS), 756,672 → 338,296 (aarch64).
+- **The font readers share one `_slurp`, and free their buffers** ([issue 0014](docs/development/issues/archive/0014-transient-read-buffers-never-freed.md)). The three copies of the read loop are now one function. Each reader splits into a read and a parse (`_font_parse`, `_font_header_parse`, `_flf_parse`), and frees the read buffer after the parse (`fl_alloc` / `fl_free`, first use in `src/`). `--list-fonts` no longer grows with the number of fonts: peak RSS for 200 fonts went from 16.7 MB to 13.3 MB, the same as for 3. `[deps].stdlib` gains `freelist` and `mmap`.
+- **Named limits wired in** ([issue 0012](docs/development/issues/archive/0012-dead-geometry-constants.md)).
+  - Five enums of limits and struct offsets were declared and never used. They now replace the literals, the three different meanings of `32` in `src/flf.cyr` kept apart.
+  - New `MAX_GAP` and `CHARMAP_SIZE`. `MAX_INPUT` moved to where the cap is enforced.
+  - `flf.cyr`'s "match font.cyr" comment, which would have tied the `.flf` envelope to schema 1, now says why they differ.
+  - Codegen-neutral: an enum constant compiles to the same instruction as its literal.
+- **`src/test.cyr` deleted.** It was an empty `return 0` from the scaffold that bare `cyrius test` counted as a passing suite. `[build].test` now names `tests/bannermanor.tcyr`. The test and bench harnesses exit through `SYS_EXIT`, not a raw 60, which is `exit` on x86_64 only.
+- **`--help`** lists `--` ("end of flags: everything after it is TEXT, even a word starting with '-'"). This changes `--help` stdout bytes, as 1.1.4's help edit did, and also the usage block after a parse error. These are golden snapshot and error records; under ADR 0002 ruling 1 it is documentation, not a frozen byte.
+- **`src/main.cyr`** — `--version` literal bumped to `bnrmr 1.4.1`.
+
+### Documentation
+
+- **`docs/guides/fonts.md`** ([issue 0017](docs/development/issues/archive/0017-docs-precision-pass.md)) — two validation lists, one per loader, and where they disagree. `name` documented as a listing requirement and a stem convention, not a render-path check. The exact size gate (65,535 bytes loads, 65,536 does not), zero geometry as out of range, the zero-entry rejection, and 128 (not 256) as the binding entry limit.
+- **ADR 0001** — a 1.4.1 amendment with the same facts. It also writes down F-004's rule, until now only in audit prose: a font loader never calls `bayan_cyml_expand_value`.
+- **Source comments** — `src/color.cyr` no longer claims a separator-less `brightX` (it exits 1). `src/layout.cyr` no longer promises "no output" for a sub-glyph `--width` (it writes blank rows).
+- **CHANGELOG repairs** — [1.1.3]'s retracted "benchmarks are flat" bullet now opens with a superseded pointer, since a deep link reached it without the retraction. [1.1.4]'s fold seams are closed, and its two suite counts reconciled.
+- **`docs/development/state.md`** rewritten. The stale **Unreleased** paragraph (shipped in 1.1.4) is gone, the version log is in order, and the benchmark line counts the real points. The consumers line names agora (embeds `bnrmr "AGORA"` art), anuenue (documents the `bnrmr | anuenue` pipeline), agnos (stages `/bin/bnrmr`) and agnoshi (its launch example), instead of `_None yet._`.
+- **Pointers** — README, `docs/guides/getting-started.md`, `CLAUDE.md` (the roadmap pointer no longer says "1.2.x onward") and `scripts/doc-pin-check.sh` (the roadmap-exclusion comment, and the darshana scoping comment, now that `[deps.bayan]` follows that section).
+- **`docs/development/roadmap.md`** — cleared of everything this release completed. Every remaining item is retargeted, and the issue register is current.
+
+### Notes
+
+- **Verification.**
+  - `cyrius build` clean for x86_64, `--agnos` and `--aarch64`.
+  - `cyrius lint --strict --strict-deferrals` 0 warnings on all of `src/` and the three harnesses.
+  - `cyrius test` 3006 passed, 0 failed, on x86_64 and on aarch64 (`cyrius test --aarch64`, qemu).
+  - Golden 285/285 on x86_64 and on the aarch64 build under qemu-aarch64.
+  - `cyrius fuzz` 78,003 parses, 0 violations.
+  - `cyrius coverage --min 100` (36/36 public functions, was 25/36).
+  - `cyrius deps --locked` green, and `scripts/doc-pin-check.sh` green.
+- **Correction to [1.2.0]: one output change shipped unrecorded** ([issue 0007](docs/development/issues/archive/0007-positionals-past-128-dropped.md)). Through 1.1.5 the stdlib flag parser silently dropped positionals past the 128th: `bnrmr` with 200 one-word arguments rendered 128 and exited 0. 1.2.0's `lib/` re-vendor brought a parser that grows instead, so all 200 render. That is a fix, but 1.2.0's "golden matrix byte-identical to 1.1.5" claim was true only because the matrix had no case past 128. It has one now (`positionals-200-past-128`).
+- **Also fixed by 1.2.0's toolchain, unnoticed**: `--list-fonts` no longer hangs on a FIFO under `fonts/` ([issue 0011](docs/development/issues/archive/0011-list-fonts-hangs-on-fifo.md); accepted risk A-08). cyrius 6.6.10's `is_dir` asks `stat(2)` instead of `open(2)`.
+- **Unblocked by ADR 0002, not in this release**: diagnostics to stderr, plus the `--color` error text's missing `bright-<name>` (issue 0016); checked writes (issue 0009); rejecting surplus CYML body rows (issue 0008); raising the `.flf` geometry ceilings. The ADR was accepted after this release's code was done, so these wait for roadmap 1.5.0. Each changes behavior on purpose and gets its own entry.
+- **Natural-width renders cost ~0.9 µs more in process** (B4: 18.0 against 17.1 µs). That is the price of the extra call layers through the `file_write` wrapper on each of its 50 writes. It does not show at the process level, where the smaller binary more than pays for it (562 against ~570 µs per invocation).
+- **B2 (`font_load_file`) did not move.** The sublib is the same parser code; [issue 0006](docs/development/issues/0006-bayan-cyml-parse-regression.md)'s ~45% bayan regression remains, as expected.
+- **Not runtime-verified on AGNOS** (no AGNOS target here): the `file_write` route, freelist's AGNOS `mmap` (2 MB-granular there) and the sublib. All three compile through their AGNOS branches, which the stdlib's other AGNOS consumers already use.
+- **Toolchain unchanged at 6.7.9**, darshana at 1.3.0. cyrius 6.7.12 is out; moving to it is a separate change, with the bump checklist.
+
 ## [1.2.0] — 2026-10-12 (cyrius 6.7.9, darshana 1.3.0, stdout probes through darshana)
 
 The cyrius 6.7 language minor, darshana's 1.3.0 surface, and the two terminal
@@ -91,7 +212,6 @@ the `--version` literal. Full report:
 
 - **`src/font.cyr` and `src/flf.cyr` now include `lib/io.cyr` themselves.** Both call the wrapper set directly, but neither declared it — the symbol resolved only because `src/layout.cyr` includes `io.cyr`, and it does so *after* its own `include "src/font.cyr"`. The modules now declare the dependency they use instead of inheriting it from a sibling's include order. Includes are deduplicated, so the emitted binary is unchanged (verified byte-for-byte with and without the two lines).
 
-
 - **`--width` / `--pad` accepted i64 modular wraparound (F-015).** `lib/flags.cyr`'s integer parser accumulates `n*10+d` with no overflow guard, and bnrmr validated only the post-wrap residue, so `--pad 18446744073709551617` rendered with pad=1 and `--width 18446744073709551620` exited 0 — silently defeating the caps issue 0002 froze at v1.0. Both flags are now taken as strings and parsed through `parse_uint`, which carries the F-002 `PARSER_INT_CAP` guard. Every previously-accepted spelling is preserved with its exact exit code and message — verified by A/B against the 1.1.3 binary across 38 inputs: `-0`, `-00`, `007`, `4096`, `+5`, `" 5"`, `abc`, empty and the cap boundaries are all unchanged; only the four wraparound cases move, from silent success to the correct `max` message and exit 1.
 - **`.flf` endmark detection ignored trailing whitespace (F-016).** figlet's `readfontchar()` trims trailing `ISSPACE` *first*, then takes the last remaining byte as the endmark. bnrmr trimmed only a single CR (the issue-0003 fix), so a row ending in a space or TAB latched `endmark = ' '` and the literal `@`/`#` bytes rendered as banner art. Now trims the full `{space, TAB, CR, VT, FF}` set. **Output-byte change, measured and bounded**: a 397-font differential (18 upstream figlet fonts + 376 archive fonts + every in-tree fixture + `modular.flf`) shows 8 differing glyph sets across exactly 7 fonts — **all 7 already misparse today**, and no font changes its load/reject status. `tiny.flf`, `flf_crlf.flf`, `flf_esc_glyph.flf` and `modular.flf` contain no trailing whitespace and are byte-identical.
 - **`.flf` hardblank range was narrower than the spec (F-014).** The header rejected any hardblank outside 33..126; FIGfont v2 allows any byte except NUL, LF, CR and space, and explicitly recommends DEL. 17 of the 1052 fonts in the reference corpus were rejected on byte 5 alone — including `bubble`, `digital` and `term`, three of the 18 fonts shipped with figlet itself. Widening only *admits* fonts, so nothing that loaded before can change: the hardblank→space substitution runs *before* the F-001 control scrub, so a DEL or C1 hardblank still becomes a space and never reaches stdout (covered by a new regression test).
@@ -102,7 +222,7 @@ the `--version` literal. Full report:
 
 ### Added
 
-- **`t_reader_dir_path`** — a directory path pushed through all three readers. This is the one input that separates the two guards: the open **succeeds** (so the `fd < 0` early-out does not fire) and the read then fails `EISDIR`, which must land on the `total <= 0` return. The pre-existing missing-file tests only ever exercised `fd < 0`, leaving the `file_read` error passthrough uncovered. Suite is 2762 → 2765.
+- **`t_reader_dir_path`** — a directory path pushed through all three readers. This is the one input that separates the two guards: the open **succeeds** (so the `fd < 0` early-out does not fire) and the read then fails `EISDIR`, which must land on the `total <= 0` return. The pre-existing missing-file tests only ever exercised `fd < 0`, leaving the `file_read` error passthrough uncovered. This test took the suite 2762 → 2765; the release as a whole ends at 2775 (Notes). *(1.4.1: the S_IFREG gate under Fixed now rejects a directory before the open, so this test no longer reaches the read; it pins the gate instead. The `total <= 0` return is covered by `t_reader_empty_file`.)*
 - **`scripts/doc-pin-check.sh` + a `Documented pin consistency` CI step.** Fails the build when a version or pin quoted in the docs disagrees with the file that owns it. Three sources of truth: `VERSION` (project version), `cyrius.cyml [package].cyrius` (toolchain pin — read with the exact `grep`/`sed` expression the workflows use to decide what to install, so the gate and CI can never disagree about what "the pin" is), and `cyrius.cyml [deps.darshana]`'s `tag` (darshana pin, read section-scoped so a future `[deps.<other>]` cannot be mistaken for it). Scans `README.md`, `docs/guides/*.md`, `docs/development/state.md` and `src/main.cyr`'s `--version` literal — 6 live mentions today. Runs as the **first** step in `ci.yml`, ahead of the toolchain install, because it invokes no `cyrius` at all; `release.yml` calls that workflow as its CI Gate, so tag pushes are gated by it too. This closes the class of failure behind 1.1.3's "four-release pin drift in the docs": `README.md` and `docs/guides/getting-started.md` sat on `cyrius = "6.0.1"` through the 1.1.0, 1.1.1 and 1.1.2 releases with every existing gate green, because nothing in CI reads prose — the build does not, the suite renders banners, and `release.yml`'s "Verify version" step ties the git tag to `VERSION` and stops at the repo root.
   - **Live vs historical is decided by SHAPE, not by the number.** Most stale versions in this tree are *supposed* to be stale: `CHANGELOG.md` is a per-release record, `state.md`'s dated `**N.N.N** — <date>.` paragraphs are that record in summary form, `docs/benchmarks.md` stamps each measurement point with the `**Toolchain**:` it was taken under (points 1–3 still read `6.0.1`, and rewriting them would falsify the benchmark), and `docs/development/issues/archive/` describes bugs as filed. None of those are scanned. Within the live set only declarative forms match — `cyrius = "X.Y.Z"`, a line-leading ``- **Cyrius pin**: `X.Y.Z` ``, `darshana = X.Y.Z`, a line-leading `**X.Y.Z**` *not* followed by an em dash (that em dash is the whole discriminator between README's Status line and state.md's 13-entry version log), and `"bnrmr X.Y.Z"`. Bare versions in running prose are deliberately unmatched: `state.md` alone carries `added at 1.1.3`, `(pinned, 1.1.3)`, `against 0.8.0` and `the 0.7.0 audit`, every one of them provenance.
   - **The gate asserts its own coverage.** A pattern-matching check fails the way it passes — silently, by matching nothing — so a table names which kind of claim each file must yield, and a file that yields none is a failure with its own message ("the gate found nothing to check where it must find something"), not a pass. Every mention found is printed on success, so a run listing 5 where it listed 6 is reporting that its own patterns broke rather than that the tree is clean. A line that matches a pattern but yields no extractable version is likewise an error, not a skip: `sed` passes a line it cannot rewrite straight through, and that garbage would otherwise be reported as doc drift.
@@ -126,7 +246,6 @@ the `--version` literal. Full report:
 
 - **The agnos fix itself is not runtime-verified here** — there is no agnos target in this environment. It rests on the `#ifdef` bridge inside `lib/io.cyr`, which upstream `bayan` and the rest of the stdlib's file paths already depend on. What *is* verified is that the agnos build output changed (37 507 bytes differ against a build of the pre-fix source), confirming the readers now compile through the agnos branch rather than the raw numbers.
 - **The remaining raw `syscall()` sites in `src/` are out of scope and already portable.** The stdout writes in `src/main.cyr` and `src/layout.cyr` use literal `syscall(1, 1, ...)`, and `SYS_WRITE` is `1` on both Linux and agnos, so they are correct on both by coincidence rather than by construction; the `SYS_EXIT` and `SYS_IOCTL` sites use named enum constants and the `ioctl` pair is already `#ifdef`-gated (1.1.0). Folding the writes into a named wrapper is worth doing but is not this fix.
-
 
 - **Known, not fixed: the write path issues one `write(2)` per glyph cell and per pad space.** Render cost therefore scales with banner width — 0.67 ms at natural width against 5.49 ms at `--width 4096`, an 8× difference that is almost entirely syscall overhead. Fixing it means buffering, which must interleave correctly with darshana's own unbuffered SGR writes to keep output byte-identical; deferred rather than rushed into a hardening release.
 - **Known, not fixed: `src/font.cyr` links the whole bayan bundle for 9 CYML symbols**, which is most of the 516 KB binary. The added code is unreachable and `CYRIUS_DCE=1` NOPs rather than strips it. Needs a narrower entry point from bayan.
@@ -153,7 +272,8 @@ the `--version` literal. Full report:
 ### Notes
 
 - **No API or behavior changes.** Build clean, `cyrius lint` clean (0 warnings, 0 untracked deferrals), full suite green (2762 tests). Cross-builds clean for both `--agnos` and `--aarch64`. Rendered output across all three fonts, both alignments, the `.flf` path, the `--color` path and every error path is **byte-identical to 1.1.2** except the `--version` literal.
-- **Benchmarks are flat for this release.** Holding the 6.5.35 compiler fixed and swapping only the vendored `lib/`, `font_load_file(block.cyml)` measures 87.4 / 86.6 / 87.6 µs pre-upgrade against 88.3 / 86.3 / 86.8 µs post-upgrade — bayan 1.5.2 parses no slower than 1.0.1 despite quadrupling in size. The suite *is* ~29 µs slower than the 0.9.0 baseline in `docs/benchmarks.md`, but that drift predates this bump and entered across 6.0.1 → 6.2.24, three toolchain generations that shipped without a bench point. Captured as Point 4 with the A/B table; bisecting it is filed as follow-up.
+- **Superseded at 1.1.4: this claim is wrong.** The A/B below swapped files in `lib/`, which `cyrius bench` silently restores from `cyrius.lock`, so both arms measured the same bayan. Re-measured correctly, bayan 1.5.2 made `font_load_file` ~45% slower. See [1.1.4] Documentation, `docs/benchmarks.md` Point 4, and [issue 0006](docs/development/issues/0006-bayan-cyml-parse-regression.md). The original text follows, unedited.
+  **Benchmarks are flat for this release.** Holding the 6.5.35 compiler fixed and swapping only the vendored `lib/`, `font_load_file(block.cyml)` measures 87.4 / 86.6 / 87.6 µs pre-upgrade against 88.3 / 86.3 / 86.8 µs post-upgrade — bayan 1.5.2 parses no slower than 1.0.1 despite quadrupling in size. The suite *is* ~29 µs slower than the 0.9.0 baseline in `docs/benchmarks.md`, but that drift predates this bump and entered across 6.0.1 → 6.2.24, three toolchain generations that shipped without a bench point. Captured as Point 4 with the A/B table; bisecting it is filed as follow-up.
 - **The binary roughly doubled: 237 192 → 516 528 bytes.** This is `bayan` 1.5.2 arriving with PDF, YAML and Grisu2 `dtoa` attached — `src/font.cyr` includes the whole bundle to reach `cyml_parse`. The added code is unreachable (`1122 unreachable fns, 336 820 bytes`) and `CYRIUS_DCE=1` NOPs rather than strips it, so the size is carried, not executed. Trimming it would need a narrower CYML-only entry point from bayan; filed as follow-up, not blocking.
 - **Two `lib/bayan.cyr` compiler warnings are gone** — the `assigning non-pointer to typed pointer` pair at the old bundle's TOML paths was fixed upstream. The build is now warning-free.
 

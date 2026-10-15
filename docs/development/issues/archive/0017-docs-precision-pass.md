@@ -3,7 +3,7 @@
 **Reported**: 2026-08-25
 **Version**: 1.1.4 (audit deferral)
 **Reporter**: maintainer
-**Status**: **open** — scheduled for 1.3.1 (retargeted from 1.2.1 when the toolchain and darshana move took 1.2.0)
+**Status**: **fixed in 1.4.1** (2026-10-15), except the `--color` error text, which moved to issue 0016 (see below)
 **Severity**: documentation — a font author would write a wrong font
 
 ## Scope
@@ -66,3 +66,29 @@ Document the 128-positional cap — reachable with ordinary input, since
 Every documented constraint is enforced, and every enforced constraint
 is documented — checked in both directions. No `src/` behavior change;
 the golden suite proves it.
+
+## Resolution (1.4.1)
+
+- **fonts.md / ADR 0001, items 1–7**: fixed. `docs/guides/fonts.md` now
+  has two validation lists, one per loader, and says where they
+  disagree. It states `name` as a listing requirement and a stem
+  convention, the exact size gate (65,535 bytes loads, 65,536 does not),
+  zero geometry as out of range, the zero-entry rejection, and 128 as
+  the binding entry limit. ADR 0001 has a 1.4.1 amendment with the same
+  facts, plus the `cyml_expand_value` rule (item 7). Every one of these
+  limits now has a test that pins it (`t_cyml_*`, `t_flf_*`).
+- **`src/color.cyr`**: the comment no longer claims a separator-less
+  `brightX`.
+- **`--color` error text**: **not changed in 1.4.1**. It omits the
+  `bright-<name>` alias. Changing it moves an error path's stdout bytes,
+  which ADR 0002 ruling 1 permits, but it is folded into issue 0016 so
+  the error tier is re-baselined once, when diagnostics move to stderr
+  (roadmap 1.5.0).
+- **`src/layout.cyr` / `state.md`**: the "no output" claim for a
+  sub-glyph `--width` is corrected in both.
+- **`print_usage`**: the `--` line is added. The 128-positional cap no
+  longer exists (issue 0007, fixed by 1.2.0's toolchain), so there is
+  nothing to document there.
+- **Both directions checked**: `t_cli_usage_names_every_flag` fails if a
+  registered flag (or `--`) is missing from `--help`. The fonts.md limits
+  are each pinned by a test.

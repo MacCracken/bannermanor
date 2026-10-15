@@ -3,6 +3,47 @@
 **Status**: Accepted
 **Date**: 2026-05-19
 
+> **Amendment — 1.4.1 (2026-10-15).** Precision, and one rule written down.
+> The decision stands, and the body below is left as written. Where the
+> body and this block disagree, this block describes the code.
+>
+> 1. **The validation list is `font_load_file`'s.** `--list-fonts` uses a
+>    second loader, `font_header_load`, which checks only the `[font]`
+>    block. It never decodes an entry, so a font with a bad body lists
+>    clean. It also requires `name`, which `font_load_file` never reads,
+>    so a font with no `name` renders but lists as malformed.
+>    [`../guides/fonts.md`](../guides/fonts.md#loader-validation) gives
+>    both lists.
+> 2. **`name` is a convention, not a check.** "Must match the file stem"
+>    below is not enforced anywhere: `--font NAME` loads
+>    `fonts/NAME.cyml` by stem and never reads `name`. Only the listing
+>    uses it, and the listing needs it to be at most 63 bytes. Enforcing
+>    the stem would make fonts that render today fail, which
+>    [ADR 0002](0002-freeze-scope-error-paths-and-malformed-input.md)
+>    ruling 3 keeps out of 1.x.
+> 3. **Exact limits.** "File size ≤ 64 KB" means fewer than 65,536 bytes:
+>    a file of exactly 64 KiB is refused. Geometry is width 1–64, height
+>    1–32, gap 0–16 (zero width or height is rejected, not only negative
+>    values). A font needs at least one entry. The 256-entry cap is
+>    bnrmr's policy, but the binding limit is 128: the charmap covers
+>    chars 0–127 and every entry needs a distinct one.
+> 4. **The parser moved again.** Since 1.4.1, bnrmr includes bayan's
+>    CYML-only sublib, `lib/bayan-cyml.cyr` (pinned in `cyrius.cyml`
+>    `[deps.bayan]`), not the full `lib/bayan.cyr` bundle. It contains
+>    the same parser code. The functions are the canonical
+>    `bayan_cyml_*`; the unprefixed `cyml_*` names were the bundle's
+>    deprecated compat shims.
+> 5. **A font loader never expands values.** bayan offers
+>    `bayan_cyml_expand_value` (formerly `cyml_expand_value`), which
+>    resolves `${file:...}` and `${env:...}` references. That is for
+>    package metadata a project author controls. A font file is
+>    untrusted input, so a loader that expanded it would read arbitrary
+>    files and environment variables into a banner. bnrmr's loaders have
+>    never called it. The 2026-05-20 audit (F-004) and the 2026-08-25
+>    audit both verified that, but until now the rule lived only in
+>    audit prose. Any extension to the loader, such as a per-glyph
+>    metadata key or an include mechanism, must keep it.
+
 > **Amendment — 1.1.3 (2026-08-25).** The decision stands; two facts it
 > rests on have since moved, and the body below is left as written for
 > the record.

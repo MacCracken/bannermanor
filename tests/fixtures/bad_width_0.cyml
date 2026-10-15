@@ -1,0 +1,13 @@
+# Malformed fixture: width = 0. Both loaders must reject (geometry must be >= 1, not just >= 0).
+[font]
+schema = 1
+name = "bad_width_0"
+width = 0
+height = 1
+gap = 1
+
+[[entries]]
+char = "A"
+---
+
+

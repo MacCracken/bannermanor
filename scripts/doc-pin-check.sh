@@ -113,9 +113,10 @@ is_version "$CYRIUS_PIN" || fail "the toolchain pin is not version-shaped: '$CYR
     "    cyrius = \"X.Y.Z\"" \
     "CI extracts it with this same expression and would install that string."
 
-# Section-scoped so a future [deps.<other>] with its own `tag =` cannot be read
-# as darshana's. The range ends at the next line starting with '[' (or EOF —
-# [deps.darshana] is last today); the inner filter skips the comment block above
+# Section-scoped so another [deps.<name>] with its own `tag =` cannot be read
+# as darshana's. That is no longer hypothetical: [deps.bayan] (1.4.1) follows
+# [deps.darshana] and pins its own tag. The range ends at the next line
+# starting with '[' (or EOF); the inner filter skips the comment block above
 # the tag, which itself names old pins.
 DARSHANA_PIN="$(sed -n '/^\[deps\.darshana\]/,/^\[/{ /^[[:space:]]*tag[[:space:]]*=/p; }' cyrius.cyml 2>/dev/null \
     | head -1 | sed 's/.*"\(.*\)"/\1/')"
@@ -135,13 +136,16 @@ is_version "$DARSHANA_PIN" || fail "the darshana pin is not version-shaped: '$DA
 #   docs/development/issues/archive/   bugs as filed, closed, frozen
 #   docs/adr/                          decisions as made (0001 is amended in place
 #                                      with the body preserved as the record)
-#   docs/development/roadmap.md        names TARGET versions (1.3.0, 1.4.0, ...)
-#                                      and deliberately never the shipped one —
-#                                      state.md owns that. Do NOT add it to
-#                                      LIVE_SET: rule (d) is an equality test
-#                                      against VERSION, and a target version is
-#                                      defined by not equalling it, so every
-#                                      heading here would read as drift.
+#   docs/development/roadmap.md        names TARGET versions (1.5.0, 1.6.0, ...)
+#                                      for planned work, and shipped versions
+#                                      only as provenance ("fixed in 1.4.1");
+#                                      it never states the CURRENT version as
+#                                      current — state.md owns that. Do NOT
+#                                      add it to LIVE_SET: rule (d) is an
+#                                      equality test against VERSION, and a
+#                                      target version is defined by not
+#                                      equalling it, so every heading here
+#                                      would read as drift.
 : > "$TMPD/live"
 for f in README.md docs/guides/*.md docs/development/state.md src/main.cyr; do
     [ -f "$f" ] && printf '%s\n' "$f" >> "$TMPD/live"

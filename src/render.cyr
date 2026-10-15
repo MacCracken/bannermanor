@@ -11,10 +11,6 @@
 
 include "src/layout.cyr"
 
-enum RenderLimits {
-    MAX_INPUT = 1024;       # M1 contract; kept through M2/M3/M4
-}
-
 # Render `text[0..len-1]` with `font` to stdout. Returns 0 on success,
 # -1 if input is over the 1 KB cap or len is negative, -2 if font is null.
 fn render(font, text, len): i64 {

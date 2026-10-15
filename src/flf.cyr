@@ -25,51 +25,33 @@ include "src/font.cyr"
 include "lib/string.cyr"
 include "lib/io.cyr"
 
+# The adapter's own envelope. FLF_MAX_WIDTH / FLF_MAX_HEIGHT share
+# their values with src/font.cyr's MAX_WIDTH / MAX_HEIGHT, but they are
+# NOT the same limit and must not be kept "in sync": MAX_* is CYML
+# schema 1, frozen at v1.0; FLF_MAX_* is how big a FIGfont bnrmr agrees
+# to load, which the FIGfont spec does not bound. Raising FLF_MAX_* is
+# on the roadmap for 1.5.0 (ADR 0002 ruling 3); raising MAX_* would be a
+# schema change. A comment here once said "match font.cyr", which is
+# exactly the instruction that would have changed both.
+#
+# Three different things in this file are the number 32: FLF_FIRST_CH
+# (the first glyph's char code), FLF_MAX_HEIGHT, and the space byte
+# that hardblanks and control bytes become. Only the first two are
+# named here; the space byte stays a literal, commented where used.
 enum FlfLimits {
-    FLF_MAX_FILE = 1048576;     # 1 MB cap per roadmap M6
+    FLF_MAX_FILE = 1048576;     # 1 MB; a file of this size or more is refused
     FLF_GLYPHS = 95;            # ASCII 32..126 inclusive
-    FLF_FIRST_CH = 32;
-    FLF_MAX_WIDTH = 64;         # match font.cyr MAX_WIDTH
-    FLF_MAX_HEIGHT = 32;        # match font.cyr MAX_HEIGHT
+    FLF_FIRST_CH = 32;          # char code of glyph 0
+    FLF_MAX_WIDTH = 64;         # widest glyph row, after endmarks are stripped;
+    # also the scratch stride per row
+    FLF_MAX_HEIGHT = 32;        # rows per glyph
     FLF_MAX_COMMENTS = 1024;    # absurd-but-finite cap on header comments
 }
 
 # ---- low-level parse helpers ----
-
-# Slurp `path` into a freshly alloc'd buffer up to FLF_MAX_FILE bytes.
-# Returns the buffer pointer and writes the byte count to *out_len.
-# Returns 0 on open failure, OOM, empty file, or file at/over the cap.
-fn _flf_slurp(path, out_len): i64 {
-    # 1.1.4 — reject anything that is not a regular file before we
-    # commit to a read. A character device (`--font /dev/zero`) would
-    # otherwise be read up to the size cap, and a FIFO would block the
-    # process indefinitely. STAT_MODE (not a hardcoded 24) because the
-    # st_mode offset differs per arch — 24 on x86_64-Linux, 16 on
-    # aarch64-Linux. S_IFMT 0xF000, S_IFREG 0x8000.
-    var st[144];
-    if (xstat(path, &st) != 0) { return 0; }
-    var mode = load32(&st + STAT_MODE);
-    if (mode & 0xF000 != 0x8000) { return 0; }
-    var fd = file_open(path, 0, 0);
-    if (fd < 0) { return 0; }
-    var buf = alloc(1048576);
-    if (buf == 0) { file_close(fd); return 0; }
-    var total = 0;
-    var rgo = 1;
-    while (rgo == 1) {
-        var n = file_read(fd, buf + total, 1048576 - total);
-        if (n <= 0) { rgo = 0; }
-        else {
-            total = total + n;
-            if (total >= 1048576) { rgo = 0; }
-        }
-    }
-    file_close(fd);
-    if (total <= 0) { return 0; }
-    if (total >= 1048576) { return 0; }
-    store64(out_len, total);
-    return buf;
-}
+#
+# The file read itself is src/font.cyr's `_slurp`, shared with the two
+# CYML readers (1.4.1); this adapter passes FLF_MAX_FILE as the cap.
 
 # Index of the next \n at or after `pos`, or `len` if none (EOF).
 fn _flf_eol(buf, len, pos): i64 {
@@ -128,9 +110,22 @@ fn _flf_take_int(buf, len, pos, out_end): i64 {
 fn flf_load_file(path): i64 {
     var len_box[8];
     store64(&len_box, 0);
-    var buf = _flf_slurp(path, &len_box);
+    var buf = _slurp(path, FLF_MAX_FILE, &len_box);
     if (buf == 0) { return 0; }
-    var total = load64(&len_box);
+    var f = _flf_parse(buf, load64(&len_box));
+    # Safe to free: every glyph row is copied into the Font (through the
+    # scratch below) before _flf_parse returns.
+    fl_free(buf);
+    return f;
+}
+
+# Parse a .flf font held in memory (`total` bytes at `buf`) into a
+# Font*, or 0. Split from flf_load_file at 1.4.1 so the read buffer is
+# freed in one place and the fuzz harness can drive the parser
+# directly.
+fn _flf_parse(buf, total): i64 {
+    if (total <= 0) { return 0; }
+    if (total >= FLF_MAX_FILE) { return 0; }
 
     # --- header line: "flf2a$ HH BB ML OL CL [...]\n" ---
     var hdr_end = _flf_eol(buf, total, 0);
@@ -158,7 +153,7 @@ fn flf_load_file(path): i64 {
     var height = _flf_take_int(buf, hdr_end, p, &p_box);
     p = load64(&p_box);
     if (height < 1) { return 0; }
-    if (height > 32) { return 0; }
+    if (height > FLF_MAX_HEIGHT) { return 0; }
 
     p = _flf_skip_ws(buf, hdr_end, p);
     var baseline = _flf_take_int(buf, hdr_end, p, &p_box);
@@ -186,7 +181,7 @@ fn flf_load_file(path): i64 {
     var comments = _flf_take_int(buf, hdr_end, p, &p_box);
     p = load64(&p_box);
     if (comments < 0) { return 0; }
-    if (comments > 1024) { return 0; }
+    if (comments > FLF_MAX_COMMENTS) { return 0; }
 
     # --- skip CL comment lines ---
     var cursor = hdr_end + 1;
@@ -199,16 +194,16 @@ fn flf_load_file(path): i64 {
         ci = ci + 1;
     }
 
-    # --- scratch for 95 glyphs × HH rows, max 64 cols ---
-    var scratch_bytes = 95 * height * 64;
+    # --- scratch for 95 glyphs × HH rows, FLF_MAX_WIDTH cols each ---
+    var scratch_bytes = FLF_GLYPHS * height * FLF_MAX_WIDTH;
     var rows_scratch = alloc(scratch_bytes);
     if (rows_scratch == 0) { return 0; }
-    memset(rows_scratch, 32, scratch_bytes);      # default-fill with space
+    memset(rows_scratch, 32, scratch_bytes);      # default-fill with space (32)
 
     # --- parse 95 glyph blocks ---
     var max_width = 0;
     var gi = 0;
-    while (gi < 95) {
+    while (gi < FLF_GLYPHS) {
         var endmark = 0;
         var r = 0;
         while (r < height) {
@@ -272,7 +267,7 @@ fn flf_load_file(path): i64 {
                 }
             }
 
-            if (llen > 64) { return 0; }
+            if (llen > FLF_MAX_WIDTH) { return 0; }
 
             # Copy to scratch with hardblank → space substitution.
             # Control bytes (0x00–0x1F, 0x7F, 0x80–0x9F) are replaced
@@ -287,14 +282,14 @@ fn flf_load_file(path): i64 {
             # hardblank guard to the FIGfont v2 rule; before that the
             # header rejected any hardblank < 33, so this path was
             # dead and the comment here claimed otherwise.
-            var dst = rows_scratch + (gi * height + r) * 64;
+            var dst = rows_scratch + (gi * height + r) * FLF_MAX_WIDTH;
             var col = 0;
             while (col < llen) {
                 var b = load8(buf + line_start + col);
-                if (b == hardblank) { b = 32; }
-                if (b < 32)  { b = 32; }      # C0 controls + DEL-band
-                if (b == 127) { b = 32; }     # DEL
-                if (b >= 128 && b <= 159) { b = 32; }  # C1 controls
+                if (b == hardblank) { b = 32; }       # -> space
+                if (b < 32)  { b = 32; }      # C0 controls -> space
+                if (b == 127) { b = 32; }     # DEL -> space
+                if (b >= 128 && b <= 159) { b = 32; }  # C1 controls -> space
                 store8(dst + col, b);
                 col = col + 1;
             }
@@ -313,19 +308,19 @@ fn flf_load_file(path): i64 {
     }
 
     if (max_width <= 0) { return 0; }
-    if (max_width > 64) { return 0; }
+    if (max_width > FLF_MAX_WIDTH) { return 0; }
 
     # --- assemble Font* ---
-    var f = font_new(max_width, height, 0, 95);
+    var f = font_new(max_width, height, 0, FLF_GLYPHS);
     if (f == 0) { return 0; }
 
     var idx = 0;
-    while (idx < 95) {
-        var ch = 32 + idx;
+    while (idx < FLF_GLYPHS) {
+        var ch = FLF_FIRST_CH + idx;
         if (font_set_char(f, idx, ch) < 0) { return 0; }
         var rr = 0;
         while (rr < height) {
-            var src = rows_scratch + (idx * height + rr) * 64;
+            var src = rows_scratch + (idx * height + rr) * FLF_MAX_WIDTH;
             var dst = font_row(f, idx, rr);
             memcpy(dst, src, max_width);
             rr = rr + 1;

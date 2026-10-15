@@ -8,11 +8,11 @@ cyrius = "6.7.9"
 
 [build]
 entry = "src/main.cyr"
-test = "src/test.cyr"
+test = "tests/bannermanor.tcyr"
 output = "bnrmr"
 
 [deps]
-stdlib = ["string", "fmt", "alloc", "atomic", "io", "vec", "str", "syscalls", "assert", "bench", "args", "bayan", "result", "flags", "fs", "fnptr"]
+stdlib = ["string", "fmt", "alloc", "atomic", "io", "vec", "str", "syscalls", "assert", "bench", "args", "result", "flags", "fs", "fnptr", "freelist", "mmap"]
 
 [deps.darshana]
 # What bnrmr consumes, all inside darshana's frozen v1.0 surface
@@ -34,3 +34,16 @@ stdlib = ["string", "fmt", "alloc", "atomic", "io", "vec", "str", "syscalls", "a
 git = "https://github.com/MacCracken/darshana.git"
 tag = "1.3.0"
 modules = ["dist/darshana.cyr"]
+
+[deps.bayan]
+# The CYML-only sublib, not the stdlib's full bayan bundle (issue 0013).
+# What bnrmr consumes: bayan_cyml_parse, bayan_cyml_doc_header{,_len},
+# bayan_cyml_doc_entry{,_count}, bayan_cyml_entry_header{,_len} and
+# bayan_cyml_entry_body{,_len} (src/font.cyr). 1.5.13 is the bayan the
+# cyrius 6.7.9 stdlib bundles, so the parser is byte-for-byte what 1.2.0
+# ran; its cyml.cyr section is identical to the bundle's.
+# The sublib's own stdlib needs (dist/bayan-cyml.deps: alloc, io, str,
+# string, result, syscalls) are all in [deps].stdlib above.
+git = "https://github.com/MacCracken/bayan.git"
+tag = "1.5.13"
+modules = ["dist/bayan-cyml.cyr"]

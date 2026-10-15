@@ -1,0 +1,9 @@
+# Golden-suite fixture (tests/golden/cases.sh). A header and no entries:
+# lists clean (the header loader never counts entries), fails to render.
+[font]
+schema = 1
+name = "zero_entries"
+description = "header only"
+width = 3
+height = 3
+gap = 1

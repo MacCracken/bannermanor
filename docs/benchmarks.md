@@ -1,23 +1,27 @@
 # BannerManor — Benchmarks
 
-> **What this is**: a small set of CPU-side benchmarks captured at
-> each release, used as a **trend** for regression detection rather
-> than an absolute performance claim. Three data points across M7
-> (0.7.0, 0.8.0, 0.9.0) close out the roadmap's "3-point benchmark
-> trend" item before v1.0.
+> **What this is**: a small set of benchmarks captured at each
+> release, used as a **trend** for regression detection rather than an
+> absolute performance claim. Seven points so far, 0.7.0 through 1.4.1.
+> The first three (0.7.0, 0.8.0, 0.9.0) closed the roadmap's pre-v1.0
+> "3-point benchmark trend" item.
 
 ## What we measure (and why)
 
-The rendered banner's wall-clock time is dominated by the terminal's
-write/echo loop, not by bnrmr's CPU work. To get a signal that
-actually catches regressions in bnrmr's own code, we benchmark the
-CPU-side hot path with no stdout writes in the timed region:
+Two sides of the render path. B1–B3 are CPU-side, with no stdout writes
+in the timed region. B4 (since 1.4.1) is the write side, with stdout
+pointed at `/dev/null`, so it measures bnrmr's own syscall pattern and
+not the terminal. Until 1.4.1 the write side was left out on the
+premise that it was "dominated by the terminal". It was not: through
+1.2.0, `render_layout` issued one `write(2)` per pad space (issue 0005).
 
 | ID | Subject | Why it matters |
 |----|---------|----------------|
+| B0 | `_calibration` (an empty call) | The harness floor. A row near it is "at the floor", not fast. |
 | B1 | `block_font_embed()` | Embedded-font construction — alloc + glyph data copy. Hit on every default-font invocation. |
-| B2 | `font_load_file("fonts/block.cyml")` | Full CYML file load + parser end-to-end. Hit on every `--font NAME` invocation. |
+| B2 | `font_load_file("fonts/block.cyml")` | Full CYML file read + parse end to end. Hit on every `--font NAME` invocation. |
 | B3 | `fit_chars(80, 5, 1, 12)` ×100 | Layout-math hot loop (frame=80, 5×5 block font, 12-char banner). Per-render cost. |
+| B4 | `render_layout` ×3: natural, `--width 4096` centered, `--width 4096` right-aligned | The write path. Must not scale with banner width. |
 
 Source: [`tests/bannermanor.bcyr`](../tests/bannermanor.bcyr). Run via
 `cyrius bench tests/bannermanor.bcyr`.
@@ -297,11 +301,95 @@ B2 sits above Point 5's 85 µs in BOTH rows, so that gap is the host
 Verdict: **no regression worth acting on**. B3's +0.3 ns per call is
 recorded so the next point can tell whether it is a trend.
 
+### Point 7 — 1.4.1
+
+**Captured**: 2026-10-15
+**Toolchain**: cyrius 6.7.9
+**Host**: archaemenid (AMD Ryzen 7 5800H, Linux 7.2.8), timer floor
+1.3–1.4 µs per clock read (hpet)
+**Code delta vs 1.2.0**:
+- the write path writes runs (issue 0005, Option 1), and every write
+  goes through `lib/io.cyr`'s `file_write`;
+- bayan's CYML-only sublib replaces the full bundle (same parser code,
+  issue 0013);
+- the font readers share one `_slurp` and `fl_free` their buffers
+  (issue 0014).
+
+**New subjects**: B0 `_calibration`, an empty call that shows the
+harness floor, and **B4**, the write path: three `render_layout` rows,
+timed with fd 1 on `/dev/null`. The write side had never been
+benchmarked, at first on the false premise that it was "bounded by
+terminal/pipe throughput".
+
+**B4, A/B against 1.2.0's write path.** Built from this tree, with only
+`src/layout.cyr` swapped for 1.2.0's: nothing restores `src/` (see
+architecture note 002 for why the same trick fails on `lib/`). The arms
+were run back to back, twice each:
+
+| B4 row | 1.2.0 `layout.cyr` | 1.4.1 | iters |
+|---|---|---|---|
+| natural (`AGNOS`) | 16.9 / 17.4 µs | 18.0 / 18.0 / 18.2 µs | 2 000 |
+| `--width 4096 --align center` (`AGNOS`) | **3.31 / 3.24 ms** | **20.6 / 21.5 µs** | 2 000 |
+| `--width 4096 --align right` (`A`) | **6.53 / 6.66 ms** | **5.6 / 5.8 µs** | 2 000 |
+
+The wide rows are 150× and 1,150× cheaper, and now cost about what a
+natural row does. That is issue 0005's acceptance bar. The natural row
+is **~0.9 µs slower** in process. Each of its 50 writes now passes
+through `_emit` → `file_write` → `sys_write`, and a cyrius call costs
+about 12 ns, with no inlining. An earlier cut, before gaps were written
+straight from the run buffer, cost 2.4 µs.
+
+**Whole process** (500 invocations each, wall clock; this is what a user
+sees):
+
+| invocation | 1.2.0 | 1.4.1 |
+|---|---|---|
+| `bnrmr AGNOS` | 567–578 µs | 562 µs |
+| `--width 4096 --align center AGNOS` | 4.2 ms | 0.56 ms |
+| `--width 4096 --align right A` | 7.7 ms | 0.55 ms |
+
+At process level the natural render is slightly *faster*. The binary
+shrank from 597 KB to 244 KB, which more than pays for the extra call
+layers.
+
+**B0–B3**, from the same session:
+
+| ID | Subject | 1.4.1 | vs Point 6 |
+|----|---------|-------|------------|
+| B0 | `_calibration` | **2 ns** | new |
+| B1 | `block_font_embed` | **6 ns** | noise |
+| B2 | `font_load_file(block.cyml)` | **87.4 / 91.2 µs** | flat (90.6) |
+| B3 | `fit_chars ×100` | **608 / 619 ns** | flat (672) |
+
+B2 now also pays an mmap and munmap for its 64 KB read buffer (`fl_alloc`
+takes anything over 4 KB from `mmap`), and it is flat anyway. The sublib
+is the same parser, so issue 0006's ~45% bayan regression is untouched,
+as expected.
+
+**A run under load is not a point.** Later the same day, with other
+cyrius compiles pushing the load average to 8–19, every row read 25–50%
+high, B2 included (110–118 µs), and that code had not changed. Those
+rows were discarded. If B1 or B2 moves and nothing it calls changed,
+check `/proc/loadavg` before you check the code.
+
+**History file**: `scripts/bench-history.sh` (new) appends a run to
+`docs/benchmarks/history.csv` (date, version, toolchain, host, the
+measured timer floor, row, average, iterations). It refuses an empty or
+short run. Record from a quiet machine.
+
+Verdict: **issue 0005 is fixed**: wide renders no longer scale with
+width. **No regression worth acting on.** The natural path's +0.9 µs in
+process is the price of routing writes through the per-target wrapper,
+and it does not show at the process level.
+
 ## Re-running
 
 ```sh
 cyrius bench tests/bannermanor.bcyr
+cyrius bench tests/bannermanor.bcyr | sh scripts/bench-history.sh   # record it
 ```
 
-Reports three lines, one per subject. Append a new "Point N" section
-above with the captured numbers, host context, and toolchain pin.
+Reports one line per subject (seven since 1.4.1) after the timer-floor
+line. Append a new "Point N" section above with the captured numbers,
+host context, and toolchain pin. Check `/proc/loadavg` first: a busy host
+inflates every row.

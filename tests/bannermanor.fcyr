@@ -1,16 +1,403 @@
-# bannermanor fuzz harness
+# bannermanor fuzz harness — a regression gate over the three font parsers
+# (issue 0010).
+#
+# Through 1.2.0 this file was a 16-line stub that included nothing from
+# src/, called no parser and returned 0, so `cyrius fuzz` reported
+# "1 passed" whatever the parsers did, and two CHANGELOG entries cited it.
+# Scoped honestly this time: a regression gate over the inputs already
+# known to matter, not a discovery tool. The 1.1.4 audit's 7,000 ad-hoc
+# mutations found nothing.
+#
+# What it does. Every fixture under tests/fixtures/, the three in-tree
+# fonts and modular.flf are seeds. Each seed is mutated FZ_ITERS times (one
+# to four byte-level edits: overwrite, an "interesting" byte, insert,
+# delete, truncate, duplicate a span, swap a digit run for a boundary
+# number). Each mutant goes through all three parse halves,
+# _font_parse / _font_header_parse / _flf_parse, whatever kind of file
+# the seed was, because cross-feeding is free.
+#
+# The oracles, checked on every mutant:
+#   - bounds: the mutant sits at the very end of a mapping followed by a
+#     PROT_NONE page, so a read one byte past the input faults. The
+#     process dies, cyrius fuzz counts a failure.
+#   - a Font* that loads has legal geometry (CYML schema 1, or the .flf
+#     envelope), a charmap that points at real glyphs, and glyph rows with
+#     no control byte: only ' ' and '#' from CYML, no C0 / DEL / C1 from
+#     .flf (the F-001 property).
+#   - a header that loads has legal geometry and a NUL-terminated name
+#     and description within their buffers with no control byte (F-011).
+#   - termination: the run finishing is the check.
+# Plus two checks on the harness itself, so it cannot pass vacuously:
+# the oracle must flag a deliberately bad font, and the mutants must be
+# accepted often enough that the font checks actually run.
+#
+# Deterministic: a fixed xorshift seed, so a failure reproduces exactly.
+# The report names the seed file, the iteration and the first bytes of
+# the mutant.
 
-fn fuzz_main(data, len) {
-    if (len == 0) { return 0; }
+include "src/flf.cyr"
+include "lib/mmap.cyr"
+
+enum FuzzLimits {
+    FZ_MAX = 16384;             # longest mutant; a whole number of pages
+    FZ_PAGE = 4096;
+    FZ_ITERS = 1000;            # mutants per seed
+    FZ_KIND_CYML = 0;
+    FZ_KIND_FLF = 1;
+}
+
+var _fz_state = 2685821657736338717;   # xorshift64 state (0x2545F4914F6CDD1D)
+
+fn _fz_next(): i64 {
+    var x = _fz_state;
+    x = x ^ (x << 13);
+    x = x ^ ((x >> 7) & 0x01FFFFFFFFFFFFFF);     # logical shift
+    x = x ^ (x << 17);
+    _fz_state = x;
+    return x & 0x7FFFFFFFFFFFFFFF;
+}
+
+fn _fz_below(n): i64 {
+    if (n <= 0) { return 0; }
+    return _fz_next() % n;
+}
+
+# Bytes that mean something to one of the parsers.
+var _fz_bytes = "\x00\t\n\r\x1b \"#$.=@[\\]\x7f-09";
+fn _fz_pick(): i64 {
+    var r = _fz_below(24);
+    if (r < 20) { return load8(_fz_bytes + r); }
+    if (r == 20) { return 128; }
+    if (r == 21) { return 133; }                  # NEL, a C1 control
+    if (r == 22) { return 155; }                  # CSI, a C1 control
+    return 195;                                   # a UTF-8 lead byte
+}
+
+# Numbers on either side of every limit the parsers enforce.
+fn _fz_number(): i64 {
+    var r = _fz_below(19);
+    if (r == 0) { return "0"; }
+    if (r == 1) { return "1"; }
+    if (r == 2) { return "16"; }
+    if (r == 3) { return "17"; }
+    if (r == 4) { return "32"; }
+    if (r == 5) { return "33"; }
+    if (r == 6) { return "64"; }
+    if (r == 7) { return "65"; }
+    if (r == 8) { return "95"; }
+    if (r == 9) { return "128"; }
+    if (r == 10) { return "256"; }
+    if (r == 11) { return "257"; }
+    if (r == 12) { return "1024"; }
+    if (r == 13) { return "1025"; }
+    if (r == 14) { return "65535"; }
+    if (r == 15) { return "1048576"; }
+    if (r == 16) { return "1048577"; }
+    if (r == 17) { return "99999999999999999999"; }
+    return "-1";
+}
+
+# Mutate src[0..slen) into dst; return the mutant's length (<= FZ_MAX).
+fn _fz_mutate(src, slen, dst): i64 {
+    memcpy(dst, src, slen);
+    var n = slen;
+    var k = 1 + _fz_below(4);
+    while (k > 0) {
+        var op = _fz_below(7);
+        var pos = _fz_below(n);
+        if (op == 0 && n > 0) { store8(dst + pos, _fz_below(256)); }
+        if (op == 1 && n > 0) { store8(dst + pos, _fz_pick()); }
+        if (op == 2 && n < FZ_MAX) {
+            var i = n;
+            while (i > pos) { store8(dst + i, load8(dst + i - 1)); i = i - 1; }
+            store8(dst + pos, _fz_pick());
+            n = n + 1;
+        }
+        if (op == 3 && n > 0) {
+            var j = pos;
+            while (j + 1 < n) { store8(dst + j, load8(dst + j + 1)); j = j + 1; }
+            n = n - 1;
+        }
+        if (op == 4) { n = _fz_below(n + 1); }
+        if (op == 5 && n > 0) {
+            var span = 1 + _fz_below(64);
+            if (pos + span > n) { span = n - pos; }
+            if (n + span <= FZ_MAX) {
+                memcpy(dst + n, dst + pos, span);
+                n = n + span;
+            }
+        }
+        if (op == 6 && n > 0) {
+            # Find a digit run at or after pos and swap in a boundary number.
+            var d = pos;
+            while (d < n && (load8(dst + d) < 48 || load8(dst + d) > 57)) { d = d + 1; }
+            if (d < n) {
+                var e = d;
+                while (e < n && load8(dst + e) >= 48 && load8(dst + e) <= 57) { e = e + 1; }
+                var num = _fz_number();
+                var nl = strlen(num);
+                var tail = n - e;
+                if (d + nl + tail <= FZ_MAX) {
+                    var tmp = fl_alloc(tail + 1);
+                    if (tmp != 0) {
+                        memcpy(tmp, dst + e, tail);
+                        memcpy(dst + d, num, nl);
+                        memcpy(dst + d + nl, tmp, tail);
+                        fl_free(tmp);
+                        n = d + nl + tail;
+                    }
+                }
+            }
+        }
+        k = k - 1;
+    }
+    return n;
+}
+
+fn _fz_ctl(b): i64 {
+    if (b < 32) { return 1; }
+    if (b == 127) { return 1; }
+    if (b >= 128 && b <= 159) { return 1; }
     return 0;
 }
 
-fn main() {
+var _fz_why = 0;
+
+# 0 if Font* f satisfies every invariant for its kind; 1 (with _fz_why
+# set) otherwise.
+fn _fz_check_font(f, kind): i64 {
+    var w = font_width(f);
+    var h = font_height(f);
+    var g = font_gap(f);
+    var c = font_count(f);
+    if (w < 1 || w > MAX_WIDTH) { _fz_why = "width out of range"; return 1; }
+    if (h < 1 || h > MAX_HEIGHT) { _fz_why = "height out of range"; return 1; }
+    if (g < 0 || g > MAX_GAP) { _fz_why = "gap out of range"; return 1; }
+    if (kind == FZ_KIND_FLF) {
+        if (g != 0) { _fz_why = ".flf gap != 0"; return 1; }
+        if (c != FLF_GLYPHS) { _fz_why = ".flf count != 95"; return 1; }
+    } else {
+        if (c < 1 || c > CHARMAP_SIZE) { _fz_why = "count out of range"; return 1; }
+    }
+    var ch = 0;
+    while (ch < 256) {
+        var gi = font_glyph_index(f, ch);
+        if (gi < 0 - 1 || gi >= c) { _fz_why = "charmap points past the glyphs"; return 1; }
+        ch = ch + 1;
+    }
+    var idx = 0;
+    while (idx < c) {
+        var r = 0;
+        while (r < h) {
+            var row = font_row(f, idx, r);
+            var col = 0;
+            while (col < w) {
+                var b = load8(row + col);
+                if (kind == FZ_KIND_CYML) {
+                    if (b != 32 && b != 35) { _fz_why = "CYML row byte is not space or #"; return 1; }
+                } else {
+                    if (_fz_ctl(b) == 1) { _fz_why = ".flf row carries a control byte (F-001)"; return 1; }
+                }
+                col = col + 1;
+            }
+            r = r + 1;
+        }
+        idx = idx + 1;
+    }
+    return 0;
+}
+
+fn _fz_check_str(s, cap): i64 {
+    var i = 0;
+    while (i < cap) {
+        var b = load8(s + i);
+        if (b == 0) { return 0; }
+        if (_fz_ctl(b) == 1) { _fz_why = "header string carries a control byte (F-011)"; return 1; }
+        i = i + 1;
+    }
+    _fz_why = "header string not NUL-terminated within its buffer";
+    return 1;
+}
+
+fn _fz_check_hdr(h): i64 {
+    var w = font_hdr_width(h);
+    var hh = font_hdr_height(h);
+    var g = font_hdr_gap(h);
+    if (w < 1 || w > MAX_WIDTH) { _fz_why = "header width out of range"; return 1; }
+    if (hh < 1 || hh > MAX_HEIGHT) { _fz_why = "header height out of range"; return 1; }
+    if (g < 0 || g > MAX_GAP) { _fz_why = "header gap out of range"; return 1; }
+    if (_fz_check_str(font_hdr_name(h), HDR_NAME_CAP) != 0) { return 1; }
+    if (_fz_check_str(font_hdr_desc(h), HDR_DESC_CAP) != 0) { return 1; }
+    return 0;
+}
+
+var _fz_parses = 0;
+var _fz_fonts = 0;
+var _fz_headers = 0;
+var _fz_violations = 0;
+
+fn _fz_report(seed, iter, what, buf, n): i64 {
+    _fz_violations = _fz_violations + 1;
+    if (_fz_violations > 5) { return 0; }
+    print("fuzz: VIOLATION ", 16);
+    print(what, strlen(what));
+    print(": ", 2);
+    print(_fz_why, strlen(_fz_why));
+    print(" (seed ", 7);
+    print(seed, strlen(seed));
+    print(", iteration ", 12);
+    fmt_int(iter);
+    print(", ", 2);
+    fmt_int(n);
+    println(" bytes); first bytes:");
+    var shown = n;
+    if (shown > 96) { shown = 96; }
+    var i = 0;
+    while (i < shown) {
+        var b = load8(buf + i);
+        if (b >= 32 && b < 127 && b != 92) { print(buf + i, 1); }
+        else { print("\\", 1); fmt_int(b); print(" ", 1); }
+        i = i + 1;
+    }
+    println("");
+    return 0;
+}
+
+# Run the three parse halves over buf[0..n) and check what comes back.
+# Each result's memory is bump-allocated and reset by the caller.
+fn _fz_parse_all(seed, iter, buf, n): i64 {
+    var f = _font_parse(buf, n);
+    _fz_parses = _fz_parses + 1;
+    if (f != 0) {
+        _fz_fonts = _fz_fonts + 1;
+        if (_fz_check_font(f, FZ_KIND_CYML) != 0) { _fz_report(seed, iter, "_font_parse", buf, n); }
+    }
+    var h = _font_header_parse(buf, n);
+    _fz_parses = _fz_parses + 1;
+    if (h != 0) {
+        _fz_headers = _fz_headers + 1;
+        if (_fz_check_hdr(h) != 0) { _fz_report(seed, iter, "_font_header_parse", buf, n); }
+    }
+    var x = _flf_parse(buf, n);
+    _fz_parses = _fz_parses + 1;
+    if (x != 0) {
+        _fz_fonts = _fz_fonts + 1;
+        if (_fz_check_font(x, FZ_KIND_FLF) != 0) { _fz_report(seed, iter, "_flf_parse", buf, n); }
+    }
+    return 0;
+}
+
+var _fz_guard = 0;      # first byte of the PROT_NONE page
+var _fz_mut = 0;        # mutation scratch (fl_alloc, so alloc_reset leaves it)
+
+fn _fz_seed(path): i64 {
+    var len_box[8];
+    store64(&len_box, 0);
+    var src = _slurp(path, FZ_MAX, &len_box);
+    if (src == 0) {
+        print("fuzz: seed missing or unreadable: ", 34);
+        println(path);
+        _fz_violations = _fz_violations + 1;
+        return 0;
+    }
+    var slen = load64(&len_box);
+    var it = 0;
+    while (it < FZ_ITERS) {
+        var n = _fz_mutate(src, slen, _fz_mut);
+        # The mutant ends exactly at the guard page.
+        var at = _fz_guard - n;
+        memcpy(at, _fz_mut, n);
+        _fz_parse_all(path, it, at, n);
+        alloc_reset();      # the parsers' Font / doc / scratch, all bump
+        it = it + 1;
+    }
+    fl_free(src);
+    return 0;
+}
+
+# The oracle must be able to say no. A font with an ESC in a glyph row,
+# and one whose geometry is out of range, must both be flagged; if
+# either passes, every "0 violations" this harness reports is worthless.
+fn _fz_self_test(): i64 {
+    var bad = font_new(1, 1, 0, FLF_GLYPHS);
+    store8(font_row(bad, 0, 0), 27);
+    if (_fz_check_font(bad, FZ_KIND_FLF) == 0) { return 1; }
+    var tall = font_new(1, MAX_HEIGHT + 1, 0, 1);
+    if (_fz_check_font(tall, FZ_KIND_CYML) == 0) { return 1; }
+    var good = font_new(1, 1, 0, 1);
+    font_set_char(good, 0, 65);
+    store8(font_row(good, 0, 0), 35);
+    if (_fz_check_font(good, FZ_KIND_CYML) != 0) { return 1; }
+    alloc_reset();
+    return 0;
+}
+
+fn main(): i64 {
     alloc_init();
-    fuzz_main("test", 4);
-    println("fuzz: ok");
+    if (_fz_self_test() != 0) {
+        println("fuzz: FAILED — the oracle passed a font it must reject; nothing below would mean anything");
+        return 1;
+    }
+    var region = mmap_anon(FZ_MAX + FZ_PAGE);
+    if (region <= 0) { println("fuzz: FAILED — could not map the guard region"); return 1; }
+    _fz_guard = region + FZ_MAX;
+    if (cyr_mprotect(_fz_guard, FZ_PAGE, PROT_NONE) != 0) {
+        println("fuzz: FAILED — could not arm the guard page");
+        return 1;
+    }
+    _fz_mut = fl_alloc(FZ_MAX + 64);
+    if (_fz_mut == 0) { println("fuzz: FAILED — no mutation buffer"); return 1; }
+
+    # The empty input, once, for each parser.
+    _fz_parse_all("(empty)", 0, _fz_guard, 0);
+    alloc_reset();
+
+    _fz_seed("fonts/block.cyml");
+    _fz_seed("fonts/slim.cyml");
+    _fz_seed("fonts/big.cyml");
+    _fz_seed("modular.flf");
+    _fz_seed("tests/fixtures/bad_body_byte.cyml");
+    _fz_seed("tests/fixtures/bad_gap_17.cyml");
+    _fz_seed("tests/fixtures/bad_height_33.cyml");
+    _fz_seed("tests/fixtures/bad_schema.cyml");
+    _fz_seed("tests/fixtures/bad_width_0.cyml");
+    _fz_seed("tests/fixtures/bad_width_65.cyml");
+    _fz_seed("tests/fixtures/char_non_ascii.cyml");
+    _fz_seed("tests/fixtures/ctl_header.cyml");
+    _fz_seed("tests/fixtures/dup_char.cyml");
+    _fz_seed("tests/fixtures/extra_rows.cyml");
+    _fz_seed("tests/fixtures/long_name.cyml");
+    _fz_seed("tests/fixtures/wrong_row_count.cyml");
+    _fz_seed("tests/fixtures/tiny.flf");
+    _fz_seed("tests/fixtures/flf_bad_height.flf");
+    _fz_seed("tests/fixtures/flf_bad_magic.flf");
+    _fz_seed("tests/fixtures/flf_c1_hardblank.flf");
+    _fz_seed("tests/fixtures/flf_crlf.flf");
+    _fz_seed("tests/fixtures/flf_esc_glyph.flf");
+    _fz_seed("tests/fixtures/flf_space_hardblank.flf");
+    _fz_seed("tests/fixtures/flf_too_many_comments.flf");
+    _fz_seed("tests/fixtures/flf_truncated.flf");
+    _fz_seed("tests/fixtures/flf_wide_65.flf");
+
+    print("fuzz: ", 6);
+    fmt_int(_fz_parses);
+    print(" parses over 26 seeds; ", 23);
+    fmt_int(_fz_fonts);
+    print(" fonts and ", 11);
+    fmt_int(_fz_headers);
+    print(" headers accepted and checked; ", 31);
+    fmt_int(_fz_violations);
+    println(" violations");
+
+    if (_fz_violations > 0) { return 1; }
+    # A harness whose mutants are all rejected checks nothing; require that
+    # a real share of them load, so the invariants above actually ran.
+    if (_fz_fonts * 20 < _fz_parses / 3) {
+        println("fuzz: FAILED — under 5% of mutants loaded; the font checks barely ran");
+        return 1;
+    }
     return 0;
 }
 
 var r = main();
-syscall(60, r);
+syscall(SYS_EXIT, r);

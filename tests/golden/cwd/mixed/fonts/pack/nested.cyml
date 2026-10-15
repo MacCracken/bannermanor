@@ -1,0 +1,29 @@
+# Golden-suite fixture (tests/golden/cases.sh). Nested one level: --list-fonts recurses into it, --font cannot name it.
+[font]
+schema = 1
+name = "nested"
+description = "lives in fonts/pack/"
+width = 3
+height = 3
+gap = 1
+
+[[entries]]
+char = " "
+---
+...
+...
+...
+
+[[entries]]
+char = "H"
+---
+#.#
+###
+#.#
+
+[[entries]]
+char = "I"
+---
+###
+.#.
+###

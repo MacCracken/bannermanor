@@ -13,315 +13,20 @@
 #   --pad N                blank lines above and below banner
 #                          (default: 0)
 #   --color NAME           colorize (16 ANSI names or rainbow); M5
+#   --                     end of flags; everything after is TEXT
 #
 # Long flags accept both `--name value` and `--name=value` (handled by
 # lib/flags.cyr). Positional args are concatenated with spaces into the
 # render text, subject to a 1 KB cap.
+#
+# This file holds main() and the entry statement only. Everything else
+# the CLI does is in src/cli.cyr, which the test suite can include; this
+# file it cannot (see _agnos_entry below).
 
 include "src/render.cyr"
 include "src/font_block.cyr"
 include "src/flf.cyr"
-include "lib/flags.cyr"
-include "lib/fs.cyr"
-include "lib/fmt.cyr"
-
-enum MainLimits {
-    BUF_CAP = 1024;
-    FONT_NAME_CAP = 64;
-}
-
-# Does `name` end in ".flf"? Used to dispatch --font to the legacy
-# figlet-font adapter (src/flf.cyr) instead of the CYML loader.
-# When true, the name is treated as a literal path — no path-segment
-# sanitization (the user explicitly opted into a path with the .flf
-# suffix; size is bounded inside flf_load_file).
-fn _is_flf_path(name): i64 {
-    var n = strlen(name);
-    if (n < 5) { return 0; }
-    return memeq(name + n - 4, ".flf", 4);
-}
-
-# Build "fonts/<name>.cyml" into out, null-terminated. Returns 0 if
-# the name is empty, too long, or contains a byte that we won't allow
-# (path separators, dots, control chars — keeps --font scoped to
-# `fonts/` regardless of caller intent).
-fn build_font_path(out, out_cap, name): i64 {
-    var nlen = strlen(name);
-    if (nlen <= 0) { return 0; }
-    if (nlen > 64) { return 0; }
-    var i = 0;
-    while (i < nlen) {
-        var c = load8(name + i);
-        if (c == 47)  { return 0; }   # '/'
-        if (c == 92)  { return 0; }   # '\'
-        if (c == 46)  { return 0; }   # '.'
-        if (c < 32)   { return 0; }
-        if (c == 127) { return 0; }
-        i = i + 1;
-    }
-    var need = 12 + nlen;
-    if (need > out_cap) { return 0; }
-    memcpy(out + 0, "fonts/", 6);
-    memcpy(out + 6, name, nlen);
-    memcpy(out + 6 + nlen, ".cyml", 5);
-    store8(out + 11 + nlen, 0);
-    return 11 + nlen;
-}
-
-fn print_usage(): i64 {
-    println("bnrmr — figlet-equivalent ASCII-art banner generator");
-    println("");
-    println("Usage:");
-    println("  bnrmr [FLAGS] TEXT...");
-    println("");
-    println("Flags:");
-    println("  -f, --font NAME       load fonts/NAME.cyml (default: embedded block)");
-    println("                        or a path ending in .flf for a legacy figlet font");
-    println("      --align V         left | center | right (default: left)");
-    println("  -w, --width N         truncate at glyph boundary at N columns");
-    println("                        (default: 0 = unlimited; if N is smaller");
-    println("                        than one glyph, no glyphs render — the");
-    println("                        banner comes out as blank rows)");
-    println("      --pad N           N blank lines above and below banner (default: 0)");
-    println("      --color NAME      colorize: black, red, green, yellow, blue,");
-    println("                        magenta, cyan, white (or bright_<name> /");
-    println("                        bright-<name>), or 'rainbow'");
-    println("                        for per-row cycling. Suppressed on non-TTY stdout.");
-    println("      --list-fonts      list available fonts and exit");
-    println("      --version         print version and exit");
-    println("  -h, --help            print this help and exit");
-    println("");
-    println("Coverage: A-Z, 0-9, space, printable punctuation. Lowercase folds");
-    println("to uppercase when the font has no lowercase glyphs. Unsupported");
-    println("characters render as blank.");
-    return 0;
-}
-
-# Lexicographic Str compare (byte-wise). Returns <0 / 0 / >0.
-fn _str_lex_cmp(a, b): i64 {
-    var al = str_len(a);
-    var bl = str_len(b);
-    var ad = str_data(a);
-    var bd = str_data(b);
-    var n = al;
-    if (bl < n) { n = bl; }
-    var i = 0;
-    while (i < n) {
-        var ac = load8(ad + i);
-        var bc = load8(bd + i);
-        if (ac != bc) { return ac - bc; }
-        i = i + 1;
-    }
-    return al - bl;
-}
-
-# Insertion sort vec of Str in place. Fine for 3–5 fonts.
-fn _sort_paths(v): i64 {
-    var n = vec_len(v);
-    var i = 1;
-    while (i < n) {
-        var cur = vec_get(v, i);
-        var j = i - 1;
-        var done = 0;
-        while (j >= 0 && done == 0) {
-            var prev = vec_get(v, j);
-            if (_str_lex_cmp(prev, cur) > 0) {
-                vec_set(v, j + 1, prev);
-                j = j - 1;
-            } else { done = 1; }
-        }
-        vec_set(v, j + 1, cur);
-        i = i + 1;
-    }
-    return 0;
-}
-
-# Write `n` bytes of `buf` to stdout with control bytes folded to
-# spaces (F-012). Mirrors _scrub_ctl in src/font.cyr; used for strings
-# that reach stdout without passing through the font parser.
-fn _write_scrubbed(buf, n): i64 {
-    # Emit maximal runs of clean bytes directly from the caller's buffer
-    # and substitute a literal space for each control byte. No scratch
-    # buffer, and the common all-clean case costs one write.
-    var i = 0;
-    var run = 0;
-    while (i < n) {
-        var b = load8(buf + i);
-        var bad = 0;
-        if (b < 32) { bad = 1; }
-        if (b == 127) { bad = 1; }
-        if (b >= 128 && b <= 159) { bad = 1; }
-        if (bad == 1) {
-            if (run > 0) { syscall(1, 1, buf + i - run, run); run = 0; }
-            syscall(1, 1, " ", 1);
-        } else {
-            run = run + 1;
-        }
-        i = i + 1;
-    }
-    if (run > 0) { syscall(1, 1, buf + n - run, run); }
-    return 0;
-}
-
-# Print a cstring padded with trailing spaces to width `w`. If the
-# cstring is already >= w bytes, prints it as-is followed by a single
-# space (so adjacent columns don't collide).
-fn _print_padded(cstr, w): i64 {
-    var n = strlen(cstr);
-    syscall(1, 1, cstr, n);
-    if (n >= w) {
-        syscall(1, 1, " ", 1);
-        return 0;
-    }
-    var pad = w - n;
-    while (pad > 0) {
-        syscall(1, 1, " ", 1);
-        pad = pad - 1;
-    }
-    return 0;
-}
-
-# --list-fonts handler. Walks ./fonts, sorts alphabetically, prints
-# one line per font: "  NAME  WxH gap=N  DESCRIPTION".
-fn cmd_list_fonts(): i64 {
-    var dir = str_from("fonts");
-    var ext = str_from(".cyml");
-    var files = find_files(dir, ext);
-    _sort_paths(files);
-
-    println("Available fonts (fonts/):");
-    println("");
-
-    var nf = vec_len(files);
-    if (nf == 0) {
-        println("  (none found — try running from the project root)");
-        return 0;
-    }
-
-    var i = 0;
-    while (i < nf) {
-        var path_str = vec_get(files, i);
-        var path_cstr = str_cstr(path_str);
-        var h = font_header_load(path_cstr);
-        if (h == 0) {
-            syscall(1, 1, "  ", 2);
-            # Scrub the path before echoing it (F-012). This branch runs
-            # precisely because the parser REJECTED the file, so the
-            # parser-boundary scrub in _font_get_str cannot cover it, and
-            # the bytes here come straight from the filename. A font file
-            # named "ev<ESC>[31mil.cyml" would otherwise emit live SGR.
-            _write_scrubbed(str_data(path_str), str_len(path_str));
-            println("  (malformed — skipped)");
-        } else {
-            syscall(1, 1, "  ", 2);
-            _print_padded(font_hdr_name(h), 10);
-            syscall(1, 1, " ", 1);
-            fmt_int(font_hdr_width(h));
-            syscall(1, 1, "x", 1);
-            fmt_int(font_hdr_height(h));
-            syscall(1, 1, " gap=", 5);
-            fmt_int(font_hdr_gap(h));
-            syscall(1, 1, "  ", 2);
-            var desc = font_hdr_desc(h);
-            syscall(1, 1, desc, strlen(desc));
-            syscall(1, 1, "\n", 1);
-        }
-        i = i + 1;
-    }
-    return 0;
-}
-
-# Map --align value cstring to AlignKind. Returns -1 if unrecognized.
-fn parse_align(s): i64 {
-    if (s == 0) { return ALIGN_LEFT; }
-    if (streq(s, "left") == 1) { return ALIGN_LEFT; }
-    if (streq(s, "L") == 1)    { return ALIGN_LEFT; }
-    if (streq(s, "center") == 1) { return ALIGN_CENTER; }
-    if (streq(s, "centre") == 1) { return ALIGN_CENTER; }
-    if (streq(s, "C") == 1)      { return ALIGN_CENTER; }
-    if (streq(s, "right") == 1) { return ALIGN_RIGHT; }
-    if (streq(s, "R") == 1)     { return ALIGN_RIGHT; }
-    return 0 - 1;
-}
-
-# Concatenate flags_positional(fs, 0..n-1) into out separated by spaces.
-# Returns bytes written, or -1 on overflow.
-fn join_positionals(out, out_cap, fs): i64 {
-    var pc = flags_positional_count(fs);
-    var n: i64 = 0;
-    var i = 0;
-    while (i < pc) {
-        var arg = flags_positional(fs, i);
-        var alen = strlen(arg);
-        if (n > 0) {
-            if (n + 1 > out_cap) { return 0 - 1; }
-            store8(out + n, 32);
-            n = n + 1;
-        }
-        if (n + alen > out_cap) { return 0 - 1; }
-        memcpy(out + n, arg, alen);
-        n = n + alen;
-        i = i + 1;
-    }
-    return n;
-}
-
-# Pack argc()/argv(i) into a contiguous cstr* array on the stack.
-# Required because flags_parse takes a raw pointer-array, not the
-# `argv(n)` function.
-fn build_argv_array(arr): i64 {
-    var ac = argc();
-    var i = 0;
-    while (i < ac) {
-        store64(arr + i * 8, argv(i));
-        i = i + 1;
-    }
-    return ac;
-}
-
-# _parse_count_flag sentinels (negative, so they cannot collide with a
-# parsed count). Written inline as `0 - N` per this file's existing
-# convention — cyrius enum members take literals only.
-#
-#   0 - 2  COUNT_BAD   empty, or contains a non-digit
-#   0 - 3  COUNT_NEG   a real negative (leading '-', nonzero)
-#   0 - 4  COUNT_OVER  all-digit but past PARSER_INT_CAP
-
-# Parse a --width/--pad token. Returns the value, or a COUNT_* sentinel.
-#
-# Absent flag -> 0 (the pre-1.1.4 default from flags_get_int).
-# "-0"/"-00"  -> 0, which _flags_parse_int accepted before, so keep it.
-# "007"       -> 7; leading zeros worked before and must keep working.
-# huge digits -> COUNT_OVER so the caller still prints its `max` message
-#                rather than a generic parse error (matches the
-#                pre-1.1.4 behavior of `--width 1048577`).
-fn _parse_count_flag(tok): i64 {
-    if (tok == 0) { return 0; }
-    var p = tok;
-    var neg = 0;
-    if (load8(p) == 45) { neg = 1; p = p + 1; }     # '-'
-    var n = parse_uint(p);
-    if (n < 0) {
-        # Distinguish "too big" from "not a number": re-scan for digits.
-        var i = 0;
-        var alldigit = 1;
-        var any = 0;
-        var c = load8(p);
-        while (c != 0) {
-            if (c < 48 || c > 57) { alldigit = 0; }
-            any = 1;
-            i = i + 1;
-            c = load8(p + i);
-        }
-        if (any == 1 && alldigit == 1) { return 0 - 4; }
-        return 0 - 2;
-    }
-    if (neg == 1) {
-        if (n == 0) { return 0; }                   # "-0" == 0
-        return 0 - 3;
-    }
-    return n;
-}
+include "src/cli.cyr"
 
 fn main(): i64 {
     alloc_init();
@@ -373,7 +78,7 @@ fn main(): i64 {
         return 0;
     }
     if (flags_get_bool(fs, f_version) == 1) {
-        println("bnrmr 1.2.0");
+        println("bnrmr 1.4.1");
         return 0;
     }
     if (flags_get_bool(fs, f_list) == 1) {
@@ -435,8 +140,8 @@ fn main(): i64 {
                 return 1;
             }
         } else {
-            var pathbuf[80];
-            var plen = build_font_path(&pathbuf, 80, font_name);
+            var pathbuf[FONT_PATH_CAP];
+            var plen = build_font_path(&pathbuf, FONT_PATH_CAP, font_name);
             if (plen <= 0) {
                 println("bnrmr: invalid font name");
                 return 1;
@@ -461,8 +166,8 @@ fn main(): i64 {
         return 0;
     }
 
-    var buf[1024];
-    var n = join_positionals(&buf, 1024, fs);
+    var buf[MAX_INPUT];
+    var n = join_positionals(&buf, MAX_INPUT, fs);
     if (n < 0) {
         println("bnrmr: input too long (max 1024 bytes)");
         return 1;

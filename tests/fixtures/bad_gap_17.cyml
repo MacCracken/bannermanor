@@ -1,0 +1,13 @@
+# Malformed fixture: gap = 17, one past schema 1's MAX_GAP. Both loaders must reject.
+[font]
+schema = 1
+name = "bad_gap_17"
+width = 1
+height = 1
+gap = 17
+
+[[entries]]
+char = "A"
+---
+#
+

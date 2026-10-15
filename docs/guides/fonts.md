@@ -60,15 +60,17 @@ There is no `---` after the file-level `[font]` block — the first
 | Key           | Required | Meaning                                                |
 |---------------|----------|--------------------------------------------------------|
 | `schema`      | yes      | Format version. Must be `1`.                          |
-| `name`        | yes      | Must match the filename stem (`example.cyml` → `"example"`). |
-| `description` | no       | One-line description. Shown in `--list-fonts`.         |
+| `name`        | for `--list-fonts` | The name `--list-fonts` shows, 63 bytes at most. `--list-fonts` calls a font without one (or with a longer one) malformed. `--font` never reads it: it loads `fonts/<NAME>.cyml` by file stem. By convention, match the stem (`example.cyml` → `"example"`) so the listed name is the one `--font` accepts. Nothing enforces that (see [ADR 0002](../adr/0002-freeze-scope-error-paths-and-malformed-input.md), ruling 3). |
+| `description` | no       | One line, shown by `--list-fonts`. 255 bytes at most: a longer one is left out of the listing, not truncated. |
 | `width`       | yes      | Columns per glyph. Range: 1–64.                        |
 | `height`      | yes      | Rows per glyph. Range: 1–32.                           |
 | `gap`         | yes      | Spaces between adjacent glyphs at render time. Range: 0–16. |
 | `author`      | no       | Free-form attribution. Required for in-tree fonts.     |
 | `license`     | no       | SPDX identifier. Required for in-tree fonts.           |
 
-Unknown keys are ignored — forward-compatible by design.
+Unknown keys are ignored — forward-compatible by design. Control bytes in
+`name` and `description` are shown as spaces (a font cannot put escape
+sequences on your terminal through `--list-fonts`).
 
 ### Entry header (`[[entries]]`)
 
@@ -120,12 +122,16 @@ Implications:
   only** and let the fold do its job. `fonts/block.cyml` is the
   canonical example.
 - Unsupported chars (NUL, control characters, DEL, bytes > 127)
-  render as the space glyph silently. They are not an error.
+  render as the font's space glyph silently, or its first glyph if it
+  has no space. They are not an error.
 
-There is a hard cap of 256 entries per font. This is BannerManor's own
-limit, enforced in `font_load_file` (`src/font.cyr`) — the CYML parser
-in `lib/bayan.cyr` no longer imposes one of its own. ASCII fits
-comfortably; non-ASCII coverage is a v2.0 question.
+How many entries a font can have: bnrmr refuses a file with more than
+256 (`MAX_GLYPHS` in `src/font.cyr`, its own policy; the CYML parser
+sets no cap). The limit that binds first is the charmap, though. Every
+entry needs its own `char` below 128, so **128 entries is the most a
+font can load**. Printable ASCII is 95, so this only matters for a font
+that also maps control characters. Non-ASCII coverage is a v2.0
+question.
 
 ## Required attribution
 
@@ -149,8 +155,10 @@ the file.
    ```
 
    Your font should appear in alphabetical order with its geometry
-   and description. A `(malformed — skipped)` line means the loader
-   rejected the file — see the validation list below.
+   and description. A `(malformed — skipped)` line means the header
+   loader rejected it (see the two validation lists below). A clean
+   listing does **not** prove the glyphs load. `--list-fonts` never
+   reads an entry, so step 3 is the real check.
 
 3. Render a probe string:
 
@@ -183,21 +191,41 @@ the file.
 
 ## Loader validation
 
-`font_load_file` rejects a font (returns 0) when any of these fail:
+Two loaders read a font file, and they check different things.
 
-- File size exceeds 64 KB.
-- The `[font]` block is missing or any required key (`schema`,
-  `width`, `height`, `gap`) is missing or non-numeric.
-- `schema != 1`.
-- Geometry out of range (width > 64, height > 32, gap > 16, any < 0).
-- An entry has no `char` field, or the value is not a single ASCII byte.
-- Two entries declare the same `char`.
-- Any entry body row has the wrong number of bytes, or contains a
-  byte that is not `.` or `#`.
+**`bnrmr --font <name>`** (`font_load_file`) refuses the font, with
+`bnrmr: failed to load font (missing or malformed)` and exit 1, when:
 
-A rejected font causes `bnrmr --font <name>` to exit non-zero with
-`bnrmr: failed to load font (missing or malformed)`. `--list-fonts`
-surfaces it as `(malformed — skipped)` and continues with the rest.
+- the path is not a regular file, the file is empty, or it is
+  **65,536 bytes or larger**: a file of exactly 64 KiB is refused, so
+  the largest loadable font is 65,535 bytes;
+- `schema`, `width`, `height` or `gap` is missing or not a number;
+- `schema` is not `1`;
+- geometry is out of range: width 1–64, height 1–32, gap 0–16. A width
+  or height of `0` is out of range too;
+- the file has no `[[entries]]`, or more than 256;
+- an entry has no `char`, or its value is not a single ASCII byte
+  (below 128), or two entries declare the same `char`;
+- an entry body has fewer than `height` rows, a row that is not exactly
+  `width` bytes, or a byte other than `.` and `#`.
+
+It never reads `name`, `description`, `author` or `license`. It also
+does not reject a body with **more** rows than `height`. The extra rows
+are ignored, which is a known gap
+([issue 0008](../development/issues/0008-cyml-body-not-fully-consumed.md)).
+
+**`bnrmr --list-fonts`** (`font_header_load`) reads only the `[font]`
+block, and shows `(malformed — skipped)` when:
+
+- the path is not a regular file, is empty, or is 65,536 bytes or
+  larger;
+- `schema`, `width`, `height` or `gap` fails the same checks as above;
+- `name` is missing, or longer than 63 bytes.
+
+It never decodes an entry. So the two can disagree in **both**
+directions. A font with a bad glyph body lists cleanly and then fails
+`--font`. A font with no `name` renders with `--font` and lists as
+malformed. Check a new font with both, as in the workflow above.
 
 ## Design tips for the body
 

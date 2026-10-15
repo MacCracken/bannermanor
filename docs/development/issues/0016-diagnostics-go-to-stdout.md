@@ -3,7 +3,8 @@
 **Reported**: 2026-08-25
 **Version**: 1.1.4 (deferred-work sweep)
 **Reporter**: maintainer
-**Status**: **open** — gated on ADR 0002
+**Status**: **open**, unblocked. [ADR 0002](../../adr/0002-freeze-scope-error-paths-and-malformed-input.md) ruling (1), accepted
+2026-10-15, permits the move. Scheduled for roadmap 1.5.0.
 **Severity**: correctness — corrupts the project's primary use case
 
 ## Observation
@@ -37,26 +38,30 @@ Exit codes are correct throughout; only the stream is wrong. A caller
 checking `$?` is fine. A caller redirecting stdout — which is every
 caller in the documented use case — is not.
 
-## Why it is gated
+## Why it was gated
 
 Moving ~20 messages from fd 1 to fd 2 changes the stdout bytes of an
 invalid invocation. Whether the v1.0 freeze covers *invalid* invocations
-is one of three unsettled readings of the freeze sentence, and ADR 0002
-(scheduled in 1.3.0) is where that gets decided. Precedent leans toward
-"corrigible": 1.1.4 already changed `--help` stdout bytes inside a patch
-release on the reasoning that no test asserts them.
-
-If ADR 0002 rules the other way, the fallback is a `--strict` style opt
-in, or deferral to 2.0.
+was one of three unsettled readings of the freeze sentence.
+[ADR 0002](../../adr/0002-freeze-scope-error-paths-and-malformed-input.md)
+ruling (1), accepted 2026-10-15, settles it: diagnostic output is not
+frozen, exit codes are. The move is a `Changed` entry in a 1.x minor,
+with the golden `error` tier re-baselined in the same commit and its diff
+reviewed record by record. The precedent agreed: 1.1.4 had already
+changed `--help` stdout bytes inside a patch release.
 
 ## Scope when unblocked
 
 - Route all diagnostics to fd 2. Keep exit codes exactly as they are.
+- Add the `bright-<name>` dash alias to the `--color` error text, so it
+  agrees with `--help` (moved here from issue 0017 at 1.4.1). It is an
+  error-path byte change too, so the error tier moves once, not twice.
 - Decide `--help`'s stream separately: `--help` on *request* is a
   success and conventionally goes to stdout; the usage block printed
   after an *error* should follow the error to stderr.
-- The golden suite (1.3.0) must capture stdout and stderr separately so
-  the move is provable rather than asserted.
+- The golden suite already captures stdout and stderr separately
+  (`scripts/golden.sh`, since 1.4.1), so the move shows up as a diff of
+  the `error` tier, record by record.
 
 ## Acceptance
 

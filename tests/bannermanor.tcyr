@@ -14,6 +14,7 @@
 include "src/render.cyr"
 include "src/font_block.cyr"
 include "src/flf.cyr"
+include "src/cli.cyr"
 
 # ---- smoke ----
 
@@ -686,21 +687,451 @@ fn t_header_load_malformed() {
     assert_eq(font_header_load("tests/fixtures/bad_schema.cyml"), 0, "bad schema -> 0");
 }
 
-# ---- reader I/O portability (io.cyr wrappers) ----
+# ---- reader gates (src/font.cyr _slurp, shared by all three readers) ----
 #
-# All three font readers open + read + close through lib/io.cyr's
-# `file_open` / `file_read` / `file_close` rather than raw syscall
-# numbers (which were x86_64-Linux-only and mis-dispatched on agnos).
-# A directory path is the one case that separates the two guards: the
-# open SUCCEEDS (so the `fd < 0` early-out does not fire) and the
-# read then fails, which must land on the `total <= 0` return. Covers
-# the `file_read` error passthrough that the missing-file tests miss.
+# Through 1.1.3 a directory was the one input that separated the reader's
+# two guards: the open succeeded and the read failed EISDIR, landing on
+# `total <= 0`. That is what this test was written to cover. Since
+# 1.1.4's regular-file gate a directory never reaches open(2): `_slurp`
+# rejects anything that is not S_IFREG first. The test now pins that gate.
+# The `total <= 0` return is covered by t_reader_empty_file.
 
 fn t_reader_dir_path() {
-    test_group("readers / directory path (open ok, read fails)");
+    test_group("readers / directory path (rejected by the S_IFREG gate)");
     assert_eq(font_load_file("fonts"),   0, "font_load_file(dir) -> 0");
     assert_eq(font_header_load("fonts"), 0, "font_header_load(dir) -> 0");
     assert_eq(flf_load_file("fonts"),    0, "flf_load_file(dir) -> 0");
+}
+
+fn t_reader_empty_file() {
+    test_group("readers / empty regular file (the total <= 0 return)");
+    assert_eq(font_load_file("tests/fixtures/empty.cyml"),   0, "font_load_file(empty) -> 0");
+    assert_eq(font_header_load("tests/fixtures/empty.cyml"), 0, "font_header_load(empty) -> 0");
+    assert_eq(flf_load_file("tests/fixtures/empty.flf"),     0, "flf_load_file(empty) -> 0");
+}
+
+# ---- 1.4.1: parser fixtures (the cases the 1.1.4 audit found absent) ----
+#
+# Committed fixtures under tests/fixtures/ for the shapes worth naming,
+# and fonts built in memory for the boundaries: a test that says "64
+# loads and 65 does not" is the documentation of the limit. In-memory
+# inputs go straight to the parse halves the readers were split into at
+# 1.4.1 (_font_parse / _font_header_parse / _flf_parse).
+
+# A small byte builder for in-memory fonts.
+var _tb_buf = 0;
+var _tb_len = 0;
+fn _tb_reset(cap): i64 { _tb_buf = alloc(cap); _tb_len = 0; return _tb_buf; }
+fn _tb_str(s): i64 {
+    var n = strlen(s);
+    memcpy(_tb_buf + _tb_len, s, n);
+    _tb_len = _tb_len + n;
+    return 0;
+}
+fn _tb_byte(b): i64 { store8(_tb_buf + _tb_len, b); _tb_len = _tb_len + 1; return 0; }
+fn _tb_int(n): i64 { _tb_len = tty_dec_buf(_tb_buf, _tb_len, n); return 0; }
+fn _tb_rep(b, n): i64 {
+    var i = 0;
+    while (i < n) { _tb_byte(b); i = i + 1; }
+    return 0;
+}
+
+# [font] header for a schema-1 font with the given geometry.
+fn _tb_cyml_header(schema, w, h, gap): i64 {
+    _tb_str("[font]\nschema = "); _tb_int(schema);
+    _tb_str("\nname = \"t\"\nwidth = "); _tb_int(w);
+    _tb_str("\nheight = "); _tb_int(h);
+    _tb_str("\ngap = "); _tb_int(gap);
+    _tb_str("\n\n");
+    return 0;
+}
+
+# One entry for char `ch`, w x h, all stroke.
+fn _tb_cyml_entry(ch, w, h): i64 {
+    _tb_str("[[entries]]\nchar = \"");
+    if (ch == 34 || ch == 92) { _tb_byte(92); }
+    _tb_byte(ch);
+    _tb_str("\"\n---\n");
+    var r = 0;
+    while (r < h) {
+        _tb_rep(35, w);
+        _tb_byte(10);
+        r = r + 1;
+    }
+    _tb_byte(10);
+    return 0;
+}
+
+# A one-glyph font ('A') with this geometry, parsed by both CYML halves.
+# Stores the full parse at *out_f and the header parse at *out_h.
+fn _tb_geom(w, h, gap, out_f, out_h): i64 {
+    _tb_reset(8192);
+    _tb_cyml_header(1, w, h, gap);
+    _tb_cyml_entry(65, w, h);
+    store64(out_f, _font_parse(_tb_buf, _tb_len));
+    store64(out_h, _font_header_parse(_tb_buf, _tb_len));
+    return 0;
+}
+
+fn t_cyml_geometry_bounds() {
+    test_group("CYML / schema-1 geometry bounds, both loaders");
+    var p = "tests/fixtures/bad_width_65.cyml";
+    assert_eq(font_load_file(p), 0, "width 65 -> font_load_file 0");
+    assert_eq(font_header_load(p), 0, "width 65 -> font_header_load 0");
+    p = "tests/fixtures/bad_width_0.cyml";
+    assert_eq(font_load_file(p), 0, "width 0 -> font_load_file 0");
+    assert_eq(font_header_load(p), 0, "width 0 -> font_header_load 0");
+    p = "tests/fixtures/bad_height_33.cyml";
+    assert_eq(font_load_file(p), 0, "height 33 -> font_load_file 0");
+    assert_eq(font_header_load(p), 0, "height 33 -> font_header_load 0");
+    p = "tests/fixtures/bad_gap_17.cyml";
+    assert_eq(font_load_file(p), 0, "gap 17 -> font_load_file 0");
+    assert_eq(font_header_load(p), 0, "gap 17 -> font_header_load 0");
+
+    # The limits themselves load: MAX_WIDTH 64, MAX_HEIGHT 32, MAX_GAP 16.
+    var f = 0;
+    var h = 0;
+    _tb_geom(64, 1, 0, &f, &h);
+    assert(f != 0, "width 64 loads");
+    assert(h != 0, "width 64 lists");
+    if (f != 0) { assert_eq(font_width(f), 64, "width 64 -> font_width 64"); }
+    _tb_geom(1, 32, 0, &f, &h);
+    assert(f != 0, "height 32 loads");
+    assert(h != 0, "height 32 lists");
+    _tb_geom(1, 1, 16, &f, &h);
+    assert(f != 0, "gap 16 loads");
+    assert(h != 0, "gap 16 lists");
+    _tb_geom(1, 1, 0, &f, &h);
+    assert(f != 0, "1x1 gap 0 loads (the smallest legal font)");
+    _tb_geom(0, 1, 0, &f, &h);
+    assert_eq(f, 0, "height 1 width 0 -> 0 (geometry must be >= 1)");
+    assert_eq(h, 0, "width 0 -> header 0");
+    _tb_geom(1, 0, 0, &f, &h);
+    assert_eq(f, 0, "height 0 -> 0");
+    assert_eq(h, 0, "height 0 -> header 0");
+}
+
+fn t_cyml_entry_rules() {
+    test_group("CYML / entry rules: the two loaders gate differently");
+    # Duplicate char: the full loader rejects; the header loader never
+    # decodes entries, so the same file lists clean.
+    assert_eq(font_load_file("tests/fixtures/dup_char.cyml"), 0, "duplicate char -> font_load_file 0");
+    assert(font_header_load("tests/fixtures/dup_char.cyml") != 0, "duplicate char -> font_header_load lists it");
+    assert_eq(font_load_file("tests/fixtures/char_non_ascii.cyml"), 0, "non-ASCII char -> 0");
+    # name over the 63-byte buffer: the header loader requires a name that
+    # fits; the full loader never reads name.
+    assert(font_load_file("tests/fixtures/long_name.cyml") != 0, "64-byte name -> font_load_file loads");
+    assert_eq(font_header_load("tests/fixtures/long_name.cyml"), 0, "64-byte name -> font_header_load 0");
+    # Issue 0008, scheduled for 1.5.0: surplus body rows load and are
+    # ignored. This pins today's behavior so the fix is a deliberate flip.
+    var x = font_load_file("tests/fixtures/extra_rows.cyml");
+    assert(x != 0, "surplus rows -> loads today (issue 0008)");
+    if (x != 0) { assert_eq(font_height(x), 1, "surplus rows -> height stays 1"); }
+    # No entries: the header lists, the font does not load.
+    _tb_reset(256);
+    _tb_cyml_header(1, 3, 3, 1);
+    assert_eq(_font_parse(_tb_buf, _tb_len), 0, "zero entries -> font 0");
+    assert(_font_header_parse(_tb_buf, _tb_len) != 0, "zero entries -> header lists");
+    # Schema other than 1, in memory.
+    _tb_reset(256);
+    _tb_cyml_header(2, 1, 1, 0);
+    _tb_cyml_entry(65, 1, 1);
+    assert_eq(_font_parse(_tb_buf, _tb_len), 0, "schema 2 -> 0");
+    assert_eq(_font_header_parse(_tb_buf, _tb_len), 0, "schema 2 -> header 0");
+}
+
+# MAX_GLYPHS is 256, but the binding limit is CHARMAP_SIZE: every entry
+# needs a distinct char below 128, so 128 is the most that can load.
+fn t_cyml_entry_cap() {
+    test_group("CYML / entry cap: 128 binds, not MAX_GLYPHS");
+    _tb_reset(16384);
+    _tb_cyml_header(1, 1, 1, 0);
+    var c = 0;
+    while (c < 128) { _tb_cyml_entry(c, 1, 1); c = c + 1; }
+    var f = _font_parse(_tb_buf, _tb_len);
+    assert(f != 0, "128 entries, chars 0..127 -> loads");
+    if (f != 0) {
+        assert_eq(font_count(f), 128, "count 128");
+        var ok = 1;
+        c = 0;
+        while (c < 128) {
+            if (font_glyph_index(f, c) != c) { ok = 0; }
+            c = c + 1;
+        }
+        assert_eq(ok, 1, "char c -> glyph c for every c in 0..127");
+    }
+    # A 129th entry has to repeat a char (or leave ASCII): rejected.
+    _tb_cyml_entry(65, 1, 1);
+    assert_eq(_font_parse(_tb_buf, _tb_len), 0, "129 entries -> 0 (a char repeats)");
+    # Past MAX_GLYPHS the count gate fires before any entry is decoded.
+    _tb_reset(32768);
+    _tb_cyml_header(1, 1, 1, 0);
+    c = 0;
+    while (c < 257) { _tb_cyml_entry(65, 1, 1); c = c + 1; }
+    assert_eq(_font_parse(_tb_buf, _tb_len), 0, "257 entries -> 0");
+}
+
+# A valid one-glyph font padded with `#` comment lines to exactly `total`
+# bytes. Leaves it in the builder.
+fn _tb_padded_font(total): i64 {
+    _tb_reset(total + 128);
+    _tb_cyml_header(1, 1, 1, 0);
+    _tb_cyml_entry(65, 1, 1);
+    var body = _tb_buf;
+    var blen = _tb_len;
+    var out = alloc(total + 128);
+    var o = 0;
+    var left = total - blen;
+    while (left > 0) {
+        var line = left;
+        if (line > 80) { line = 80; }
+        if (line == 1) {
+            store8(out + o, 10);
+        } else {
+            store8(out + o, 35);
+            memset(out + o + 1, 120, line - 2);
+            store8(out + o + line - 1, 10);
+        }
+        o = o + line;
+        left = left - line;
+    }
+    memcpy(out + o, body, blen);
+    _tb_buf = out;
+    _tb_len = o + blen;
+    return 0;
+}
+
+fn t_cyml_size_gate() {
+    test_group("CYML / size gate: 65535 loads, 65536 does not");
+    _tb_padded_font(65535);
+    assert_eq(_tb_len, 65535, "padded to 65535");
+    assert(_font_parse(_tb_buf, _tb_len) != 0, "65535 bytes -> loads");
+    assert(_font_header_parse(_tb_buf, _tb_len) != 0, "65535 bytes -> lists");
+    _tb_padded_font(65536);
+    assert_eq(_tb_len, 65536, "padded to 65536");
+    assert_eq(_font_parse(_tb_buf, _tb_len), 0, "65536 bytes -> 0 (>= MAX_FILE_BYTES)");
+    assert_eq(_font_header_parse(_tb_buf, _tb_len), 0, "65536 bytes -> header 0");
+}
+
+# A .flf of `height` rows, every glyph row `w` copies of 'W', CL comments.
+fn _tb_flf(height, w, comments): i64 {
+    _tb_reset(200 + comments * 4 + 95 * height * (w + 3));
+    _tb_str("flf2a$ "); _tb_int(height);
+    _tb_str(" 0 "); _tb_int(w + 2);
+    _tb_str(" 0 "); _tb_int(comments);
+    _tb_byte(10);
+    var c = 0;
+    while (c < comments) { _tb_str("cm\n"); c = c + 1; }
+    var g = 0;
+    while (g < 95) {
+        var r = 0;
+        while (r < height) {
+            _tb_rep(87, w);
+            _tb_byte(64);
+            if (r + 1 == height) { _tb_byte(64); }
+            _tb_byte(10);
+            r = r + 1;
+        }
+        g = g + 1;
+    }
+    return 0;
+}
+
+fn t_flf_header_gates() {
+    test_group(".flf / the adapter's envelope and header gates");
+    assert_eq(flf_load_file("tests/fixtures/flf_too_many_comments.flf"), 0, "1025 comment lines -> 0");
+    assert_eq(flf_load_file("tests/fixtures/flf_wide_65.flf"), 0, "65-column glyph rows -> 0");
+    _tb_flf(1, 64, 0);
+    var f = _flf_parse(_tb_buf, _tb_len);
+    assert(f != 0, "64-column glyph rows -> loads (FLF_MAX_WIDTH)");
+    if (f != 0) { assert_eq(font_width(f), 64, "width 64"); }
+    _tb_flf(1, 65, 0);
+    assert_eq(_flf_parse(_tb_buf, _tb_len), 0, "65 columns, in memory -> 0");
+    _tb_flf(32, 1, 0);
+    f = _flf_parse(_tb_buf, _tb_len);
+    assert(f != 0, "height 32 -> loads (FLF_MAX_HEIGHT)");
+    if (f != 0) { assert_eq(font_height(f), 32, "height 32"); }
+    _tb_flf(33, 1, 0);
+    assert_eq(_flf_parse(_tb_buf, _tb_len), 0, "height 33 -> 0");
+    _tb_flf(1, 1, 1024);
+    assert(_flf_parse(_tb_buf, _tb_len) != 0, "1024 comment lines -> loads (FLF_MAX_COMMENTS)");
+    _tb_flf(1, 1, 1025);
+    assert_eq(_flf_parse(_tb_buf, _tb_len), 0, "1025 comment lines -> 0");
+}
+
+fn t_flf_size_gate() {
+    test_group(".flf / size gate: FLF_MAX_FILE - 1 loads, FLF_MAX_FILE does not");
+    # Bytes after the 95th glyph are ignored (the German block and any
+    # code-tagged glyphs are skipped), so padding goes at the end.
+    _tb_flf(1, 1, 0);
+    var base = _tb_buf;
+    var blen = _tb_len;
+    var big = alloc(1048576);
+    memcpy(big, base, blen);
+    memset(big + blen, 10, 1048576 - blen);
+    assert(_flf_parse(big, 1048575) != 0, "1048575 bytes -> loads");
+    assert_eq(_flf_parse(big, 1048576), 0, "1048576 bytes -> 0");
+}
+
+fn t_font_construction() {
+    test_group("font_new / font_set_char / font_set_row");
+    var f = font_new(3, 2, 1, 2);
+    assert(f != 0, "font_new");
+    assert_eq(font_width(f), 3, "width");
+    assert_eq(font_height(f), 2, "height");
+    assert_eq(font_gap(f), 1, "gap");
+    assert_eq(font_count(f), 2, "count");
+    assert_eq(load8(font_row(f, 1, 1) + 2), 32, "rows start as spaces");
+    assert_eq(font_glyph_index(f, 65), 0 - 1, "charmap starts empty");
+    assert_eq(font_set_char(f, 0, 65), 0, "map A -> glyph 0");
+    assert_eq(font_set_char(f, 1, 65), 0 - 1, "A again -> -1 (duplicate)");
+    assert_eq(font_set_char(f, 1, 128), 0 - 1, "128 -> -1 (past CHARMAP_SIZE)");
+    assert_eq(font_set_char(f, 1, 0 - 1), 0 - 1, "-1 -> -1");
+    assert_eq(font_set_char(f, 1, 66), 0, "map B -> glyph 1");
+    assert_eq(font_glyph_index(f, 66), 1, "B -> 1");
+    assert_eq(font_glyph_index(f, 98), 1, "b folds to B");
+    font_set_row(f, 1, 0, "#.#");
+    assert_eq(memeq(font_row(f, 1, 0), "#.#", 3), 1, "font_set_row copies width bytes");
+    assert_eq(load8(font_row(f, 0, 0)), 32, "glyph 0 untouched");
+}
+
+# ---- 1.4.1: src/cli.cyr, tested for the first time ----
+
+fn t_cli_is_flf_path() {
+    test_group("cli / _is_flf_path");
+    assert_eq(_is_flf_path("a.flf"), 1, "a.flf");
+    assert_eq(_is_flf_path("./modular.flf"), 1, "./modular.flf");
+    assert_eq(_is_flf_path(".flf"), 0, ".flf alone is a CYML name (rejected there)");
+    assert_eq(_is_flf_path("flf"), 0, "flf");
+    assert_eq(_is_flf_path("a.FLF"), 0, "case-sensitive");
+    assert_eq(_is_flf_path("a.flfx"), 0, "suffix must be last");
+    assert_eq(_is_flf_path(""), 0, "empty");
+}
+
+fn t_cli_build_font_path() {
+    test_group("cli / build_font_path (the CYML --font containment)");
+    var out[96];
+    assert_eq(build_font_path(&out, 96, "block"), 16, "block -> 16 bytes");
+    assert_eq(memeq(&out, "fonts/block.cyml", 17), 1, "block -> fonts/block.cyml + NUL");
+    assert_eq(build_font_path(&out, 96, ""), 0, "empty -> 0");
+    assert_eq(build_font_path(&out, 96, "a/b"), 0, "slash -> 0");
+    assert_eq(build_font_path(&out, 96, "../block"), 0, "traversal -> 0");
+    assert_eq(build_font_path(&out, 96, "a\\b"), 0, "backslash -> 0");
+    assert_eq(build_font_path(&out, 96, "a.b"), 0, "dot -> 0");
+    assert_eq(build_font_path(&out, 96, "a\x1bb"), 0, "ESC -> 0");
+    assert_eq(build_font_path(&out, 96, "a\x7fb"), 0, "DEL -> 0");
+    var n64[72];
+    memset(&n64, 110, 64);
+    store8(&n64 + 64, 0);
+    assert_eq(build_font_path(&out, 96, &n64), 75, "64-byte name -> 75 bytes (FONT_NAME_CAP)");
+    store8(&n64 + 64, 110);
+    store8(&n64 + 65, 0);
+    assert_eq(build_font_path(&out, 96, &n64), 0, "65-byte name -> 0");
+    assert_eq(build_font_path(&out, 16, "block"), 0, "17 bytes needed, 16 available -> 0");
+    assert_eq(build_font_path(&out, 17, "block"), 16, "17 available -> fits");
+    assert(FONT_PATH_CAP >= 12 + FONT_NAME_CAP, "FONT_PATH_CAP holds the longest name");
+}
+
+fn t_cli_parse_align() {
+    test_group("cli / parse_align");
+    assert_eq(parse_align(0), ALIGN_LEFT, "absent -> left");
+    assert_eq(parse_align("left"), ALIGN_LEFT, "left");
+    assert_eq(parse_align("L"), ALIGN_LEFT, "L");
+    assert_eq(parse_align("center"), ALIGN_CENTER, "center");
+    assert_eq(parse_align("centre"), ALIGN_CENTER, "centre");
+    assert_eq(parse_align("C"), ALIGN_CENTER, "C");
+    assert_eq(parse_align("right"), ALIGN_RIGHT, "right");
+    assert_eq(parse_align("R"), ALIGN_RIGHT, "R");
+    assert_eq(parse_align(""), 0 - 1, "empty -> -1");
+    assert_eq(parse_align("LEFT"), 0 - 1, "LEFT -> -1");
+    assert_eq(parse_align("l"), 0 - 1, "l -> -1");
+    assert_eq(parse_align("middle"), 0 - 1, "middle -> -1");
+}
+
+# The sentinels are exit-code contract: main() maps -2 to "bad integer
+# value", -3 to "must be non-negative", -4 to the "max" message.
+fn t_cli_parse_count_flag() {
+    test_group("cli / _parse_count_flag (--width / --pad)");
+    assert_eq(_parse_count_flag(0), 0, "absent -> 0");
+    assert_eq(_parse_count_flag("0"), 0, "0");
+    assert_eq(_parse_count_flag("5"), 5, "5");
+    assert_eq(_parse_count_flag("007"), 7, "007 -> 7 (leading zeros kept working)");
+    assert_eq(_parse_count_flag("-0"), 0, "-0 -> 0");
+    assert_eq(_parse_count_flag("-00"), 0, "-00 -> 0");
+    assert_eq(_parse_count_flag("4097"), 4097, "4097 parses; main applies WIDTH_CAP");
+    assert_eq(_parse_count_flag("1048576"), 1048576, "PARSER_INT_CAP itself parses");
+    assert_eq(_parse_count_flag("-5"), 0 - 3, "-5 -> COUNT_NEG");
+    assert_eq(_parse_count_flag("1048577"), 0 - 4, "past PARSER_INT_CAP -> COUNT_OVER");
+    assert_eq(_parse_count_flag("18446744073709551617"), 0 - 4, "u64 wrap -> COUNT_OVER (F-015)");
+    assert_eq(_parse_count_flag("-1048577"), 0 - 4, "negative and huge -> COUNT_OVER");
+    assert_eq(_parse_count_flag(""), 0 - 2, "empty -> COUNT_BAD");
+    assert_eq(_parse_count_flag("-"), 0 - 2, "lone - -> COUNT_BAD");
+    assert_eq(_parse_count_flag("abc"), 0 - 2, "abc -> COUNT_BAD");
+    assert_eq(_parse_count_flag("+5"), 0 - 2, "+5 -> COUNT_BAD");
+    assert_eq(_parse_count_flag(" 5"), 0 - 2, "leading space -> COUNT_BAD");
+    assert_eq(_parse_count_flag("12a"), 0 - 2, "trailing junk -> COUNT_BAD");
+}
+
+# Parse a synthetic argv (bnrmr + `n` words from `words`) and join.
+fn _jp(words, n, out, cap): i64 {
+    var argv_arr[2048];
+    store64(&argv_arr, "bnrmr");
+    var i = 0;
+    while (i < n) { store64(&argv_arr + (i + 1) * 8, load64(words + i * 8)); i = i + 1; }
+    var fs = flags_new();
+    if (flags_parse(fs, n + 1, &argv_arr) != 0) { return 0 - 99; }
+    return join_positionals(out, cap, fs);
+}
+
+fn t_cli_join_positionals() {
+    test_group("cli / join_positionals (the 1 KB cap)");
+    var out = alloc(2048);
+    var w[64];
+    store64(&w, "HELLO");
+    store64(&w + 8, "WORLD");
+    assert_eq(_jp(&w, 2, out, MAX_INPUT), 11, "HELLO WORLD -> 11 bytes");
+    assert_eq(memeq(out, "HELLO WORLD", 11), 1, "joined with one space");
+    assert_eq(_jp(&w, 0, out, MAX_INPUT), 0, "no words -> 0");
+    var a1024 = alloc(1100);
+    memset(a1024, 65, 1024);
+    store8(a1024 + 1024, 0);
+    store64(&w, a1024);
+    assert_eq(_jp(&w, 1, out, MAX_INPUT), 1024, "one 1024-byte word -> 1024");
+    store8(a1024 + 1024, 65);
+    store8(a1024 + 1025, 0);
+    assert_eq(_jp(&w, 1, out, MAX_INPUT), 0 - 1, "one 1025-byte word -> -1");
+    var a512 = alloc(600);
+    memset(a512, 65, 512);
+    store8(a512 + 512, 0);
+    var a511 = alloc(600);
+    memset(a511, 65, 511);
+    store8(a511 + 511, 0);
+    store64(&w, a512);
+    store64(&w + 8, a511);
+    assert_eq(_jp(&w, 2, out, MAX_INPUT), 1024, "512 + space + 511 -> 1024");
+    store64(&w + 8, a512);
+    assert_eq(_jp(&w, 2, out, MAX_INPUT), 0 - 1, "512 + space + 512 -> -1");
+    # 200 words: past the 128 the old flag parser kept (issue 0007).
+    var many = alloc(256 * 8);
+    var k = 0;
+    while (k < 200) { store64(many + k * 8, "x"); k = k + 1; }
+    assert_eq(_jp(many, 200, out, MAX_INPUT), 399, "200 one-letter words -> 399 bytes, none dropped");
+}
+
+fn t_cli_sort_paths() {
+    test_group("cli / _str_lex_cmp + _sort_paths (--list-fonts order)");
+    assert(_str_lex_cmp(str_from("a"), str_from("ab")) < 0, "prefix sorts first");
+    assert(_str_lex_cmp(str_from("b"), str_from("a")) > 0, "b > a");
+    assert_eq(_str_lex_cmp(str_from("big"), str_from("big")), 0, "equal");
+    assert(_str_lex_cmp(str_from("B"), str_from("a")) < 0, "bytewise: B < a");
+    var v = vec_new();
+    vec_push(v, str_from("fonts/slim.cyml"));
+    vec_push(v, str_from("fonts/big.cyml"));
+    vec_push(v, str_from("fonts/block.cyml"));
+    _sort_paths(v);
+    assert_eq(memeq(str_data(vec_get(v, 0)), "fonts/big.cyml", 14), 1, "big first");
+    assert_eq(memeq(str_data(vec_get(v, 1)), "fonts/block.cyml", 16), 1, "block second");
+    assert_eq(memeq(str_data(vec_get(v, 2)), "fonts/slim.cyml", 15), 1, "slim third");
 }
 
 # ---- 1.2.0: stdout probes through darshana (issues 0018 / 0019) ----
@@ -905,7 +1336,245 @@ fn _pt_same(a, an, b, bn): i64 {
     return memeq(a, b, an);
 }
 
+# Point fd 1 at a fresh pipe; *rd_out / *wr_out get its ends. Returns
+# the saved fd 1 for _cap_end, or -1. Whatever is written before
+# _cap_end must fit the pipe (64 KB on Linux).
+fn _cap_begin(rd_out, wr_out): i64 {
+    var fds[16];
+    if (sys_pipe(&fds) < 0) { return 0 - 1; }
+    var rd = load32(&fds);
+    var wr = load32(&fds + 4);
+    var saved = _pt_redirect(wr);
+    if (saved < 0) { sys_close(rd); sys_close(wr); return 0 - 1; }
+    store64(rd_out, rd);
+    store64(wr_out, wr);
+    return saved;
+}
+
+# Restore fd 1 and collect what was written into buf. Returns the count.
+fn _cap_end(saved, rd, wr, buf, cap): i64 {
+    _pt_restore(saved);
+    sys_close(wr);
+    var got = 0;
+    var go = 1;
+    while (go == 1) {
+        var n = sys_read(rd, buf + got, cap - got);
+        if (n > 0) { got = got + n; } else { go = 0; }
+        if (got >= cap) { go = 0; }
+    }
+    sys_close(rd);
+    return got;
+}
+
+# Does buf[0..n) contain the cstring s?
+fn _has(buf, n, s): i64 {
+    var sl = strlen(s);
+    var i = 0;
+    while (i + sl <= n) {
+        if (memeq(buf + i, s, sl) == 1) { return 1; }
+        i = i + 1;
+    }
+    return 0;
+}
+
+# "/tmp/bnrmr-t-<pid>-<tag>" into out, NUL-terminated.
+fn _tmp_path(out, tag): i64 {
+    memcpy(out, "/tmp/bnrmr-t-", 13);
+    var e = tty_dec_buf(out, 13, sys_getpid());
+    store8(out + e, 45);
+    var tl = strlen(tag);
+    memcpy(out + e + 1, tag, tl);
+    store8(out + e + 1 + tl, 0);
+    return 0;
+}
+
+# Write buf[0..n) to path (created or truncated). 0, or -1.
+fn _tw_file(path, buf, n): i64 {
+    var fd = file_open(path, O_WRONLY | O_CREAT | O_TRUNC, 420);
+    if (fd < 0) { return 0 - 1; }
+    var off = 0;
+    var rc = 0;
+    while (off < n && rc == 0) {
+        var w = file_write(fd, buf + off, n - off);
+        if (w <= 0) { rc = 0 - 1; } else { off = off + w; }
+    }
+    file_close(fd);
+    return rc;
+}
+
 #endif
+
+# ---- 1.4.1: reader gates and CLI output, through real descriptors ----
+
+# A FIFO in a font path must not block any reader (1.1.4's S_IFREG gate,
+# now in _slurp). git cannot hold a FIFO, so it is made here. If the gate
+# regressed, open(2) would block and the suite would hit cyrius test's
+# deadline, which fails the run.
+fn t_reader_fifo() {
+    test_group("readers / FIFO rejected before open");
+    #ifdef CYRIUS_TARGET_LINUX
+    var p[96];
+    _tmp_path(&p, "fifo.cyml");
+    xunlink(&p);
+    var rc = sys_mknodat(0 - 100, &p, 4096 | 384, 0);       # S_IFIFO | 0600
+    assert_eq(rc, 0, "mkfifo");
+    if (rc == 0) {
+        assert_eq(font_load_file(&p), 0, "font_load_file(FIFO) -> 0, no block");
+        assert_eq(font_header_load(&p), 0, "font_header_load(FIFO) -> 0, no block");
+        assert_eq(flf_load_file(&p), 0, "flf_load_file(FIFO) -> 0, no block");
+        xunlink(&p);
+    }
+    #endif
+}
+
+# The 64 KB gate through the real reader (_slurp), not just the parser.
+fn t_reader_size_gate_file() {
+    test_group("readers / 64 KB gate through font_load_file");
+    #ifdef CYRIUS_TARGET_LINUX
+    var p[96];
+    _tmp_path(&p, "64k.cyml");
+    _tb_padded_font(65535);
+    assert_eq(_tw_file(&p, _tb_buf, _tb_len), 0, "wrote 65535 bytes");
+    assert(font_load_file(&p) != 0, "65535-byte file -> loads");
+    assert(font_header_load(&p) != 0, "65535-byte file -> lists");
+    _tb_padded_font(65536);
+    assert_eq(_tw_file(&p, _tb_buf, _tb_len), 0, "wrote 65536 bytes");
+    assert_eq(font_load_file(&p), 0, "65536-byte file -> 0");
+    assert_eq(font_header_load(&p), 0, "65536-byte file -> header 0");
+    xunlink(&p);
+    #endif
+}
+
+# F-012: the --list-fonts malformed branch echoes a filesystem path, so it
+# goes through _write_scrubbed. Same byte set as _scrub_ctl, and length
+# preserving.
+fn t_cli_write_scrubbed() {
+    test_group("cli / _write_scrubbed (F-012)");
+    #ifdef CYRIUS_TARGET_LINUX
+    var rd = 0;
+    var wr = 0;
+    var src = "ev\x1b[31mil\x07.cy\x7fml\x85!";
+    var n = strlen(src);
+    var buf = alloc(256);
+    var saved = _cap_begin(&rd, &wr);
+    assert(saved >= 0, "fd 1 on a pipe");
+    if (saved >= 0) {
+        _write_scrubbed(src, n);
+        var got = _cap_end(saved, rd, wr, buf, 256);
+        assert_eq(got, n, "length preserved");
+        assert_eq(_pt_same(buf, got, "ev [31mil .cy ml !", 18), 1, "ESC, BEL, DEL, C1 -> space; the rest verbatim");
+    }
+    saved = _cap_begin(&rd, &wr);
+    if (saved >= 0) {
+        _write_scrubbed("plain.cyml", 10);
+        var got2 = _cap_end(saved, rd, wr, buf, 256);
+        assert_eq(_pt_same(buf, got2, "plain.cyml", 10), 1, "clean input -> verbatim");
+    }
+    #endif
+}
+
+fn t_cli_print_padded() {
+    test_group("cli / _print_padded (--list-fonts name column)");
+    #ifdef CYRIUS_TARGET_LINUX
+    var rd = 0;
+    var wr = 0;
+    var buf = alloc(256);
+    var saved = _cap_begin(&rd, &wr);
+    if (saved >= 0) {
+        _print_padded("abc", 6);
+        _print_padded("abcdef", 6);
+        _print_padded("abcdefgh", 6);
+        var got = _cap_end(saved, rd, wr, buf, 256);
+        assert_eq(_pt_same(buf, got, "abc   abcdef abcdefgh ", 22), 1, "pad to width; at or past it, one space");
+    }
+    #endif
+}
+
+# --list-fonts from the repo root: the header, then the three in-tree
+# fonts in name order. The exact bytes are the golden snapshot tier's.
+fn t_cli_list_fonts() {
+    test_group("cli / cmd_list_fonts from the repo root");
+    #ifdef CYRIUS_TARGET_LINUX
+    var rd = 0;
+    var wr = 0;
+    var buf = alloc(8192);
+    var saved = _cap_begin(&rd, &wr);
+    if (saved >= 0) {
+        var rc = cmd_list_fonts();
+        var n = _cap_end(saved, rd, wr, buf, 8192);
+        assert_eq(rc, 0, "exit 0");
+        assert_eq(memeq(buf, "Available fonts (fonts/):\n\n", 27), 1, "header line, blank line");
+        assert_eq(_has(buf, n, "  big        7x7 gap=1  "), 1, "big: name column, geometry");
+        assert_eq(_has(buf, n, "  block      5x5 gap=1  "), 1, "block");
+        assert_eq(_has(buf, n, "  slim       4x5 gap=1  "), 1, "slim");
+        assert_eq(_has(buf, n, "malformed"), 0, "no in-tree font is malformed");
+    }
+    #endif
+}
+
+fn t_cli_build_argv_array() {
+    test_group("cli / build_argv_array");
+    args_init();                        # main() does this before anything reads argv
+    var arr = alloc(256 * 8);
+    var ac = build_argv_array(arr);
+    assert_eq(ac, argc(), "returns argc()");
+    assert(ac >= 1, "argv[0] at least");
+    assert_eq(load64(arr), argv(0), "slot 0 is argv(0)");
+}
+
+# resolve_frame: an explicit width wins; otherwise the terminal, then
+# COLUMNS, then 80. The terminal leg needs a pty, so it is Linux-only.
+fn t_layout_resolve_frame() {
+    test_group("layout / resolve_frame + term_width_env");
+    assert_eq(resolve_frame(40), 40, "explicit width wins");
+    assert_eq(resolve_frame(4096), 4096, "explicit 4096");
+    var e = term_width_env();
+    assert(e >= 0 && e <= WS_COL_CAP, "term_width_env is 0..WS_COL_CAP whatever the runner's COLUMNS");
+    #ifdef CYRIUS_TARGET_LINUX
+    var m = 0;
+    var s = 0;
+    if (_pt_open(&m, &s) == 0) {
+        _pt_set_winsize(s, 24, 77);
+        var saved = _pt_redirect(s);
+        var fr = 0;
+        if (saved >= 0) {
+            fr = resolve_frame(0);
+            _pt_restore(saved);
+        }
+        assert_eq(fr, 77, "no --width, 77-column pty -> 77");
+        sys_close(s);
+        sys_close(m);
+    }
+    #endif
+}
+
+# Every flag the parser registers must appear in --help, and so must the
+# `--` terminator (1.4.1). A doc-drift check, not a byte check: the exact
+# bytes are the golden snapshot tier's job.
+fn t_cli_usage_names_every_flag() {
+    test_group("cli / --help names every flag");
+    #ifdef CYRIUS_TARGET_LINUX
+    var rd = 0;
+    var wr = 0;
+    var buf = alloc(8192);
+    var saved = _cap_begin(&rd, &wr);
+    if (saved >= 0) {
+        print_usage();
+        var n = _cap_end(saved, rd, wr, buf, 8192);
+        assert(n > 0, "usage printed");
+        assert_eq(_has(buf, n, "-f, --font"), 1, "--font / -f");
+        assert_eq(_has(buf, n, "--align"), 1, "--align");
+        assert_eq(_has(buf, n, "-w, --width"), 1, "--width / -w");
+        assert_eq(_has(buf, n, "--pad"), 1, "--pad");
+        assert_eq(_has(buf, n, "--color"), 1, "--color");
+        assert_eq(_has(buf, n, "--list-fonts"), 1, "--list-fonts");
+        assert_eq(_has(buf, n, "--version"), 1, "--version");
+        assert_eq(_has(buf, n, "-h, --help"), 1, "--help / -h");
+        assert_eq(_has(buf, n, "  --  "), 1, "the -- terminator");
+        assert_eq(_has(buf, n, "bright-<name>"), 1, "the bright- dash form");
+    }
+    #endif
+}
 
 # Non-TTY stdout: both probes say "not a terminal". The Linux contract
 # that keeps `bnrmr ... | cat` untruncated and uncolored.
@@ -1065,6 +1734,28 @@ fn main() {
     t_header_load_missing();
     t_header_load_malformed();
     t_reader_dir_path();
+    t_reader_empty_file();
+    t_reader_fifo();
+    t_reader_size_gate_file();
+    t_cyml_geometry_bounds();
+    t_cyml_entry_rules();
+    t_cyml_entry_cap();
+    t_cyml_size_gate();
+    t_flf_header_gates();
+    t_flf_size_gate();
+    t_cli_is_flf_path();
+    t_cli_build_font_path();
+    t_cli_parse_align();
+    t_cli_parse_count_flag();
+    t_cli_join_positionals();
+    t_cli_sort_paths();
+    t_cli_write_scrubbed();
+    t_cli_print_padded();
+    t_cli_usage_names_every_flag();
+    t_cli_list_fonts();
+    t_cli_build_argv_array();
+    t_layout_resolve_frame();
+    t_font_construction();
     t_load_tiny_flf();
     t_load_flf_missing();
     t_load_flf_malformed();
@@ -1083,4 +1774,4 @@ fn main() {
 }
 
 var exit_code = main();
-syscall(60, exit_code);
+syscall(SYS_EXIT, exit_code);

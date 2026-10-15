@@ -68,7 +68,19 @@ jobs:
           echo "CYRIUS_HOME=$HOME/.cyrius" >> $GITHUB_ENV
 
       - name: Resolve dependencies
-        run: cyrius deps
+        # --locked: lib/ and cyrius.lock must be exactly what the manifest's
+        # pins resolve to. A hand-edited lib/ file (CLAUDE.md forbids it) or
+        # a lock that drifted from the tags fails here, not three steps on.
+        run: cyrius deps --locked
+
+      - name: Lint
+        # --strict exits nonzero on any warning; --strict-deferrals on any
+        # untracked TODO/FIXME. All of src/ plus the three harnesses. cyrlint
+        # refuses a file that does not compile, so this is not vacuous on a
+        # broken file. Note it is a style gate only: it does not see raw
+        # syscall numbers, which is why the readers' AGNOS bug shipped
+        # through a clean lint (1.1.4).
+        run: cyrius lint --strict --strict-deferrals src/*.cyr tests/bannermanor.tcyr tests/bannermanor.bcyr tests/bannermanor.fcyr
 
       - name: Build
         # Binary is `bnrmr` (vowel-dropped per the commandress→cmdrs
@@ -78,6 +90,27 @@ jobs:
         run: |
           mkdir -p build
           cyrius build src/main.cyr build/bnrmr
+
+      - name: Cross-build (AGNOS, aarch64)
+        # The pinned toolchain cross-compiles both targets in-process from
+        # this x86_64 runner. This gates COMPILE breakage only: neither
+        # binary runs here (an AGNOS binary cannot run on Linux at all, and
+        # the aarch64 runtime check under qemu is roadmap work).
+        run: |
+          cyrius build --agnos src/main.cyr build/bnrmr-agnos
+          cyrius build --aarch64 src/main.cyr build/bnrmr-aarch64
+
+      - name: Smoke
+        # The built binary runs, renders, and reports the version VERSION
+        # says (doc-pin-check reads the literal in the source; this reads
+        # what the binary actually prints).
+        run: |
+          want="bnrmr $(tr -d '[:space:]' < VERSION)"
+          got="$(./build/bnrmr --version)"
+          test "$got" = "$want" || { echo "--version printed '$got', VERSION says '$want'"; exit 1; }
+          out="$(./build/bnrmr AGNOS)"
+          test -n "$out" || { echo "bnrmr AGNOS printed nothing"; exit 1; }
+          ./build/bnrmr --list-fonts > /dev/null
 
       - name: Test
         # Explicit .tcyr path (matches patra + mihi/iam/chakshu) — the
@@ -93,5 +126,31 @@ jobs:
         # choice, not a workaround.)
         #
         # Each .tcyr runs under a 300 s deadline; override with
-        # CYRIUS_TEST_TIMEOUT=<seconds> (0 disables).
+        # CYRIUS_TEST_TIMEOUT=<seconds> (0 disables). The deadline is also
+        # what turns a regressed FIFO gate (t_reader_fifo blocks in open)
+        # into a failure instead of a hung job.
         run: cyrius test tests/bannermanor.tcyr
+
+      - name: Golden suite
+        # The v1.0 frozen-output contract, byte for byte: 285 invocations in
+        # three tiers (frozen renders, error paths, snapshot help/version/
+        # listing), 112 of them on a pty through script(1), which
+        # ubuntu-latest ships in util-linux. A missing script(1) FAILS the
+        # suite; it never skips the pty leg. See scripts/golden.sh.
+        run: sh scripts/golden.sh
+
+      - name: Fuzz
+        # A regression gate over the three font parsers (issue 0010): seeded
+        # mutants of every fixture, scrub / geometry / charmap invariants on
+        # whatever loads, and a guard page after each input so an over-read
+        # faults. The harness also checks its own oracle can say no. Until
+        # 1.4.1 this target was a stub that always passed; see
+        # tests/bannermanor.fcyr before citing it as evidence of anything.
+        run: cyrius fuzz tests/bannermanor.fcyr
+
+      - name: Coverage floor
+        # Reference coverage: the share of src/'s public functions the test
+        # corpus names. A floor, not a correctness proof. 100% since 1.4.1
+        # (36/36), when src/cli.cyr made the CLI testable; a new public
+        # function without a test drops it below and fails here.
+        run: cyrius coverage --min 100

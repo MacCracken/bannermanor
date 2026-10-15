@@ -41,8 +41,11 @@ fn parse_color(s): i64 {
     if (streq(s, "cyan")    == 1) { return TTY_FG_CYAN; }
     if (streq(s, "white")   == 1) { return TTY_FG_WHITE; }
 
-    # 8 bright variants — accept both "bright_X" and "bright-X" /
-    # "brightX" so users don't have to memorize the separator.
+    # 8 bright variants, spelled "bright_X" or "bright-X", so users don't
+    # have to memorize the separator. There is no separator-less
+    # "brightX": `--color brightred` exits 1. Adding it would widen a
+    # frozen flag surface, which ADR 0002 ruling 2 keeps for 2.0. (Until
+    # 1.4.1 this comment claimed "brightX" worked.)
     if (streq(s, "bright_black")   == 1) { return TTY_FG_BRIGHT_BLACK; }
     if (streq(s, "bright_red")     == 1) { return TTY_FG_BRIGHT_RED; }
     if (streq(s, "bright_green")   == 1) { return TTY_FG_BRIGHT_GREEN; }

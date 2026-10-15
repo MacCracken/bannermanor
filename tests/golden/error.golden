@@ -1,0 +1,703 @@
+### font-missing
+args: [--font] [typo] [HI]
+exit: 1
+stdout: 50 bytes, cksum 2368485592
+| bnrmr: failed to load font (missing or malformed)$
+stderr: 0 bytes, cksum 4294967295
+
+### font-slash
+args: [--font] [../fonts/block] [HI]
+exit: 1
+stdout: 25 bytes, cksum 1922709972
+| bnrmr: invalid font name$
+stderr: 0 bytes, cksum 4294967295
+
+### font-dot
+args: [--font] [a.b] [HI]
+exit: 1
+stdout: 25 bytes, cksum 1922709972
+| bnrmr: invalid font name$
+stderr: 0 bytes, cksum 4294967295
+
+### font-backslash
+args: [--font] [a\\b] [HI]
+exit: 1
+stdout: 25 bytes, cksum 1922709972
+| bnrmr: invalid font name$
+stderr: 0 bytes, cksum 4294967295
+
+### font-control-byte
+args: [--font] [a\033b] [HI]
+exit: 1
+stdout: 25 bytes, cksum 1922709972
+| bnrmr: invalid font name$
+stderr: 0 bytes, cksum 4294967295
+
+### font-name-65
+args: [--font] [nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn] [HI]
+exit: 1
+stdout: 25 bytes, cksum 1922709972
+| bnrmr: invalid font name$
+stderr: 0 bytes, cksum 4294967295
+
+### font-name-64-missing
+args: [--font] [nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn] [HI]
+exit: 1
+stdout: 50 bytes, cksum 2368485592
+| bnrmr: failed to load font (missing or malformed)$
+stderr: 0 bytes, cksum 4294967295
+
+### font-empty-arg
+args: [--font] [] [HI]
+exit: 1
+stdout: 25 bytes, cksum 1922709972
+| bnrmr: invalid font name$
+stderr: 0 bytes, cksum 4294967295
+
+### font-empty-equals
+args: [--font=] [HI]
+exit: 1
+stdout: 25 bytes, cksum 1922709972
+| bnrmr: invalid font name$
+stderr: 0 bytes, cksum 4294967295
+
+### font-bare-flf-suffix
+args: [--font] [.flf] [HI]
+exit: 1
+stdout: 25 bytes, cksum 1922709972
+| bnrmr: invalid font name$
+stderr: 0 bytes, cksum 4294967295
+
+### flf-missing
+args: [--font] [nope.flf] [HI]
+exit: 1
+stdout: 55 bytes, cksum 3137093636
+| bnrmr: failed to load .flf font (missing or malformed)$
+stderr: 0 bytes, cksum 4294967295
+
+### flf-bad-magic
+args: [--font] [tests/fixtures/flf_bad_magic.flf] [HI]
+exit: 1
+stdout: 55 bytes, cksum 3137093636
+| bnrmr: failed to load .flf font (missing or malformed)$
+stderr: 0 bytes, cksum 4294967295
+
+### flf-bad-height
+args: [--font] [tests/fixtures/flf_bad_height.flf] [HI]
+exit: 1
+stdout: 55 bytes, cksum 3137093636
+| bnrmr: failed to load .flf font (missing or malformed)$
+stderr: 0 bytes, cksum 4294967295
+
+### flf-truncated
+args: [--font] [tests/fixtures/flf_truncated.flf] [HI]
+exit: 1
+stdout: 55 bytes, cksum 3137093636
+| bnrmr: failed to load .flf font (missing or malformed)$
+stderr: 0 bytes, cksum 4294967295
+
+### flf-space-hardblank
+args: [--font] [tests/fixtures/flf_space_hardblank.flf] [HI]
+exit: 1
+stdout: 55 bytes, cksum 3137093636
+| bnrmr: failed to load .flf font (missing or malformed)$
+stderr: 0 bytes, cksum 4294967295
+
+### flf-directory
+args: [--font] [dir.flf] [HI]
+cwd: tests/golden/cwd/mixed
+exit: 1
+stdout: 55 bytes, cksum 3137093636
+| bnrmr: failed to load .flf font (missing or malformed)$
+stderr: 0 bytes, cksum 4294967295
+
+### cyml-bad-schema
+args: [--font] [bad_schema] [HI]
+cwd: tests/golden/cwd/mixed
+exit: 1
+stdout: 50 bytes, cksum 2368485592
+| bnrmr: failed to load font (missing or malformed)$
+stderr: 0 bytes, cksum 4294967295
+
+### cyml-bad-body-byte
+args: [--font] [bad_body_byte] [HI]
+cwd: tests/golden/cwd/mixed
+exit: 1
+stdout: 50 bytes, cksum 2368485592
+| bnrmr: failed to load font (missing or malformed)$
+stderr: 0 bytes, cksum 4294967295
+
+### cyml-wrong-row-count
+args: [--font] [wrong_row_count] [HI]
+cwd: tests/golden/cwd/mixed
+exit: 1
+stdout: 50 bytes, cksum 2368485592
+| bnrmr: failed to load font (missing or malformed)$
+stderr: 0 bytes, cksum 4294967295
+
+### cyml-zero-entries
+args: [--font] [zero_entries] [HI]
+cwd: tests/golden/cwd/mixed
+exit: 1
+stdout: 50 bytes, cksum 2368485592
+| bnrmr: failed to load font (missing or malformed)$
+stderr: 0 bytes, cksum 4294967295
+
+### cyml-width-0
+args: [--font] [width0] [HI]
+cwd: tests/golden/cwd/mixed
+exit: 1
+stdout: 50 bytes, cksum 2368485592
+| bnrmr: failed to load font (missing or malformed)$
+stderr: 0 bytes, cksum 4294967295
+
+### cyml-listed-name-not-stem
+args: [--font] [other] [HI]
+cwd: tests/golden/cwd/mixed
+exit: 1
+stdout: 50 bytes, cksum 2368485592
+| bnrmr: failed to load font (missing or malformed)$
+stderr: 0 bytes, cksum 4294967295
+
+### cyml-nested-unreachable
+args: [--font] [pack/nested] [HI]
+cwd: tests/golden/cwd/mixed
+exit: 1
+stdout: 25 bytes, cksum 1922709972
+| bnrmr: invalid font name$
+stderr: 0 bytes, cksum 4294967295
+
+### cyml-no-fonts-dir
+args: [--font] [block] [HI]
+cwd: tests/golden/cwd/empty
+exit: 1
+stdout: 50 bytes, cksum 2368485592
+| bnrmr: failed to load font (missing or malformed)$
+stderr: 0 bytes, cksum 4294967295
+
+### align-unknown
+args: [--align] [x] [HI]
+exit: 1
+stdout: 46 bytes, cksum 2400474953
+| bnrmr: --align must be left, center, or right$
+stderr: 0 bytes, cksum 4294967295
+
+### align-uppercase-word
+args: [--align] [LEFT] [HI]
+exit: 1
+stdout: 46 bytes, cksum 2400474953
+| bnrmr: --align must be left, center, or right$
+stderr: 0 bytes, cksum 4294967295
+
+### align-empty
+args: [--align] [] [HI]
+exit: 1
+stdout: 46 bytes, cksum 2400474953
+| bnrmr: --align must be left, center, or right$
+stderr: 0 bytes, cksum 4294967295
+
+### width-alpha
+args: [--width] [abc] [HI]
+exit: 1
+stdout: 25 bytes, cksum 2596445894
+| bnrmr: bad integer value$
+stderr: 0 bytes, cksum 4294967295
+
+### width-empty
+args: [--width] [] [HI]
+exit: 1
+stdout: 25 bytes, cksum 2596445894
+| bnrmr: bad integer value$
+stderr: 0 bytes, cksum 4294967295
+
+### width-negative
+args: [--width] [-5] [HI]
+exit: 1
+stdout: 36 bytes, cksum 1866824551
+| bnrmr: --width must be non-negative$
+stderr: 0 bytes, cksum 4294967295
+
+### width-4097
+args: [--width] [4097] [HI]
+exit: 1
+stdout: 24 bytes, cksum 3626136963
+| bnrmr: --width max 4096$
+stderr: 0 bytes, cksum 4294967295
+
+### width-past-int-cap
+args: [--width] [1048577] [HI]
+exit: 1
+stdout: 24 bytes, cksum 3626136963
+| bnrmr: --width max 4096$
+stderr: 0 bytes, cksum 4294967295
+
+### width-u64-wrap
+args: [--width] [18446744073709551620] [HI]
+exit: 1
+stdout: 24 bytes, cksum 3626136963
+| bnrmr: --width max 4096$
+stderr: 0 bytes, cksum 4294967295
+
+### width-plus-sign
+args: [--width] [+5] [HI]
+exit: 1
+stdout: 25 bytes, cksum 2596445894
+| bnrmr: bad integer value$
+stderr: 0 bytes, cksum 4294967295
+
+### width-leading-space
+args: [--width] [ 5] [HI]
+exit: 1
+stdout: 25 bytes, cksum 2596445894
+| bnrmr: bad integer value$
+stderr: 0 bytes, cksum 4294967295
+
+### pad-65
+args: [--pad] [65] [HI]
+exit: 1
+stdout: 20 bytes, cksum 1335478081
+| bnrmr: --pad max 64$
+stderr: 0 bytes, cksum 4294967295
+
+### pad-negative
+args: [--pad] [-1] [HI]
+exit: 1
+stdout: 34 bytes, cksum 2401827971
+| bnrmr: --pad must be non-negative$
+stderr: 0 bytes, cksum 4294967295
+
+### pad-alpha
+args: [--pad] [x] [HI]
+exit: 1
+stdout: 25 bytes, cksum 2596445894
+| bnrmr: bad integer value$
+stderr: 0 bytes, cksum 4294967295
+
+### pad-u64-wrap
+args: [--pad] [18446744073709551617] [HI]
+exit: 1
+stdout: 20 bytes, cksum 1335478081
+| bnrmr: --pad max 64$
+stderr: 0 bytes, cksum 4294967295
+
+### color-unknown
+args: [--color] [purple] [HI]
+exit: 1
+stdout: 140 bytes, cksum 2711244004
+| bnrmr: --color must be a known name or 'rainbow'$
+|        (black/red/green/yellow/blue/magenta/cyan/white,$
+|         bright_<name>, or rainbow)$
+stderr: 0 bytes, cksum 4294967295
+
+### color-no-separator
+args: [--color] [brightred] [HI]
+exit: 1
+stdout: 140 bytes, cksum 2711244004
+| bnrmr: --color must be a known name or 'rainbow'$
+|        (black/red/green/yellow/blue/magenta/cyan/white,$
+|         bright_<name>, or rainbow)$
+stderr: 0 bytes, cksum 4294967295
+
+### color-uppercase
+args: [--color] [CYAN] [HI]
+exit: 1
+stdout: 140 bytes, cksum 2711244004
+| bnrmr: --color must be a known name or 'rainbow'$
+|        (black/red/green/yellow/blue/magenta/cyan/white,$
+|         bright_<name>, or rainbow)$
+stderr: 0 bytes, cksum 4294967295
+
+### color-two-words
+args: [--color] [bright red] [HI]
+exit: 1
+stdout: 140 bytes, cksum 2711244004
+| bnrmr: --color must be a known name or 'rainbow'$
+|        (black/red/green/yellow/blue/magenta/cyan/white,$
+|         bright_<name>, or rainbow)$
+stderr: 0 bytes, cksum 4294967295
+
+### parse-unknown-long
+args: [--bogus] [HI]
+exit: 1
+stdout: 1352 bytes, cksum 1969473130
+| bnrmr: unknown flag$
+| $
+| bnrmr \342\200\224 figlet-equivalent ASCII-art banner generator$
+| $
+| Usage:$
+|   bnrmr [FLAGS] TEXT...$
+| $
+| Flags:$
+|   -f, --font NAME       load fonts/NAME.cyml (default: embedded block)$
+|                         or a path ending in .flf for a legacy figlet font$
+|       --align V         left | center | right (default: left)$
+|   -w, --width N         truncate at glyph boundary at N columns$
+|                         (default: 0 = unlimited; if N is smaller$
+|                         than one glyph, no glyphs render \342\200\224 the$
+|                         banner comes out as blank rows)$
+|       --pad N           N blank lines above and below banner (default: 0)$
+|       --color NAME      colorize: black, red, green, yellow, blue,$
+|                         magenta, cyan, white (or bright_<name> /$
+|                         bright-<name>), or 'rainbow'$
+|                         for per-row cycling. Suppressed on non-TTY stdout.$
+|       --list-fonts      list available fonts and exit$
+|       --version         print version and exit$
+|   -h, --help            print this help and exit$
+|       --                end of flags: everything after it is TEXT,$
+|                         even a word starting with '-' (bnrmr -- -HI)$
+| $
+| Coverage: A-Z, 0-9, space, printable punctuation. Lowercase folds$
+| to uppercase when the font has no lowercase glyphs. Unsupported$
+| characters render as blank.$
+stderr: 0 bytes, cksum 4294967295
+
+### parse-unknown-short
+args: [-x] [HI]
+exit: 1
+stdout: 1352 bytes, cksum 1969473130
+| bnrmr: unknown flag$
+| $
+| bnrmr \342\200\224 figlet-equivalent ASCII-art banner generator$
+| $
+| Usage:$
+|   bnrmr [FLAGS] TEXT...$
+| $
+| Flags:$
+|   -f, --font NAME       load fonts/NAME.cyml (default: embedded block)$
+|                         or a path ending in .flf for a legacy figlet font$
+|       --align V         left | center | right (default: left)$
+|   -w, --width N         truncate at glyph boundary at N columns$
+|                         (default: 0 = unlimited; if N is smaller$
+|                         than one glyph, no glyphs render \342\200\224 the$
+|                         banner comes out as blank rows)$
+|       --pad N           N blank lines above and below banner (default: 0)$
+|       --color NAME      colorize: black, red, green, yellow, blue,$
+|                         magenta, cyan, white (or bright_<name> /$
+|                         bright-<name>), or 'rainbow'$
+|                         for per-row cycling. Suppressed on non-TTY stdout.$
+|       --list-fonts      list available fonts and exit$
+|       --version         print version and exit$
+|   -h, --help            print this help and exit$
+|       --                end of flags: everything after it is TEXT,$
+|                         even a word starting with '-' (bnrmr -- -HI)$
+| $
+| Coverage: A-Z, 0-9, space, printable punctuation. Lowercase folds$
+| to uppercase when the font has no lowercase glyphs. Unsupported$
+| characters render as blank.$
+stderr: 0 bytes, cksum 4294967295
+
+### parse-wrong-case
+args: [--Font] [slim] [HI]
+exit: 1
+stdout: 1352 bytes, cksum 1969473130
+| bnrmr: unknown flag$
+| $
+| bnrmr \342\200\224 figlet-equivalent ASCII-art banner generator$
+| $
+| Usage:$
+|   bnrmr [FLAGS] TEXT...$
+| $
+| Flags:$
+|   -f, --font NAME       load fonts/NAME.cyml (default: embedded block)$
+|                         or a path ending in .flf for a legacy figlet font$
+|       --align V         left | center | right (default: left)$
+|   -w, --width N         truncate at glyph boundary at N columns$
+|                         (default: 0 = unlimited; if N is smaller$
+|                         than one glyph, no glyphs render \342\200\224 the$
+|                         banner comes out as blank rows)$
+|       --pad N           N blank lines above and below banner (default: 0)$
+|       --color NAME      colorize: black, red, green, yellow, blue,$
+|                         magenta, cyan, white (or bright_<name> /$
+|                         bright-<name>), or 'rainbow'$
+|                         for per-row cycling. Suppressed on non-TTY stdout.$
+|       --list-fonts      list available fonts and exit$
+|       --version         print version and exit$
+|   -h, --help            print this help and exit$
+|       --                end of flags: everything after it is TEXT,$
+|                         even a word starting with '-' (bnrmr -- -HI)$
+| $
+| Coverage: A-Z, 0-9, space, printable punctuation. Lowercase folds$
+| to uppercase when the font has no lowercase glyphs. Unsupported$
+| characters render as blank.$
+stderr: 0 bytes, cksum 4294967295
+
+### parse-triple-dash
+args: [---font] [slim] [HI]
+exit: 1
+stdout: 1352 bytes, cksum 1969473130
+| bnrmr: unknown flag$
+| $
+| bnrmr \342\200\224 figlet-equivalent ASCII-art banner generator$
+| $
+| Usage:$
+|   bnrmr [FLAGS] TEXT...$
+| $
+| Flags:$
+|   -f, --font NAME       load fonts/NAME.cyml (default: embedded block)$
+|                         or a path ending in .flf for a legacy figlet font$
+|       --align V         left | center | right (default: left)$
+|   -w, --width N         truncate at glyph boundary at N columns$
+|                         (default: 0 = unlimited; if N is smaller$
+|                         than one glyph, no glyphs render \342\200\224 the$
+|                         banner comes out as blank rows)$
+|       --pad N           N blank lines above and below banner (default: 0)$
+|       --color NAME      colorize: black, red, green, yellow, blue,$
+|                         magenta, cyan, white (or bright_<name> /$
+|                         bright-<name>), or 'rainbow'$
+|                         for per-row cycling. Suppressed on non-TTY stdout.$
+|       --list-fonts      list available fonts and exit$
+|       --version         print version and exit$
+|   -h, --help            print this help and exit$
+|       --                end of flags: everything after it is TEXT,$
+|                         even a word starting with '-' (bnrmr -- -HI)$
+| $
+| Coverage: A-Z, 0-9, space, printable punctuation. Lowercase folds$
+| to uppercase when the font has no lowercase glyphs. Unsupported$
+| characters render as blank.$
+stderr: 0 bytes, cksum 4294967295
+
+### parse-missing-value
+args: [--font]
+exit: 1
+stdout: 1358 bytes, cksum 2281835901
+| bnrmr: flag missing value$
+| $
+| bnrmr \342\200\224 figlet-equivalent ASCII-art banner generator$
+| $
+| Usage:$
+|   bnrmr [FLAGS] TEXT...$
+| $
+| Flags:$
+|   -f, --font NAME       load fonts/NAME.cyml (default: embedded block)$
+|                         or a path ending in .flf for a legacy figlet font$
+|       --align V         left | center | right (default: left)$
+|   -w, --width N         truncate at glyph boundary at N columns$
+|                         (default: 0 = unlimited; if N is smaller$
+|                         than one glyph, no glyphs render \342\200\224 the$
+|                         banner comes out as blank rows)$
+|       --pad N           N blank lines above and below banner (default: 0)$
+|       --color NAME      colorize: black, red, green, yellow, blue,$
+|                         magenta, cyan, white (or bright_<name> /$
+|                         bright-<name>), or 'rainbow'$
+|                         for per-row cycling. Suppressed on non-TTY stdout.$
+|       --list-fonts      list available fonts and exit$
+|       --version         print version and exit$
+|   -h, --help            print this help and exit$
+|       --                end of flags: everything after it is TEXT,$
+|                         even a word starting with '-' (bnrmr -- -HI)$
+| $
+| Coverage: A-Z, 0-9, space, printable punctuation. Lowercase folds$
+| to uppercase when the font has no lowercase glyphs. Unsupported$
+| characters render as blank.$
+stderr: 0 bytes, cksum 4294967295
+
+### parse-missing-value-after-text
+args: [HI] [--width]
+exit: 1
+stdout: 1358 bytes, cksum 2281835901
+| bnrmr: flag missing value$
+| $
+| bnrmr \342\200\224 figlet-equivalent ASCII-art banner generator$
+| $
+| Usage:$
+|   bnrmr [FLAGS] TEXT...$
+| $
+| Flags:$
+|   -f, --font NAME       load fonts/NAME.cyml (default: embedded block)$
+|                         or a path ending in .flf for a legacy figlet font$
+|       --align V         left | center | right (default: left)$
+|   -w, --width N         truncate at glyph boundary at N columns$
+|                         (default: 0 = unlimited; if N is smaller$
+|                         than one glyph, no glyphs render \342\200\224 the$
+|                         banner comes out as blank rows)$
+|       --pad N           N blank lines above and below banner (default: 0)$
+|       --color NAME      colorize: black, red, green, yellow, blue,$
+|                         magenta, cyan, white (or bright_<name> /$
+|                         bright-<name>), or 'rainbow'$
+|                         for per-row cycling. Suppressed on non-TTY stdout.$
+|       --list-fonts      list available fonts and exit$
+|       --version         print version and exit$
+|   -h, --help            print this help and exit$
+|       --                end of flags: everything after it is TEXT,$
+|                         even a word starting with '-' (bnrmr -- -HI)$
+| $
+| Coverage: A-Z, 0-9, space, printable punctuation. Lowercase folds$
+| to uppercase when the font has no lowercase glyphs. Unsupported$
+| characters render as blank.$
+stderr: 0 bytes, cksum 4294967295
+
+### parse-bundled
+args: [-hf] [HI]
+exit: 1
+stdout: 1373 bytes, cksum 1874262112
+| bnrmr: bundled short flags not supported$
+| $
+| bnrmr \342\200\224 figlet-equivalent ASCII-art banner generator$
+| $
+| Usage:$
+|   bnrmr [FLAGS] TEXT...$
+| $
+| Flags:$
+|   -f, --font NAME       load fonts/NAME.cyml (default: embedded block)$
+|                         or a path ending in .flf for a legacy figlet font$
+|       --align V         left | center | right (default: left)$
+|   -w, --width N         truncate at glyph boundary at N columns$
+|                         (default: 0 = unlimited; if N is smaller$
+|                         than one glyph, no glyphs render \342\200\224 the$
+|                         banner comes out as blank rows)$
+|       --pad N           N blank lines above and below banner (default: 0)$
+|       --color NAME      colorize: black, red, green, yellow, blue,$
+|                         magenta, cyan, white (or bright_<name> /$
+|                         bright-<name>), or 'rainbow'$
+|                         for per-row cycling. Suppressed on non-TTY stdout.$
+|       --list-fonts      list available fonts and exit$
+|       --version         print version and exit$
+|   -h, --help            print this help and exit$
+|       --                end of flags: everything after it is TEXT,$
+|                         even a word starting with '-' (bnrmr -- -HI)$
+| $
+| Coverage: A-Z, 0-9, space, printable punctuation. Lowercase folds$
+| to uppercase when the font has no lowercase glyphs. Unsupported$
+| characters render as blank.$
+stderr: 0 bytes, cksum 4294967295
+
+### parse-short-equals
+args: [-w=11] [AG]
+exit: 1
+stdout: 1373 bytes, cksum 1874262112
+| bnrmr: bundled short flags not supported$
+| $
+| bnrmr \342\200\224 figlet-equivalent ASCII-art banner generator$
+| $
+| Usage:$
+|   bnrmr [FLAGS] TEXT...$
+| $
+| Flags:$
+|   -f, --font NAME       load fonts/NAME.cyml (default: embedded block)$
+|                         or a path ending in .flf for a legacy figlet font$
+|       --align V         left | center | right (default: left)$
+|   -w, --width N         truncate at glyph boundary at N columns$
+|                         (default: 0 = unlimited; if N is smaller$
+|                         than one glyph, no glyphs render \342\200\224 the$
+|                         banner comes out as blank rows)$
+|       --pad N           N blank lines above and below banner (default: 0)$
+|       --color NAME      colorize: black, red, green, yellow, blue,$
+|                         magenta, cyan, white (or bright_<name> /$
+|                         bright-<name>), or 'rainbow'$
+|                         for per-row cycling. Suppressed on non-TTY stdout.$
+|       --list-fonts      list available fonts and exit$
+|       --version         print version and exit$
+|   -h, --help            print this help and exit$
+|       --                end of flags: everything after it is TEXT,$
+|                         even a word starting with '-' (bnrmr -- -HI)$
+| $
+| Coverage: A-Z, 0-9, space, printable punctuation. Lowercase folds$
+| to uppercase when the font has no lowercase glyphs. Unsupported$
+| characters render as blank.$
+stderr: 0 bytes, cksum 4294967295
+
+### parse-bool-with-value
+args: [--list-fonts=0]
+exit: 1
+stdout: 1360 bytes, cksum 293927734
+| bnrmr: argument parse error$
+| $
+| bnrmr \342\200\224 figlet-equivalent ASCII-art banner generator$
+| $
+| Usage:$
+|   bnrmr [FLAGS] TEXT...$
+| $
+| Flags:$
+|   -f, --font NAME       load fonts/NAME.cyml (default: embedded block)$
+|                         or a path ending in .flf for a legacy figlet font$
+|       --align V         left | center | right (default: left)$
+|   -w, --width N         truncate at glyph boundary at N columns$
+|                         (default: 0 = unlimited; if N is smaller$
+|                         than one glyph, no glyphs render \342\200\224 the$
+|                         banner comes out as blank rows)$
+|       --pad N           N blank lines above and below banner (default: 0)$
+|       --color NAME      colorize: black, red, green, yellow, blue,$
+|                         magenta, cyan, white (or bright_<name> /$
+|                         bright-<name>), or 'rainbow'$
+|                         for per-row cycling. Suppressed on non-TTY stdout.$
+|       --list-fonts      list available fonts and exit$
+|       --version         print version and exit$
+|   -h, --help            print this help and exit$
+|       --                end of flags: everything after it is TEXT,$
+|                         even a word starting with '-' (bnrmr -- -HI)$
+| $
+| Coverage: A-Z, 0-9, space, printable punctuation. Lowercase folds$
+| to uppercase when the font has no lowercase glyphs. Unsupported$
+| characters render as blank.$
+stderr: 0 bytes, cksum 4294967295
+
+### parse-help-with-value
+args: [--help=1]
+exit: 1
+stdout: 1360 bytes, cksum 293927734
+| bnrmr: argument parse error$
+| $
+| bnrmr \342\200\224 figlet-equivalent ASCII-art banner generator$
+| $
+| Usage:$
+|   bnrmr [FLAGS] TEXT...$
+| $
+| Flags:$
+|   -f, --font NAME       load fonts/NAME.cyml (default: embedded block)$
+|                         or a path ending in .flf for a legacy figlet font$
+|       --align V         left | center | right (default: left)$
+|   -w, --width N         truncate at glyph boundary at N columns$
+|                         (default: 0 = unlimited; if N is smaller$
+|                         than one glyph, no glyphs render \342\200\224 the$
+|                         banner comes out as blank rows)$
+|       --pad N           N blank lines above and below banner (default: 0)$
+|       --color NAME      colorize: black, red, green, yellow, blue,$
+|                         magenta, cyan, white (or bright_<name> /$
+|                         bright-<name>), or 'rainbow'$
+|                         for per-row cycling. Suppressed on non-TTY stdout.$
+|       --list-fonts      list available fonts and exit$
+|       --version         print version and exit$
+|   -h, --help            print this help and exit$
+|       --                end of flags: everything after it is TEXT,$
+|                         even a word starting with '-' (bnrmr -- -HI)$
+| $
+| Coverage: A-Z, 0-9, space, printable punctuation. Lowercase folds$
+| to uppercase when the font has no lowercase glyphs. Unsupported$
+| characters render as blank.$
+stderr: 0 bytes, cksum 4294967295
+
+### order-align-before-width
+args: [--align] [x] [--width] [abc] [HI]
+exit: 1
+stdout: 46 bytes, cksum 2400474953
+| bnrmr: --align must be left, center, or right$
+stderr: 0 bytes, cksum 4294967295
+
+### order-width-before-font
+args: [--font] [typo] [--width] [abc] [HI]
+exit: 1
+stdout: 25 bytes, cksum 2596445894
+| bnrmr: bad integer value$
+stderr: 0 bytes, cksum 4294967295
+
+### positionals-256-too-many
+args: [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x] [x]
+exit: 1
+stdout: 26 bytes, cksum 87987963
+| bnrmr: too many arguments$
+stderr: 0 bytes, cksum 4294967295
+
+### input-1025-one-arg
+args: [AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA]
+exit: 1
+stdout: 39 bytes, cksum 314824775
+| bnrmr: input too long (max 1024 bytes)$
+stderr: 0 bytes, cksum 4294967295
+
+### input-1025-joined
+args: [AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA] [AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA]
+exit: 1
+stdout: 39 bytes, cksum 314824775
+| bnrmr: input too long (max 1024 bytes)$
+stderr: 0 bytes, cksum 4294967295
+
