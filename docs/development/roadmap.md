@@ -1,258 +1,204 @@
 # BannerManor — Roadmap
 
-> Forward-only. Shipped work lives in [`../../CHANGELOG.md`](../../CHANGELOG.md);
-> this file is the sequencing of what's still ahead — what ships next,
-> in what order, against what dependency gates. State lives in
-> [`state.md`](state.md), which owns the current version; this file
-> names *target* versions for planned work, and shipped versions only as
-> provenance.
+> Forward-only. What ships next, in what order, against what gates.
+> Shipped work is in [`../../CHANGELOG.md`](../../CHANGELOG.md); the
+> current version and live state are in [`state.md`](state.md). This file
+> names *target* versions only.
 
-**Milestones**: M1–M8 closed at the v1.0.0 freeze. The freeze locked the
-CLI flag surface, the CYML font format (schema 1), the default font set
-(block / slim / big), and the `.flf` adapter contract. Everything below
-is post-freeze work, and the freeze is what shapes it.
+The v1.0.0 freeze locked the CLI flag surface, the CYML font format
+(schema 1), the default font set and the `.flf` adapter contract. Every
+item below is placed by what the freeze allows: 1.x when it fits, 2.0
+when it cannot.
 
-**Next**: 1.8.0 — *the fourth font*, the first with lowercase. The
-lowest-priority scheduled release; nothing else is queued ahead of it.
+**Next**: 1.8.1 — *measurement debts*: the benchmark baseline, issue
+0006, and the aarch64 binary size.
 
-## What the freeze permits
+## The rules every item is checked against
 
-Every item here is classified against the 1.0.0 freeze sentence:
+The freeze sentence:
 
 > No flags added, no flags removed, no exit-code or stdout-byte changes
 > **for any valid invocation**.
 
 [ADR 0002](../adr/0002-freeze-scope-error-paths-and-malformed-input.md)
-(**Accepted** 2026-10-15) defines "valid invocation" and rules on the three
-readings that were never written down:
+(Accepted) defines "valid invocation" and makes three rulings:
 
-1. **Error-path output is not frozen**, but exit codes are. Diagnostics
-   may move to stderr in a minor.
+1. **Error-path output is not frozen**, but exit codes are.
 2. **Exit 0 after a failed write is a defect**, not frozen behavior.
 3. **A structurally malformed font is not protected.** Metadata rules
-   (`name` against the stem) are 2.0. bnrmr's own limits (the `.flf`
-   envelope) may widen.
+   (`name` against the stem) are 2.0. bnrmr's own limits may widen.
 
-1.5.0 shipped everything those rulings unblocked (closed record below).
-The golden suite (`scripts/golden.sh`) is the mechanical side of every
-ruling. Its `frozen` tier must never move in 1.x; its
-`error` tier moves only under ruling 1, re-baselined deliberately, record
-by record.
+The golden suite (`scripts/golden.sh`) is the mechanical check. Its
+`frozen` tier never moves in 1.x; its `error` tier moves only under
+ruling 1, re-baselined record by record; its `snapshot` tier (help,
+version, listing) moves only when a release says so.
 
-Settled regardless of the ADR, and **not** 1.x work under any reading:
-new flags (the freeze calls them "an SCHEMA-MAJOR question, not a
-minor"), new spellings or a looser grammar for a flag value, rendered
-banner bytes for inputs that render correctly today, and CYML schema 1.
-See [Beyond 1.x](#beyond-1x).
+Never 1.x under any reading: new flags (the freeze calls them "an
+SCHEMA-MAJOR question, not a minor"), new spellings or a looser grammar
+for a flag value, different bytes for an input that renders correctly
+today, and CYML schema changes. Those are [Deferred to 2.0](#deferred-to-20).
 
-One thing the freeze explicitly permits: *"Additional fonts can ship in
-1.x without breaking the contract (presence is additive, never
-subtractive)."*
+Explicitly allowed: *"Additional fonts can ship in 1.x without breaking
+the contract (presence is additive, never subtractive)."*
 
 ## Planned releases
 
-Versions are targets, not commitments — ship-when-ready. Sequencing is
-by dependency, then by value.
+Targets, not commitments: ship when ready. Releases are ordered by
+dependency, then by value. A gated release whose gate is not met does not
+hold up the next one; the two swap numbers, so versions stay in shipping
+order.
 
-### 1.8.0 — The fourth font
+### 1.8.1 — Measurement debts
 
-Lowest-priority scheduled release. No consumer has asked for it; it
-earns its place on recorded intent alone, stated in three places.
+Byte-identical. Three numbers the project quotes but has never measured
+properly:
 
-No in-tree font contains a single lowercase glyph, so `bnrmr "Welcome
-home"` shouts. The gap in the default set is **case, not size**: block
-5×5, slim 4×5 and big 7×7 already span small, medium and large.
-CHANGELOG 0.3.0 made the uppercase fold a *fallback* specifically to "let
-future taller fonts ship distinct lowercase"; `fonts.md` says fonts of
-height ≥ 7 "should ship both cases"; `fonts/big.cyml` records why big is
-not that font. The mechanism shipped; the font never did.
+- **The benchmark baseline.** `scripts/bench-history.sh` has existed
+  since 1.4.1, but `docs/benchmarks/history.csv` has never been recorded:
+  each attempt met a loaded host, and the numbers were discarded. Record it on a quiet machine
+  (`cyrius bench tests/bannermanor.bcyr | sh scripts/bench-history.sh`),
+  and add the 1.4.1 → 1.8.0 points to `docs/benchmarks.md`.
+- **Issue 0006, B2's ~45% regression.** Re-measure `font_load_file`
+  against that baseline on bayan 1.5.14, and profile the CYML scan, which
+  is 62–65% of B2 (`docs/benchmarks.md`). File the finding with bayan.
+  The fix is upstream; bnrmr adopts it with a tag move.
+- **The aarch64 binary.** It grew 341,064 → 407,048 bytes at 1.5.0 while
+  x86_64 and AGNOS grew about 4.5 KB each. Not investigated (CHANGELOG
+  1.5.0). Find out what the aarch64 backend emits for the 1.5.0 changes;
+  fix it here if the cause is in bnrmr, file it with cyrius if it is not.
 
-Height ≥ 8 (seven rows leave no descender row). About 95 glyphs, no
-renderer change: `font_glyph_index` already prefers a registered glyph
-over the fold. That takes the set to four and uses up the discretionary
-half of CLAUDE.md's 3–5 budget. More fonts after this would be the
-menagerie.
+### 1.9.0 — AGNOS follow-through
 
-## Beyond 1.x
+Gated on agnos and darshana. Each item ships when its gate is met;
+whatever is not ready moves to a later 1.9.x.
 
-Contract-breaking or unrequested. Each entry states why it cannot be 1.x.
+- **Route the AGNOS probe through darshana.** [ADR 0004](../adr/0004-terminal-probes-ask-about-fd-1.md)
+  gates inline (`sys_fd_kind(1) == FDK_CONSOLE`) only because darshana's
+  AGNOS `tty_isatty` does not ask about the fd yet. When a darshana
+  release does, delete `_winsize_describes_stdout`'s AGNOS arm and call
+  darshana. Byte-identical by construction, since both draw the line at
+  the console; prove it with `scripts/agnos-smoke.py`. *Gate*: that
+  darshana release.
+- **Terminal-emulator windows on AGNOS.** A program in an AGNOS terminal
+  emulator has an `FDK_CHAN` stdout, which bnrmr treats as not a
+  terminal: no color, no width cut. That is right while the only size
+  bnrmr can ask for is the console's. When agnos and darshana expose a
+  per-fd window size for a channel, count it as a terminal. This is the
+  same contract reading as 1.7.0: color and the width cut on a terminal,
+  never in a pipe or file. *Gate*: the per-fd size.
+- **A failed write on AGNOS.** 1.7.0's QEMU run verified every write path
+  except failure, because nothing could make an AGNOS write fail on
+  demand. Add that check to `scripts/agnos-smoke.py` once agnos offers a
+  way (a full device, or a closed fd 1 from agnsh). *Gate*: that agnos
+  facility.
 
-- **Variable-width `.flf` glyph storage.** Every glyph is padded to the
-  corpus-wide max, so an `I` advances as far as an `M`: a wrong
-  inter-glyph advance mid-word, not just trailing whitespace. Measured
-  across 752 fonts, bnrmr renders a median **1.74×** wider than figlet.
-  Decomposed, uniform width accounts for 1.64× against smushing's 1.09×,
-  which makes it the dominant parity gap. *Cannot be 1.x*: it moves
-  rendered bytes for every width-variant `.flf`, and CHANGELOG 1.0.0
-  names "uniform-width fit" as frozen. The CYML half is separately
-  schema 2. The parity target is `figlet -W`, not figlet.
-- **`.flf` smushing / kerning.** 42% of corpus fonts declare a layout
-  figlet applies. *Cannot be 1.x* by either route: unconditional
-  smushing moves bytes, and a `--layout` opt-in is a flag addition.
-  Blocked on variable widths, on preserving hardblank identity into
-  `Font*`, and on rewriting layout's closed-form width math into
-  per-pair accumulation.
-- **Non-ASCII coverage** — the whole Unicode question: the skipped
-  German and code-tagged `.flf` glyphs, the 128-byte charmap (which, not
-  `MAX_GLYPHS`, is what caps a font at 128 entries), and the per-byte
-  blank cells (`bnrmr "Café"` renders five cells for four characters;
-  golden `default-non-ascii`). *Cannot be 1.x*: it is schema 2 for CYML,
-  and it moves bytes for every input ≥ 0x80. ADR 0001's amendment
-  usefully shrank it, since no parser work is a prerequisite. The real
-  gate is an unmade decision about what encoding argv text is in.
-- **Reading stdin.** `echo hi | bnrmr` prints help where `echo hi |
-  figlet` renders. *Cannot be 1.x*: that is a valid invocation exiting 0
-  today. AGNOS was a second blocker until agnos 1.57.13: with no isatty,
-  an unguarded fd-0 read would hang bare `bnrmr` on the keyboard.
-  `fd_kind` (used since 1.7.0, ADR 0004) now tells a pipe from the
-  console, so only the contract question remains.
-- **A force-color override / `--color-when`.** A new flag is a major.
-  The env-var half moves TTY bytes and does not deliver the use case on
-  its own.
-- **`--color=` accepting an empty value**, where the other four
-  value-taking flags reject it (A-06). It is one line, and one
-  deliberately inverted golden record (`color-pipe-empty-equals`). But it
-  changes the exit code *and* output bytes of an invocation that renders
-  correctly today.
-- **Sub-glyph `--width` emitting nothing** instead of blank rows (A-05).
-- **Enforcing CYML `name` against the filename stem** (A-11). It flips
-  `--font` from 0 to 1 for third-party fonts that render correctly. ADR
-  0002 ruling 3 (Accepted) settles the audit's old contradiction, which
-  classed the change `Breaking` and scheduled it for a minor: it is
-  metadata, so it waits for 2.0. Since 1.6.0 there is little left to gain: `--list-fonts`
-  shows the stem, so it no longer advertises a name `--font` refuses,
-  and a mismatched `name` is unused metadata.
-- **A `[lib]` distlib surface.** Not a contract question, but a Project
-  Identity change ("Type: Binary") that would create a second frozen
-  surface. Unrequested: agnoshi has shipped hand-rolled box art through
-  six releases, and both its builds can already spawn bnrmr. Blocked on a
-  real request; do not build on spec.
+### 1.10.0 — 2.0 groundwork, byte-identical
+
+The two largest 2.0 items, variable-width `.flf` glyphs and smushing, are
+mostly plumbing. Do the plumbing in 1.x, where the golden suite can prove
+it changed nothing, so 2.0 becomes a render-policy change and not a
+rewrite.
+
+- **Keep each `.flf` glyph's own width, and the hardblank's identity,
+  in `Font*`.** Today the loader pads every glyph to the font's maximum
+  and folds hardblanks to spaces, so both facts are lost at load.
+- **Make layout add up per-glyph advances**, instead of the closed-form
+  `n * width + (n - 1) * gap`, while every glyph still advances by the
+  padded width.
+- **Proof**: the golden `frozen` tier unchanged, and the figlet corpus
+  byte-identical before and after (1.5.0's envelope change checked 973
+  fonts unchanged the same way).
+- **The 2.0 charter, as an ADR (Proposed)**: which of the deferred items
+  below 2.0 takes, and the decision Unicode is waiting on, namely what
+  encoding argv text is in.
+
+### 1.11.0 — Library surface (on request only)
+
+A `[lib]` distlib so another Cyrius program can render a banner in
+process. It is not a contract question, but it changes the Project
+Identity ("Type: Binary") and creates a second frozen surface. No one has
+asked: agnoshi has shipped hand-drawn box art through six releases, and
+both its builds can already spawn `bnrmr`. *Gate*: a consumer's request.
+Do not build it on spec. If none comes before the 2.0 charter is
+accepted, the charter decides whether it stays here or moves to 2.0.
+
+## Deferred to 2.0
+
+Each of these breaks the freeze. Where a 1.x release prepares the
+ground, it is named.
+
+- **Variable-width `.flf` glyphs.** Every glyph is padded to the widest,
+  so an `I` advances as far as an `M`: the spacing is wrong in mid-word,
+  not just at the end. Across 752 fonts, bnrmr renders a median **1.74×**
+  wider than figlet; uniform width accounts for 1.64× of that and missing
+  smushing for 1.09×. *Why 2.0*: it moves rendered bytes for every
+  variable-width `.flf`, and CHANGELOG 1.0.0 names "uniform-width fit" as
+  frozen. The CYML half is schema 2. The parity target is `figlet -W`.
+  *Groundwork*: 1.10.0.
+- **`.flf` smushing and kerning.** 42% of corpus fonts declare a layout
+  figlet applies. *Why 2.0*: applying it moves bytes, and an opt-in
+  `--layout` is a new flag. It needs variable widths, hardblank identity
+  and per-pair layout first. *Groundwork*: 1.10.0.
+- **Non-ASCII text.** That covers the skipped German and code-tagged
+  `.flf` glyphs, the 128-byte charmap (it, not `MAX_GLYPHS`, caps a font
+  at 128 entries), and per-byte blank cells (`bnrmr "Café"` renders five
+  cells for four characters; golden `default-non-ascii`). *Why 2.0*: it
+  is CYML schema 2, and it moves bytes for every input byte ≥ 0x80. A
+  Unicode font set would also reopen the ASCII-only charter. *Groundwork*:
+  the argv-encoding decision in 1.10.0's charter ADR.
+- **Reading stdin.** `echo hi | bnrmr` prints the usage text, exit 0,
+  where figlet renders. *Why 2.0*: that is a valid invocation today.
+  AGNOS no longer blocks it: since agnos 1.57.13 `fd_kind` tells a pipe
+  from the console (bnrmr uses it since 1.7.0), so an fd-0 read need not
+  hang on the keyboard.
+- **Forcing color, and turning it off.** A `--color-when` flag is a new
+  flag. An environment override (`CLICOLOR_FORCE`, `NO_COLOR`) changes
+  bytes for invocations that are valid today, and forcing color without
+  the flag does not deliver the use case on its own.
+- **`--color=` with an empty value** (accepted risk A-06). The other four
+  value-taking flags reject an empty value; `--color=` means "no color".
+  The fix is one line plus one inverted golden record
+  (`color-pipe-empty-equals`). *Why 2.0*: it turns an exit-0 invocation
+  into an exit-1 one.
+- **A sub-glyph `--width` printing nothing** instead of blank rows
+  (A-05). *Why 2.0*: different bytes for every `--width` below one glyph,
+  and every terminal narrower than one glyph.
+- **CYML `name` checked against the filename stem** (A-11). *Why 2.0*:
+  ADR 0002 ruling 3, metadata. It would turn `--font` from exit 0 to 1
+  for third-party fonts that render today. Since 1.6.0 there is little to
+  gain: `--list-fonts` shows the stem, and `name` is unused metadata.
+
+## Out of scope
+
+Product decisions, not version questions. None reopens at any version:
+
+- **GUI / TUI preview mode.** CLI only.
+- **Animation / scrolling banners.** Single-shot render.
+- **Image embedding (kitty / sixel).** ASCII characters only.
+- **Fetching fonts from a URL, or any network use.** Fonts are local files.
+- **Daemon / cache.** Every render is fresh, with no persistent state.
+  CLAUDE.md states it as a hard rule: *one render per invocation*.
+
+The items above are refusals. [Deferred to 2.0](#deferred-to-20) holds the
+ones that are only waiting on a major.
 
 ## Issue register
 
 Open, with a written-up reproducer and acceptance criteria:
 
-| # | Title | Scheduled |
+| # | Title | Target |
 |---|---|---|
-| [0006](issues/0006-bayan-cyml-parse-regression.md) | bayan 1.5.2 made `font_load_file` ~45% slower | unscheduled; upstream (bayan). The 1.4.1 sublib did not recover it |
+| [0006](issues/0006-bayan-cyml-parse-regression.md) | bayan 1.5.2 made `font_load_file` ~45% slower | 1.8.1: re-measure and profile, file with bayan; the fix is upstream |
 
-Archived — all closed: [0001](issues/archive/0001-keystroke-interleave-during-render.md)
-(deferred past v1.0, still open in principle),
-[0002](issues/archive/0002-unbounded-pad-and-width.md),
-[0003](issues/archive/0003-flf-crlf-endmarks-bleed.md),
-[0004](issues/archive/0004-tty-wrap-on-narrow-terminal.md),
-[0005](issues/archive/0005-write-per-cell-syscall-cost.md),
-[0007](issues/archive/0007-positionals-past-128-dropped.md),
-[0008](issues/archive/0008-cyml-body-not-fully-consumed.md),
-[0009](issues/archive/0009-write-return-never-checked.md),
-[0010](issues/archive/0010-fuzz-harness-is-a-no-op.md),
-[0011](issues/archive/0011-list-fonts-hangs-on-fifo.md),
-[0012](issues/archive/0012-dead-geometry-constants.md),
-[0013](issues/archive/0013-full-bayan-bundle-linked.md),
-[0014](issues/archive/0014-transient-read-buffers-never-freed.md),
-[0015](issues/archive/0015-fonts-not-findable-when-installed.md),
-[0016](issues/archive/0016-diagnostics-go-to-stdout.md),
-[0017](issues/archive/0017-docs-precision-pass.md),
-[0018](issues/archive/0018-agnos-console-width-never-queried.md),
-[0019](issues/archive/0019-darshana-probes-hand-rolled.md),
-[0020](issues/archive/0020-list-fonts-hangs-when-fonts-is-a-fifo.md).
-The numbering rule is in [`issues/README.md`](issues/README.md); the next
-issue is 0021.
-
-## Out of scope
-
-Two kinds, kept separate. The first are product decisions independent of
-version; the second are deferred design questions.
-
-**Permanent — not a version question:**
-
-- **GUI / TUI preview mode** — never. CLI only.
-- **Animation / scrolling banners** — single-shot render.
-- **Image embedding (kitty / sixel)** — ASCII characters only.
-- **Network / fetch-font-from-URL** — never. Fonts are local files.
-- **Daemon / cache** — every render is fresh. No persistent state.
-  Restated as a hard rule in CLAUDE.md: *one render per invocation*.
-
-**Deferred to a 2.0 charter change**, not settled refusals — see
-[Beyond 1.x](#beyond-1x) for the mechanics: Unicode / multi-byte support,
-variable per-glyph `.flf` widths, and `.flf` smushing rules. A Unicode
-font set would legitimately reopen the ASCII-only charter. The five
-permanent entries above would not be reopened at any version.
-
-## Closed record
-
-Kept compact. Per-release detail is in
-[`../../CHANGELOG.md`](../../CHANGELOG.md).
-
-| Milestone | Shipped | What closed |
-|---|---|---|
-| M1 / M2 | 0.2.0 | Render pipeline, 1 KB input cap, CYML schema 1 documented |
-| M3 | 0.3.0 | `fonts/` default set — block, slim, big — full printable-ASCII coverage |
-| M4 | 0.4.0 | `--align`, `--width`, `--pad` |
-| M5 | 0.5.0 | Color via darshana; TTY auto-suppression |
-| M6 | 0.6.0 | `.flf` read path — uniform-width fit, no smushing, ASCII 32..126 |
-| M7 | 0.9.0 | Security audit ([2026-05-20](../audit/2026-05-20-audit.md), 10 findings, F-001 fixed same release); defense-in-depth follow-ups at 0.8.0; maintainer-MOTD dogfood (issues 0001–0003); benchmark trend established |
-| M8 | 1.0.0 | The freeze: CLI flags, CYML schema 1, default font set, `.flf` adapter contract. Issue 0002's `--pad` ≤ 64 / `--width` ≤ 4096 caps as its one documented `Breaking`. Issue 0004 found and fixed in the same release |
-
-Milestone numbers preserve the historical sequence and are not reused.
-Post-freeze releases carry no milestone:
-
-- **1.0.1 through 1.2.0**: dependency, toolchain, AGNOS and hardening
-  work. 1.1.4's P(-1) pass is recorded in
-  [`../audit/2026-08-25-audit.md`](../audit/2026-08-25-audit.md).
-- **1.4.1**: the whole post-1.2.0 plan in one release. That covered
-  proving the contract (the golden suite committed and gated, the CI
-  gates, the issue register reconciled, ADR 0002 proposed and accepted)
-  and the documentation precision pass. It also shipped chunked writes,
-  the CYML-only bayan and freed read buffers, plus tests, fixtures, a
-  real fuzz harness and the dead constants wired in.
-- **1.4.2**: CLI parsing moved from the stdlib's `flags` to cmdit 1.4.0.
-  The roadmap had carried this as demand-gated; it was waiting on cmdit
-  1.3.1 (positionals past 128, `--bool=value`) and on a golden suite to
-  prove it. The suite gained 33 grammar cases first, and all 318 records
-  are byte-identical across the swap.
-- **1.5.0**: everything ADR 0002 unblocked. Diagnostics on stderr with
-  the offending token named (issue 0016), checked writes with exit 1 on
-  failure (0009), one write per banner row with color composed through
-  darshana's `_buf` forms (0005 Option 2), surplus CYML rows rejected
-  (0008), and the `.flf` envelope raised to 128×64 (73 more corpus
-  fonts load, 973 unchanged byte for byte). The golden frozen and
-  snapshot tiers did not move; the error tier was re-baselined once.
-- **1.6.0**: fonts findable and the listing honest (issue 0015, ADR
-  0003). A search path: `$BNRMR_FONTS`, `./fonts`, the install directory
-  beside the executable, and the built-in block. Also `scripts/install.sh`,
-  a release tarball with the fonts, and the `bnrmr.1` man page.
-  `--list-fonts` shows stems one level deep, validated by the full
-  loader, which resolved accepted risks A-11 and A-12. The frozen tier
-  did not move.
-- **1.7.0**: AGNOS parity (ADR 0004). `--color` works on the AGNOS
-  console, and a redirected or piped banner there is plain and uncut, as
-  on Linux: bnrmr asks agnos's `fd_kind` whether fd 1 is the console
-  before trusting the console-wide width probe. That moved the toolchain
-  to cyrius 6.7.11, which also fixed issue 0020. Checked on AGNOS
-  before release (`scripts/agnos-smoke.py`, agnos 1.57.14 in QEMU), which
-  also confirmed the 1.4.1–1.6.0 paths that had only been compiled for
-  it, and that agnsh's absolute `argv[0]` finds the installed fonts. CI runs the suite and the golden matrix on aarch64 under
-  qemu-user. agnos's `stage-tools.sh` stages the fonts at
-  `/share/bannermanor/fonts` after its 1.57.14, closing the last AGNOS gap
-  (the change is agnos's).
-
-Two entries in the pre-1.0 criteria list have since moved. They are
-corrected here rather than left to imply otherwise:
-
-- The benchmark trend now runs to seven points. Point 4 records a ~45%
-  `font_load_file` regression from the 1.1.3 dependency fold
-  ([`issues/0006`](issues/0006-bayan-cyml-parse-regression.md)), and a
-  second security audit shipped at 1.1.4.
-- "CHANGELOG complete from 0.1.0 onward" was carried as an unchecked
-  acceptance criterion. It is a standing maintenance rule, not a
-  milestone, and belongs to CLAUDE.md's Work Loop.
+Closed issues are in [`issues/archive/`](issues/archive/). The numbering
+rule is in [`issues/README.md`](issues/README.md); the next issue is 0021.
 
 ## Cross-references
 
 - [`state.md`](state.md) — live status: current version, fonts, module
   inventory, consumers
-- [`../../CHANGELOG.md`](../../CHANGELOG.md) — release history
+- [`../../CHANGELOG.md`](../../CHANGELOG.md) — release history, M1–M8
+  and every post-freeze release
 - [`issues/`](issues/) — open deferrals; [`issues/archive/`](issues/archive/)
   for closed ones
 - [`../audit/`](../audit/) — audit reports and the accepted-risk register
@@ -263,4 +209,8 @@ corrected here rather than left to imply otherwise:
   state (no raw syscall numbers; `lib/` restored from the lock)
 - [`../benchmarks.md`](../benchmarks.md) — the trend, and the
   measurement-methodology trap recorded with it
+- [`../guides/fonts.md`](../guides/fonts.md) — the font format and both
+  loaders' validation, which a catalog font must pass
 - `scripts/golden.sh` / `tests/golden/` — the frozen-output contract
+- `scripts/agnos-smoke.py` — bnrmr on a real agnos kernel in QEMU
+  (manual), the check for every AGNOS item above

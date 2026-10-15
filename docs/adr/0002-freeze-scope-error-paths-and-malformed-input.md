@@ -111,7 +111,8 @@ diff reviewed record by record.
   unambiguously, but whose `name` differs from its file stem or which has
   no `name`, renders correctly. Rejecting it would make a valid invocation
   fail, which ruling 2 forbids. Enforcing `name` against the stem stays in
-  "Beyond 1.x" (accepted risk A-11). ADR 0001's "must match the file stem"
+  the roadmap's "Deferred to 2.0" ("Beyond 1.x" until 1.8.0; accepted
+  risk A-11). ADR 0001's "must match the file stem"
   is a convention, and the 1.4.1 documentation pass says so.
 - **Admitting input rejected only by a bnrmr limit is additive.** A `.flf`
   font wider than bnrmr's 64-column envelope is valid FIGfont. Raising

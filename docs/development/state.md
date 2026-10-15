@@ -5,6 +5,8 @@
 
 ## Version
 
+**1.8.0** — 2026-10-15. **The fourth font.** `fonts/clean.cyml`, 7×8, the first in-tree font with lowercase: Dale Schumacher's X11 bitmap font Clean (`clR7x8`), transcribed cell for cell from the figlet collection's `clr7x8.flf`, license HPND with its notice in the file. All 95 printable ASCII characters render exactly as the source does through the `.flf` adapter. `--font clean "Welcome home"` no longer shouts. The golden frozen and error tiers did not move; frozen gained 7 `clean` cases (346 in all), and the 7 listing snapshots gained one row each. The roadmap was rewritten to look forward only, pinned 1.8.0 through 1.11.0 with a Deferred to 2.0 section. Suite 3150 → 3268. See `CHANGELOG.md` [1.8.0].
+
 **1.7.0** — 2026-10-15. **AGNOS parity.** `--color` works on the AGNOS console, and a redirected or piped banner on AGNOS has the bytes it has on Linux: plain and uncut. bnrmr asks the kernel what fd 1 is (`sys_fd_kind(1) == FDK_CONSOLE`, agnos 1.57.13's `fd_kind#111`) before trusting darshana's console-wide `tty_winsize`, and derives color from that probe on both targets ([ADR 0004](../adr/0004-terminal-probes-ask-about-fd-1.md)). That needed cyrius 6.7.9 → 6.7.11 (bayan sublib 1.5.13 → 1.5.14, byte-identical), which also fixed `--list-fonts` hanging on a FIFO named like a font directory. Linux bytes did not move: golden 339/339 on x86_64 and aarch64. Checked on AGNOS before release: `scripts/agnos-smoke.py` boots agnos 1.57.14 in QEMU, 9/9; the 1.6.0 binary and a forced-open mutant fail the checks they should. CI now runs the suite and the golden matrix on aarch64 under qemu-user. Suite 3146 → 3150. See `CHANGELOG.md` [1.7.0].
 
 **1.6.0** — 2026-10-15. **Fonts findable, listing honest.** `--font NAME` now searches a path ([ADR 0003](../adr/0003-font-search-path.md), [issue 0015](issues/archive/0015-fonts-not-findable-when-installed.md)): `$BNRMR_FONTS`, then `./fonts`, then `<prefix>/share/bannermanor/fonts` when the executable is `<prefix>/bin/bnrmr`, then the built-in block for `--font block`. With `BNRMR_FONTS` unset, every lookup that worked before resolves to the same file. An installed `bnrmr`, or one from an unpacked release tarball, finds its fonts from any directory. `scripts/install.sh` and a release tarball carry the fonts and a new `bnrmr.1` man page. `--list-fonts` lists exactly what `--font` finds: file stems, one level deep, validated by the full loader, the built-in block included, and the directories searched on the last line. That resolved accepted risks A-11 and A-12. A missing font and a malformed one now get separate diagnostics that name the directories or the file. The golden frozen tier did not move; it gained 12 search-path cases, run against a staged install. Suite 3082 → 3146. See `CHANGELOG.md` [1.6.0].
@@ -245,26 +247,37 @@ Single-shot CLI: text in, banner bytes out, exit.
 
 In-tree in `fonts/`, installed by `scripts/install.sh` and the release
 tarball as `<prefix>/share/bannermanor/fonts/`, where an installed
-`bnrmr` finds them (1.6.0); all schema 1, full printable ASCII (95 characters
-as 69 glyphs: no lowercase, which folds to uppercase), author
-BannerManor, GPL-3.0-only:
+`bnrmr` finds them (1.6.0); all schema 1, full printable ASCII (95
+characters).
+
+The first three have 69 glyphs (no lowercase, which folds to uppercase),
+author BannerManor, GPL-3.0-only:
 
 - `fonts/block.cyml` — 5×5, gap 1. The default, also embedded.
 - `fonts/slim.cyml` — 4×5, gap 1. One column narrower than block.
 - `fonts/big.cyml` — 7×7, gap 1. The chunky option.
 
+Since 1.8.0:
+
+- `fonts/clean.cyml` — 7×8, gap 1, 95 glyphs, both cases; row 7 holds
+  the descenders. Dale Schumacher's X11 bitmap font Clean (`clR7x8`),
+  transcribed cell for cell from the figlet collection's `clr7x8.flf`.
+  License HPND; the file carries the notice, as its terms require.
+
 Schema and loader contract: [ADR 0001](../adr/0001-cyml-font-format.md)
 (amended 1.4.1). Authoring and both loaders' validation lists:
-[`docs/guides/fonts.md`](../guides/fonts.md). The fourth font, the first
-with lowercase, is on the roadmap.
+[`docs/guides/fonts.md`](../guides/fonts.md), including how a catalog
+font is imported. A fifth font is not planned.
 
 ## Tests
 
-- `tests/bannermanor.tcyr` — **3150 assertions**, run on x86_64 and on
+- `tests/bannermanor.tcyr` — **3268 assertions**, run on x86_64 and on
   aarch64 under qemu (both in CI since 1.7.0). In outline:
   - **Fonts**: embedded-font geometry, glyph lookup and the lowercase
-    fold, and row shape. The three CYML fonts load, and `block.cyml`
-    equals the embedded font byte for byte.
+    fold, and row shape. The four CYML fonts load, and `block.cyml`
+    equals the embedded font byte for byte. `clean` (1.8.0): 95 glyphs,
+    26 lowercase letters of its own, descenders on row 7, and the HPND
+    notice present in the file.
   - **CYML parser**: every schema-1 limit from both sides, the 64 KB
     gate (in memory and through a real file), the 128-entry ceiling, and
     zero / duplicate / non-ASCII entries. Both loaders' disagreements are
@@ -296,8 +309,8 @@ with lowercase, is on the roadmap.
   - **Reference coverage**: 50/50 public functions
     (`cyrius coverage --min 100` in CI).
 - `tests/golden/` + `scripts/golden.sh` — the frozen-output contract,
-  byte for byte: 339 invocations (229 frozen renders, 80 error paths, 30
-  snapshot), 113 on a pty through script(1). The `parse-*` cases (1.4.2)
+  byte for byte: 346 invocations (236 frozen renders, 80 error paths, 30
+  snapshot), 114 on a pty through script(1). The `parse-*` cases (1.4.2)
   pin the flag grammar the cmdit swap had to keep; the `path-*` and
   `list-fonts-install*` cases (1.6.0) run a staged
   `<prefix>/bin/bnrmr` install. Since 1.4.1 this is a CI
@@ -309,8 +322,9 @@ with lowercase, is on the roadmap.
   installed fonts through `argv[0]`, a `.flf` font, `--list-fonts`, and
   a diagnostic. Needs the agnos tree's kernel and rootfs, gnoboot and
   OVMF.
-- `tests/bannermanor.fcyr` — the fuzz gate: 26 seeds × 1,000 mutants
-  through all three parsers (78,003 parses), with scrub, geometry and
+- `tests/bannermanor.fcyr` — the fuzz gate: 27 seeds × 1,000 mutants
+  (`clean.cyml` joined at 1.8.0) through all three parsers (81,003
+  parses), with scrub, geometry and
   charmap oracles and a guard page after every input. A no-op stub until
   1.4.1 (issue 0010).
 - `tests/bannermanor.bcyr` — B0 `_calibration`, B1 `block_font_embed`,
@@ -380,7 +394,8 @@ bnrmr is end-user-facing; nothing links it. Known uses of its output:
 
 ## Next
 
-[`roadmap.md`](roadmap.md) is the forward plan, and its issue register is
-current. Next is 1.8.0, *the fourth font*, the first with lowercase.
-Shipped milestones are in the roadmap's closed-record table and
-in [`CHANGELOG.md`](../../CHANGELOG.md).
+[`roadmap.md`](roadmap.md) is the forward plan, pinned 1.8.0 through
+1.11.0, with what cannot be 1.x deferred to 2.0, and its issue register is
+current. Next is 1.8.0, *the fourth font*, the first with lowercase,
+chosen from an existing catalog and transliterated to CYML. Shipped
+milestones are in [`CHANGELOG.md`](../../CHANGELOG.md).

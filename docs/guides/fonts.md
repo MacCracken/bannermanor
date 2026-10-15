@@ -133,6 +133,8 @@ Implications:
 
 - **Tall fonts** (height ≥ 7 — enough vertical room for legible
   lowercase with descenders) **should ship both cases**.
+  `fonts/clean.cyml` (7×8, since 1.8.0) is the example: 95 entries,
+  both cases, with row 7 kept for the descenders of `g j p q y`.
 - **Short fonts** (5×5, 4×3 — cramped) **typically ship uppercase
   only** and let the fold do its job. `fonts/block.cyml` is the
   canonical example.
@@ -157,6 +159,33 @@ If you're transliterating a glyph set from an existing source (a
 public-domain figlet font, a Unicode block, your own prior work),
 note the source in the description or as a comment near the top of
 the file.
+
+### Importing a font from a catalog
+
+In-tree fonts after the first three come from existing catalogs, not
+new drawing. `fonts/clean.cyml` is the worked example: X11's `clR7x8`
+bitmap, as converted to `.flf` in the figlet font collection. What an
+import has to satisfy:
+
+- **Two-tone.** A body is `#` on `.`, so only a font drawn in one stroke
+  character carries over. figlet's line-art fonts (`_ | / \`) do not.
+- **One fixed cell.** Every glyph is `width` columns. A monospace bitmap
+  fits as drawn; a proportional font would be padded to its widest
+  glyph, and its spacing would suffer for it.
+- **A license compatible with GPL-3.0-only**, in `license` as an SPDX
+  identifier. If the license requires its notice in every copy, as HPND
+  does, put the notice in the file's header comment verbatim: the file
+  is what `scripts/install.sh` and the release tarball ship.
+- **The provenance chain** in the header comment: the original, every
+  conversion in between, and the SHA-256 of the file you converted from.
+
+Transcribe cell for cell, `#` for stroke and `.` for space, and change
+nothing else. A column that is blank in every glyph (the `.flf` cell's
+spacing) becomes `gap`, so the spacing stays the original's. Then prove
+the transcription: render printable ASCII with `--font <name>` and with
+`--font path/to/source.flf`; the two must match line for line, apart
+from trailing blanks. Check that comparison fails when you change one
+pixel.
 
 ## Drop-in workflow
 
@@ -269,3 +298,6 @@ These aren't rules, just things that come up repeatedly:
   of shipped fonts.
 - [`../../fonts/block.cyml`](../../fonts/block.cyml) — the canonical
   worked example.
+- [`../../fonts/clean.cyml`](../../fonts/clean.cyml) — a font imported
+  from a catalog, with both cases, its license notice and its
+  provenance.

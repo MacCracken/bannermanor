@@ -4,6 +4,90 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.8.0] — 2026-10-15 (the fourth font)
+
+`bnrmr --font clean "Welcome home"` renders lowercase. **No byte of any
+invocation that worked under 1.7.0 changes**, apart from the listing's
+new row: the golden frozen and error tiers are byte-identical, on x86_64
+and on aarch64 under qemu. The freeze permits this outright: *"Additional
+fonts can ship in 1.x without breaking the contract."*
+
+### Added
+
+- **`fonts/clean.cyml` — 7×8, gap 1, full printable ASCII (32..126) as 95
+  glyphs, uppercase and lowercase.** The first in-tree font whose
+  lowercase is its own: `font_glyph_index` uses the registered glyph and
+  skips the uppercase fold, as it has since 0.3.0. Row 7 is the
+  descender row (`g j p q y , ; _`).
+  - **Source**: Dale Schumacher's X11 bitmap font Clean, medium, 8 pixels
+    (`clR7x8.bdf`, `$XConsortium: clR7x8.bdf,v 1.2 94/04/11`), as
+    converted to `clr7x8.flf` by John Cowan's `bdf2flf` in the figlet font
+    collection (cmatsuoka/figlet-fonts, `bdffonts/clr7x8.flf`, SHA-256
+    `b2379dbd1d7f3eeacd6f0186c78de0e6a79a5104619d61e3a8664108f8d97e4c`).
+  - **Transcribed, not redrawn.** Each 8-column `.flf` cell is 7 columns
+    of glyph plus a column that is blank in every glyph; that column is
+    `gap = 1`, so the spacing is the original's. Rendering printable
+    ASCII through `--font clean` and through the `.flf` adapter on the
+    source gives the same lines, apart from trailing blanks. That
+    comparison was shown to fail on a one-pixel change.
+  - **License**: HPND (`license = "HPND"`), compatible with
+    GPL-3.0-only. Its terms require the copyright and permission notice
+    in every copy, so the file's header comment carries it verbatim; the
+    file is what `scripts/install.sh` and the release tarball ship.
+  - **Name**: `clean`, the font's family name. Like `block`, `slim` and
+    `big`, it is what `--font` takes, and it is frozen from here on.
+- **Golden suite: 7 frozen cases** (346 in all, 114 on a pty):
+  `clean-printable`, `clean-mixed-case`, `clean-descenders`,
+  `clean-width-20`, `clean-center-40`, `clean-pty-red`, and
+  `path-install-clean` (an installed copy found from an empty directory).
+- **Tests** (suite 3150 → 3268): `t_load_clean_cyml` (geometry, all 95
+  glyphs, 26 lowercase letters that are not the fold, descenders on row
+  7 and not on `a` or `x`, the header loader, and the HPND notice in the
+  file), and `t_man_page` now checks the man page names `clean`.
+- **Fuzz**: `fonts/clean.cyml` is the 27th seed (81,003 parses, 0
+  violations).
+- **`docs/guides/fonts.md`: "Importing a font from a catalog"**, the
+  rules an imported font has to meet (two-tone, one fixed cell, a
+  GPL-compatible license with its notice where required, the provenance
+  chain with a checksum) and how to prove the transcription.
+
+### Changed
+
+- **`--list-fonts` lists `clean`** (snapshot tier). The 7 listing
+  records each gained exactly that row; nothing else in them moved,
+  which was checked record by record.
+- **The man page, README and getting-started guide** name the fourth
+  font, and the man page gains a `--font clean "Welcome home"` example.
+- **The roadmap looks forward only.** Shipped work and the closed-issue
+  list are gone (they are in this file and `issues/archive/`). What can
+  be 1.x is pinned: 1.8.1 measurement debts (the benchmark baseline,
+  issue 0006, the aarch64 size jump), 1.9.0 AGNOS follow-through, 1.10.0
+  byte-identical groundwork for 2.0, and 1.11.0 a library surface, only
+  on request. Everything that breaks the freeze is under "Deferred to
+  2.0", with the reason and any 1.x groundwork. Out of scope and the
+  cross-references are kept.
+
+### Notes
+
+- **How the font was chosen.** 377 of the 1,052 fonts in the figlet
+  collections are drawn only in `#`, at least 7 rows tall, with 20 or
+  more distinct lowercase glyphs. The `clr` bitmaps are fixed-width as
+  drawn, have true lowercase with descenders and a permissive license.
+  figlet's `banner` draws lowercase as small capitals, is proportional,
+  and states no license. `clr7x8` sits between `slim` (4 columns) and
+  `big` (7) at 7 columns, one row taller for the descenders.
+- **Binary sizes are unchanged** (x86_64 309,488, AGNOS 325,768, aarch64
+  407,696 bytes): a font is data, not code.
+- **Verification**:
+  - build clean for x86_64, `--agnos` and `--aarch64`, and
+    `cyrius lint --strict --strict-deferrals` clean;
+  - `cyrius test` 3268 passed on x86_64 and on aarch64 under qemu;
+  - golden 346/346 on both;
+  - `cyrius fuzz` 81,003 parses, 0 violations; `cyrius coverage --min 100`,
+    `cyrius deps --locked`, `scripts/doc-pin-check.sh`, `groff -ww`;
+  - `scripts/install.sh` into a scratch prefix, then `--font clean` from
+    `/`.
+
 ## [1.7.0] — 2026-10-15 (AGNOS parity)
 
 `--color` works on the AGNOS console. A redirected or piped banner on AGNOS

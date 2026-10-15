@@ -51,7 +51,7 @@ g frozen default-lone-dash -- - HI
 g frozen default-flags-after-text -- HI --font slim
 g frozen default-repeat-flag-last-wins -- --font slim --font big HI
 
-# ── frozen: the three in-tree fonts ──────────────────────────────────────────
+# ── frozen: the four in-tree fonts ───────────────────────────────────────────
 g frozen block-printable -- -f block "$PRINT"
 g frozen block-agnos-equals-embedded -- --font block AGNOS
 g frozen slim-printable -- --font slim "$PRINT"
@@ -60,6 +60,13 @@ g frozen slim-lower -- --font=slim welcome
 g frozen big-printable -- --font=big "$PRINT"
 g frozen big-agnos -- -f big AGNOS
 g frozen big-lower -- --font big welcome
+# clean (1.8.0): the first font with lowercase glyphs, so case is not folded.
+g frozen clean-printable -- --font clean "$PRINT"
+g frozen clean-mixed-case -- -f clean "Welcome home"
+g frozen clean-descenders -- --font=clean "gjpqy_,;"
+g frozen clean-width-20 -- -f clean -w 20 Welcome
+g frozen clean-center-40 -- --font clean --align center --width 40 Hi
+g frozen clean-pty-red pty=24x80 -- --color red --font clean "Hi there"
 
 # ── frozen: the .flf adapter ─────────────────────────────────────────────────
 g frozen flf-tiny-printable -- --font tests/fixtures/tiny.flf "$PRINT"
@@ -94,6 +101,7 @@ g frozen path-env-empty-is-unset env=BNRMR_FONTS= -- --font slim HI
 # An install: <prefix>/bin/bnrmr finds <prefix>/share/bannermanor/fonts.
 g frozen path-install-slim install cwd=$EMPTY -- --font slim HI
 g frozen path-install-big install cwd=$EMPTY -- -f big AGNOS
+g frozen path-install-clean install cwd=$EMPTY -- --font clean Hi
 g frozen path-install-cwd-first install cwd=$MIXED -- --font tiny HI
 g frozen path-install-env-first install cwd=$EMPTY env=BNRMR_FONTS=../envfonts -- --font block HI
 g frozen path-install-pty install pty=24x80 cwd=$EMPTY -- --font big --color rainbow HI

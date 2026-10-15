@@ -323,6 +323,81 @@ fn t_load_slim_cyml() {
       "'a' folds to 'A' on slim");
 }
 
+# Does row `row` of glyph `c` have any stroke? 1 or 0.
+fn _row_inked(f, c, row): i64 {
+    var idx = font_glyph_index(f, c);
+    if (idx < 0) { return 0; }
+    var r = font_row(f, idx, row);
+    var x = 0;
+    var w = font_width(f);
+    while (x < w) {
+        if (load8(r + x) == 35) { return 1; }
+        x = x + 1;
+    }
+    return 0;
+}
+
+# 1.8.0: clean, Schumacher Clean 7x8 from X11 clR7x8, the first in-tree
+# font with lowercase glyphs. The glyph bytes are pinned by the golden
+# suite (clean-printable); this checks the shape of the font and that the
+# file carries the license its terms require in every copy.
+fn t_load_clean_cyml() {
+    test_group("font_load_file / fonts/clean.cyml");
+    var f = font_load_file("fonts/clean.cyml");
+    assert(f != 0, "loaded");
+    if (f == 0) { return 0; }
+    assert_eq(font_width(f),  7,  "clean width = 7");
+    assert_eq(font_height(f), 8,  "clean height = 8");
+    assert_eq(font_gap(f),    1,  "clean gap = 1");
+    assert_eq(font_count(f),  95, "clean count = 95 (printable ASCII, both cases)");
+
+    var c = 32;
+    while (c <= 126) {
+        assert(font_glyph_index(f, c) >= 0, "printable char resolves");
+        c = c + 1;
+    }
+    # No fold: every lowercase letter is its own glyph.
+    c = 97;
+    var distinct = 0;
+    while (c <= 122) {
+        if (font_glyph_index(f, c) != font_glyph_index(f, c - 32)) { distinct = distinct + 1; }
+        c = c + 1;
+    }
+    assert_eq(distinct, 26, "a-z are 26 glyphs of their own, not the A-Z fold");
+
+    # Row 7 is the descender: g j p q y reach it, a and x do not.
+    assert_eq(_row_inked(f, 103, 7), 1, "g descends");
+    assert_eq(_row_inked(f, 106, 7), 1, "j descends");
+    assert_eq(_row_inked(f, 112, 7), 1, "p descends");
+    assert_eq(_row_inked(f, 113, 7), 1, "q descends");
+    assert_eq(_row_inked(f, 121, 7), 1, "y descends");
+    assert_eq(_row_inked(f, 97, 7),  0, "a does not");
+    assert_eq(_row_inked(f, 120, 7), 0, "x does not");
+
+    var h = font_header_load("fonts/clean.cyml");
+    assert(h != 0, "header loads (--list-fonts)");
+    if (h != 0) {
+        assert_eq(font_hdr_width(h), 7, "header width = 7");
+        assert_eq(font_hdr_height(h), 8, "header height = 8");
+        assert_eq(streq(font_hdr_name(h), "clean"), 1, "name = clean");
+    }
+
+    # HPND: the copyright and permission notice must appear in all copies.
+    var lb[8];
+    store64(&lb, 0);
+    var m = _slurp("fonts/clean.cyml", 65536, &lb);
+    assert(m != 0, "fonts/clean.cyml read");
+    if (m != 0) {
+        var n = load64(&lb);
+        assert_eq(_has(m, n, "license = \"HPND\""), 1, "license = HPND");
+        assert_eq(_has(m, n, "Copyright 1989 Dale Schumacher"), 1, "the copyright notice");
+        assert_eq(_has(m, n, "Permission to use, copy, modify, and distribute"), 1, "the permission notice");
+        assert_eq(_has(m, n, "without express or implied warranty"), 1, "the disclaimer");
+        fl_free(m);
+    }
+    return 0;
+}
+
 # ---- M4 layout ----
 
 fn t_layout_banner_width() {
@@ -1895,6 +1970,7 @@ fn t_man_page() {
         assert_eq(_has(m, n, "COLUMNS"), 1, "COLUMNS");
         assert_eq(_has(m, n, ".SH EXIT STATUS"), 1, "exit status");
         assert_eq(_has(m, n, "share/bannermanor/fonts"), 1, "the install directory");
+        assert_eq(_has(m, n, ".B clean"), 1, "the clean font (1.8.0)");
         fl_free(m);
     }
 }
@@ -2159,6 +2235,7 @@ fn main() {
     t_load_malformed();
     t_load_slim_cyml();
     t_load_big_cyml();
+    t_load_clean_cyml();
     t_layout_banner_width();
     t_layout_fit_chars();
     t_layout_align_pad();

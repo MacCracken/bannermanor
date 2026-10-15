@@ -1,6 +1,6 @@
 .\" bnrmr(1) - BannerManor. Keep in step with print_usage (src/cli.cyr);
 .\" tests/bannermanor.tcyr checks that every flag appears here.
-.TH BNRMR 1 2026-10-15 "BannerManor 1.7.0" "User Commands"
+.TH BNRMR 1 2026-10-15 "BannerManor 1.8.0" "User Commands"
 .SH NAME
 bnrmr \- render text as an ASCII-art banner
 .SH SYNOPSIS
@@ -168,9 +168,17 @@ The fonts shipped with BannerManor are
 .B block
 (5\(mu5),
 .B slim
-(4\(mu5) and
+(4\(mu5),
 .B big
-(7\(mu7).
+(7\(mu7) and
+.B clean
+(7\(mu8).
+Only
+.B clean
+has lowercase letters; the others draw them as capitals.
+.B clean
+is Dale Schumacher's X11 bitmap font Clean, under its own permissive
+license, which the font file reproduces.
 A figlet font may be at most 1 MB and its glyphs at most
 128 columns by 64 rows.
 .SH ENVIRONMENT
@@ -206,6 +214,7 @@ never writes an error message into
 .nf
 bnrmr AGNOS
 bnrmr \-\-font slim \-\-align center "Welcome home"
+bnrmr \-\-font clean "Welcome home"
 bnrmr \-\-color rainbow \-\-font big HI
 bnrmr \-\-font ./standard.flf hello
 bnrmr \-\- \-5 C

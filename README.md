@@ -28,7 +28,7 @@ Fourth member of the terminal-aesthetics set:
 
 ## Status
 
-**1.7.0**. Stable. CLI flag surface, CYML font format (schema 1),
+**1.8.0**. Stable. CLI flag surface, CYML font format (schema 1),
 default font set, and `.flf` adapter contract are all frozen at their
 v1.0.0 shape — see the v1.0.0 [`Breaking`](CHANGELOG.md) section for
 what locked.
@@ -39,6 +39,7 @@ what locked.
 bnrmr "AGNOS"                          # default font (block), full width
 bnrmr --font slim "HELLO"              # narrower font from the default set
 bnrmr --font big "1.0"                 # chunky 7×7 banner
+bnrmr --font clean "Welcome home"      # real lowercase, with descenders
 bnrmr --align center --color cyan "WELCOME"
 bnrmr --font ./modular.flf "BNRMR"     # legacy .flf path
 bnrmr --list-fonts                     # what's available, and where
@@ -68,7 +69,8 @@ The frozen surface:
   `--pad`, `--color`, `--list-fonts`, `--help` (`-h`), `--version`.
 - **Default font set** (in-tree): `block` (5×5), `slim` (4×5),
   `big` (7×7) — all with full printable-ASCII coverage and
-  lowercase-folds-to-uppercase behavior.
+  lowercase-folds-to-uppercase behavior. The freeze lets fonts be added
+  in 1.x: `clean` (7×8, since 1.8.0) has real lowercase with descenders.
 - **CYML font format**, schema 1 — see
   [`docs/adr/0001-cyml-font-format.md`](docs/adr/0001-cyml-font-format.md).
   Authoring walkthrough at [`docs/guides/fonts.md`](docs/guides/fonts.md).
@@ -85,7 +87,7 @@ The frozen surface:
 ```sh
 cyrius deps                            # resolve stdlib + darshana + bayan-cyml + cmdit
 cyrius build src/main.cyr build/bnrmr  # compile (binary: bnrmr)
-cyrius test                            # 3150 assertions
+cyrius test                            # 3268 assertions
 sh scripts/golden.sh                   # the frozen-output contract, byte for byte
 cyrius fuzz tests/bannermanor.fcyr     # font-parser regression gate
 cyrius bench tests/bannermanor.bcyr    # render path, CPU and write side

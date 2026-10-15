@@ -11,8 +11,8 @@ orientation for someone who's about to read or change the source.
 cyrius deps                              # resolve stdlib + darshana + bayan-cyml + cmdit
 cyrius build src/main.cyr build/bnrmr    # compile (binary: bnrmr)
 ./build/bnrmr "AGNOS"                    # smoke render
-cyrius test                              # 3150 assertions
-sh scripts/golden.sh                     # 339 invocations, byte for byte
+cyrius test                              # 3268 assertions
+sh scripts/golden.sh                     # 346 invocations, byte for byte
 cyrius fuzz tests/bannermanor.fcyr       # font-parser regression gate
 cyrius bench tests/bannermanor.bcyr      # render path, CPU and write side
 sh scripts/install.sh "$HOME/.local"     # bin/, share/bannermanor/fonts/, man page
@@ -68,7 +68,8 @@ Toolchain pin: `cyrius = "6.7.11"` in `cyrius.cyml`.
   `--font` is passed.
 - `src/color.cyr` — `--color` plumbing. SGR primitives sourced from
   darshana; no inline ANSI.
-- `fonts/<name>.cyml` — in-tree default fonts (block / slim / big).
+- `fonts/<name>.cyml` — in-tree fonts (block / slim / big, and clean
+  since 1.8.0).
 - `tests/bannermanor.{tcyr,bcyr,fcyr}` — tests / benchmarks / fuzz
   harness. `tests/fixtures/` holds the malformed and boundary fonts
   they share.

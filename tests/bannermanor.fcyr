@@ -362,6 +362,7 @@ fn main(): i64 {
     _fz_seed("fonts/block.cyml");
     _fz_seed("fonts/slim.cyml");
     _fz_seed("fonts/big.cyml");
+    _fz_seed("fonts/clean.cyml");
     _fz_seed("modular.flf");
     _fz_seed("tests/fixtures/bad_body_byte.cyml");
     _fz_seed("tests/fixtures/bad_gap_17.cyml");
@@ -388,7 +389,7 @@ fn main(): i64 {
 
     print("fuzz: ", 6);
     fmt_int(_fz_parses);
-    print(" parses over 26 seeds; ", 23);
+    print(" parses over 27 seeds; ", 23);
     fmt_int(_fz_fonts);
     print(" fonts and ", 11);
     fmt_int(_fz_headers);

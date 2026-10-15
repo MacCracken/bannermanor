@@ -135,8 +135,8 @@ jobs:
 
       - name: Golden suite
         # The v1.0 frozen-output contract, byte for byte: every invocation in
-        # tests/golden/cases.sh (339 at 1.7.0) in three tiers (frozen
-        # renders, error paths, snapshot help/version/listing), 113 of them
+        # tests/golden/cases.sh (346 at 1.8.0) in three tiers (frozen
+        # renders, error paths, snapshot help/version/listing), 114 of them
         # on a pty through script(1), which ubuntu-latest ships in
         # util-linux. A missing script(1) FAILS the suite; it never skips
         # the pty leg. See scripts/golden.sh.

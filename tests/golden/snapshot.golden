@@ -405,11 +405,12 @@ stderr: 0 bytes, cksum 4294967295
 ### list-fonts
 args: [--list-fonts]
 exit: 0
-stdout: 328 bytes, cksum 1331105194
+stdout: 441 bytes, cksum 1673220998
 | Available fonts (--font NAME):$
 | $
 |   big        7x7 gap=1  BannerManor big font: 7 rows tall, 7 cols wide. Chunky banner.$
 |   block      5x5 gap=1  BannerManor block font: 5 rows tall, 5 cols wide. Default font.$
+|   clean      7x8 gap=1  Schumacher Clean (X11 clR7x8): 8 rows tall, 7 cols wide. Real lowercase with descenders.$
 |   slim       4x5 gap=1  BannerManor slim font: 5 rows tall, 4 cols wide. Narrower companion to block.$
 | $
 | Searched: ./fonts$
@@ -418,11 +419,12 @@ stderr: 0 bytes, cksum 4294967295
 ### list-fonts-with-text
 args: [--list-fonts] [HI]
 exit: 0
-stdout: 328 bytes, cksum 1331105194
+stdout: 441 bytes, cksum 1673220998
 | Available fonts (--font NAME):$
 | $
 |   big        7x7 gap=1  BannerManor big font: 7 rows tall, 7 cols wide. Chunky banner.$
 |   block      5x5 gap=1  BannerManor block font: 5 rows tall, 5 cols wide. Default font.$
+|   clean      7x8 gap=1  Schumacher Clean (X11 clR7x8): 8 rows tall, 7 cols wide. Real lowercase with descenders.$
 |   slim       4x5 gap=1  BannerManor slim font: 5 rows tall, 4 cols wide. Narrower companion to block.$
 | $
 | Searched: ./fonts$
@@ -431,11 +433,12 @@ stderr: 0 bytes, cksum 4294967295
 ### list-fonts-beats-bad-align
 args: [--list-fonts] [--align] [x]
 exit: 0
-stdout: 328 bytes, cksum 1331105194
+stdout: 441 bytes, cksum 1673220998
 | Available fonts (--font NAME):$
 | $
 |   big        7x7 gap=1  BannerManor big font: 7 rows tall, 7 cols wide. Chunky banner.$
 |   block      5x5 gap=1  BannerManor block font: 5 rows tall, 5 cols wide. Default font.$
+|   clean      7x8 gap=1  Schumacher Clean (X11 clR7x8): 8 rows tall, 7 cols wide. Real lowercase with descenders.$
 |   slim       4x5 gap=1  BannerManor slim font: 5 rows tall, 4 cols wide. Narrower companion to block.$
 | $
 | Searched: ./fonts$
@@ -557,11 +560,12 @@ stderr: 0 bytes, cksum 4294967295
 ### list-fonts-repeated
 args: [--list-fonts] [--list-fonts]
 exit: 0
-stdout: 328 bytes, cksum 1331105194
+stdout: 441 bytes, cksum 1673220998
 | Available fonts (--font NAME):$
 | $
 |   big        7x7 gap=1  BannerManor big font: 7 rows tall, 7 cols wide. Chunky banner.$
 |   block      5x5 gap=1  BannerManor block font: 5 rows tall, 5 cols wide. Default font.$
+|   clean      7x8 gap=1  Schumacher Clean (X11 clR7x8): 8 rows tall, 7 cols wide. Real lowercase with descenders.$
 |   slim       4x5 gap=1  BannerManor slim font: 5 rows tall, 4 cols wide. Narrower companion to block.$
 | $
 | Searched: ./fonts$
@@ -703,11 +707,12 @@ args: [--list-fonts]
 cwd: tests/golden/cwd/empty
 binary: @PREFIX@/bin/bnrmr (staged install)
 exit: 0
-stdout: 372 bytes, cksum 704017638
+stdout: 485 bytes, cksum 3536470164
 | Available fonts (--font NAME):$
 | $
 |   big        7x7 gap=1  BannerManor big font: 7 rows tall, 7 cols wide. Chunky banner.$
 |   block      5x5 gap=1  BannerManor block font: 5 rows tall, 5 cols wide. Default font.$
+|   clean      7x8 gap=1  Schumacher Clean (X11 clR7x8): 8 rows tall, 7 cols wide. Real lowercase with descenders.$
 |   slim       4x5 gap=1  BannerManor slim font: 5 rows tall, 4 cols wide. Narrower companion to block.$
 | $
 | Searched: ./fonts (missing), @PREFIX@/share/bannermanor/fonts$
@@ -717,11 +722,12 @@ stderr: 0 bytes, cksum 4294967295
 args: [--list-fonts]
 binary: @PREFIX@/bin/bnrmr (staged install)
 exit: 0
-stdout: 362 bytes, cksum 1494287708
+stdout: 475 bytes, cksum 3847635606
 | Available fonts (--font NAME):$
 | $
 |   big        7x7 gap=1  BannerManor big font: 7 rows tall, 7 cols wide. Chunky banner.$
 |   block      5x5 gap=1  BannerManor block font: 5 rows tall, 5 cols wide. Default font.$
+|   clean      7x8 gap=1  Schumacher Clean (X11 clR7x8): 8 rows tall, 7 cols wide. Real lowercase with descenders.$
 |   slim       4x5 gap=1  BannerManor slim font: 5 rows tall, 4 cols wide. Narrower companion to block.$
 | $
 | Searched: ./fonts, @PREFIX@/share/bannermanor/fonts$
@@ -731,11 +737,12 @@ stderr: 0 bytes, cksum 4294967295
 args: [--list-fonts]
 env: BNRMR_FONTS=tests/golden/cwd/envfonts
 exit: 0
-stdout: 341 bytes, cksum 853482621
+stdout: 454 bytes, cksum 2953442474
 | Available fonts (--font NAME):$
 | $
 |   big        7x7 gap=1  BannerManor big font: 7 rows tall, 7 cols wide. Chunky banner.$
 |   block      3x3 gap=1  Golden fixture: a block that shadows the real one$
+|   clean      7x8 gap=1  Schumacher Clean (X11 clR7x8): 8 rows tall, 7 cols wide. Real lowercase with descenders.$
 |   slim       4x5 gap=1  BannerManor slim font: 5 rows tall, 4 cols wide. Narrower companion to block.$
 | $
 | Searched: tests/golden/cwd/envfonts, ./fonts$

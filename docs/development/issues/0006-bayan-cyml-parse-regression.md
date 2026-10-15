@@ -3,7 +3,7 @@
 **Reported**: 2026-08-25
 **Version**: 1.1.4 (P(-1) audit addendum)
 **Reporter**: maintainer (P(-1) hardening pass)
-**Status**: **open** — deferred from 1.1.4; upstream (bayan)
+**Status**: **open** — deferred from 1.1.4; upstream (bayan). Roadmap target 1.8.1: re-measure against a recorded baseline, profile the CYML scan, file the finding with bayan.
 **Severity**: performance
 
 ## Observation

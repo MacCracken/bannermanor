@@ -80,7 +80,7 @@ fn _run(): i64 {
         return 0;
     }
     if (pr == CMDIT_VERSION) {
-        _emit_line("bnrmr 1.7.0");
+        _emit_line("bnrmr 1.8.0");
         return 0;
     }
     if (cmdit_get_bool(fs, CF_LIST) == 1) {
