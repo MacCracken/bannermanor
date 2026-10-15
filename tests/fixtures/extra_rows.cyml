@@ -1,4 +1,4 @@
-# Fixture for issue 0008: glyph A has two rows past height = 1. font_load_file LOADS it today and ignores the surplus (scheduled to be rejected in 1.5.0; ADR 0002 ruling 3).
+# Fixture for issue 0008: glyph A has two rows past height = 1. font_load_file rejects it since 1.5.0 (through 1.4.2 it loaded and ignored the surplus).
 [font]
 schema = 1
 name = "extra_rows"

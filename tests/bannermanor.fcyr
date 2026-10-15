@@ -170,8 +170,13 @@ fn _fz_check_font(f, kind): i64 {
     var h = font_height(f);
     var g = font_gap(f);
     var c = font_count(f);
-    if (w < 1 || w > MAX_WIDTH) { _fz_why = "width out of range"; return 1; }
-    if (h < 1 || h > MAX_HEIGHT) { _fz_why = "height out of range"; return 1; }
+    # Each loader's own geometry: schema 1 for CYML, the adapter's
+    # envelope (128 x 64 since 1.5.0) for .flf.
+    var wmax = MAX_WIDTH;
+    var hmax = MAX_HEIGHT;
+    if (kind == FZ_KIND_FLF) { wmax = FLF_MAX_WIDTH; hmax = FLF_MAX_HEIGHT; }
+    if (w < 1 || w > wmax) { _fz_why = "width out of range"; return 1; }
+    if (h < 1 || h > hmax) { _fz_why = "height out of range"; return 1; }
     if (g < 0 || g > MAX_GAP) { _fz_why = "gap out of range"; return 1; }
     if (kind == FZ_KIND_FLF) {
         if (g != 0) { _fz_why = ".flf gap != 0"; return 1; }
@@ -324,6 +329,8 @@ fn _fz_self_test(): i64 {
     if (_fz_check_font(bad, FZ_KIND_FLF) == 0) { return 1; }
     var tall = font_new(1, MAX_HEIGHT + 1, 0, 1);
     if (_fz_check_font(tall, FZ_KIND_CYML) == 0) { return 1; }
+    var wide = font_new(FLF_MAX_WIDTH + 1, 1, 0, FLF_GLYPHS);
+    if (_fz_check_font(wide, FZ_KIND_FLF) == 0) { return 1; }
     var good = font_new(1, 1, 0, 1);
     font_set_char(good, 0, 65);
     store8(font_row(good, 0, 0), 35);
@@ -377,7 +384,7 @@ fn main(): i64 {
     _fz_seed("tests/fixtures/flf_space_hardblank.flf");
     _fz_seed("tests/fixtures/flf_too_many_comments.flf");
     _fz_seed("tests/fixtures/flf_truncated.flf");
-    _fz_seed("tests/fixtures/flf_wide_65.flf");
+    _fz_seed("tests/fixtures/flf_wide_129.flf");
 
     print("fuzz: ", 6);
     fmt_int(_fz_parses);

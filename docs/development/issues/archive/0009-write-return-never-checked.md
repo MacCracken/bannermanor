@@ -3,9 +3,8 @@
 **Reported**: 2026-08-25 (1.1.4 audit, finding C-004); filed 2026-10-15
 **Version**: 0.2.0 onward
 **Reporter**: maintainer (P(-1) hardening pass)
-**Status**: **open**, unblocked. [ADR 0002](../../adr/0002-freeze-scope-error-paths-and-malformed-input.md)
-ruling (2), accepted 2026-10-15, makes it a defect to fix. Scheduled with
-the one-write-per-row emit path (roadmap 1.5.0).
+**Status**: **fixed in 1.5.0** (2026-10-15), under [ADR 0002](../../../adr/0002-freeze-scope-error-paths-and-malformed-input.md)
+ruling (2), together with issue 0005's Option 2 (one write per row).
 **Severity**: medium. A failed render reports success.
 
 ## Observation
@@ -67,3 +66,36 @@ Not a bare nonzero check:
 - A test that points fd 1 at a full device or a closed descriptor and
   asserts the return. The pty / pipe redirection helpers in
   `tests/bannermanor.tcyr` already show how.
+
+## Fix (shipped 1.5.0)
+
+`_emit` (`src/layout.cyr`) is the one stdout writer. Every byte bnrmr
+writes to stdout goes through it: banner rows, `--help`, `--version`,
+`--list-fonts` (whose numbers now go through `_emit_int` instead of the
+stdlib's unchecked `fmt_int`), and the `--pad` runs.
+
+- **Short writes** are continued until the buffer is out.
+- **`EINTR`** is retried at once, up to 100 times in a row. **`EAGAIN`**
+  (a non-blocking stdout) is retried after a 1 ms pause, up to 1000 times.
+- **Anything else**, and a write that makes no progress, is a failure.
+  It is recorded once (`_out_err`), nothing more is written, and `main()`
+  exits 1 with `bnrmr: write error: <reason>` on stderr. The reason is
+  named for ENOSPC, EBADF, EIO, EFBIG and EDQUOT.
+- The errno values are bnrmr's own (`WriteErrno`), because the AGNOS
+  syscall table defines neither `EINTR` nor `EAGAIN`. On AGNOS a failed
+  write returns -1 and is a failure.
+
+```
+$ bnrmr hi > /dev/full; echo $?
+bnrmr: write error: no space left on device
+1
+$ sh -c 'bnrmr hi >&-; echo $?'
+bnrmr: write error: stdout is not open
+1
+```
+
+`t_emit_checked` points fd 1 at `/dev/full` and checks the return, the
+sticky flag, that nothing more is attempted, and `render_layout`'s -4;
+`t_write_error_text` checks the reasons. With issue 0005's Option 2 (one
+write per row, same release) a banner row is a single `_emit`, so the
+checked write is one call per row, not one per glyph.

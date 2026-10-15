@@ -17,7 +17,6 @@
 include "src/render.cyr"
 include "lib/cmdit.cyr"
 include "lib/fs.cyr"
-include "lib/fmt.cyr"
 
 # ---- the flag table ----
 #
@@ -63,23 +62,88 @@ fn cli_flags(): i64 {
     return fs;
 }
 
-# The diagnostic for a failed parse: one line naming the CmditErr `code`,
-# a blank line, the usage block. Returns 1, the exit code. The wording is
-# the stdlib parser's, kept byte for byte: cmdit_print_error writes stderr
-# and names the token, which is issue 0016's change (roadmap 1.5.0), not
-# this one. Every code past BUNDLED, including UNEXPECTED_VALUE
-# (`--list-fonts=0`) and an argv cmdit could not read whole, is the
-# generic line, as every code past 4 was under the stdlib parser.
-fn report_parse_error(code): i64 {
-    var msg = "bnrmr: argument parse error";
-    if (code == CMDIT_ERR_UNKNOWN) { msg = "bnrmr: unknown flag"; }
-    if (code == CMDIT_ERR_MISSING_VALUE) { msg = "bnrmr: flag missing value"; }
-    if (code == CMDIT_ERR_BAD_INT) { msg = "bnrmr: bad integer value"; }
-    if (code == CMDIT_ERR_BUNDLED) { msg = "bnrmr: bundled short flags not supported"; }
-    println(msg);
-    println("");
-    print_usage();
+# The diagnostic for a failed parse of handle `fs`, on stderr: one line,
+# a blank line, the usage block. Returns 1, the exit code.
+#
+# 1.5.0 (issue 0016): the line names what the user typed, as cmdit's own
+# cmdit_print_error does (`bnrmr: unknown flag: --bogus`). Through 1.4.2
+# it said only `bnrmr: unknown flag`, on stdout. cmdit_print_error itself
+# is not used: its echo escapes C0 and DEL but not C1 (0x80-0x9F), which
+# bnrmr's control-byte rule covers (F-001), and its bundled-flag message
+# does not mention `--`, which is what someone who typed `bnrmr -HI`
+# needs. So the echo goes through _err_token: control bytes become '?',
+# and anything past 64 bytes is cut with "...".
+fn report_parse_error(fs): i64 {
+    var code = cmdit_error(fs);
+    var tok = cmdit_err_token(fs);
+    var buf[512];
+    var p = &buf;
+    var n = _cat(p, 0, "bnrmr: ");
+    if (code == CMDIT_ERR_UNKNOWN) {
+        n = _cat(p, n, "unknown flag: ");
+        n = _err_token(p, n, tok);
+    } else {
+        if (code == CMDIT_ERR_MISSING_VALUE) {
+            n = _err_token(p, n, tok);
+            n = _cat(p, n, ": missing value");
+        } else {
+            if (code == CMDIT_ERR_BAD_INT) {
+                n = _err_token(p, n, tok);
+                n = _cat(p, n, ": not a number");
+            } else {
+                if (code == CMDIT_ERR_BUNDLED) {
+                    n = _err_token(p, n, tok);
+                    n = _cat(p, n, ": bundled short flags are not supported");
+                    n = _cat(p, n, " (write -x -y; put -- before text that starts with -)");
+                } else {
+                    if (code == CMDIT_ERR_UNEXPECTED_VALUE) {
+                        n = _err_token(p, n, tok);
+                        n = _cat(p, n, ": this flag takes no value");
+                    } else {
+                        if (code == CMDIT_ERR_ARGV) {
+                            n = _cat(p, n, "could not read the whole command line");
+                        } else {
+                            if (code == CMDIT_ERR_NOMEM) {
+                                n = _cat(p, n, "out of memory");
+                            } else {
+                                n = _cat(p, n, "argument parse error");
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    store8(p + n, 10);
+    store8(p + n + 1, 10);
+    file_write(2, p, n + 2);            # the line and the blank line, one write
+    print_usage_err();
     return 1;
+}
+
+# Append cstring `s` to buf at `n`; return the new length.
+fn _cat(buf, n, s): i64 {
+    var sl = strlen(s);
+    memcpy(buf + n, s, sl);
+    return n + sl;
+}
+
+# Append an argv token for a diagnostic: control bytes (C0, DEL, C1) as
+# '?', at most 64 bytes, then "..." if it was longer. A 0 token appends
+# "(none)".
+fn _err_token(buf, n, tok): i64 {
+    if (tok == 0) { return _cat(buf, n, "(none)"); }
+    var i = 0;
+    var b = load8(tok);
+    while (b != 0 && i < 64) {
+        if (_scrub_ctl(b) != b) { b = 63; }
+        store8(buf + n + i, b);
+        i = i + 1;
+        b = load8(tok + i);
+    }
+    n = n + i;
+    if (b != 0) { n = _cat(buf, n, "..."); }
+    return n;
 }
 
 enum CliLimits {
@@ -125,35 +189,66 @@ fn build_font_path(out, out_cap, name): i64 {
     return 11 + nlen;
 }
 
-fn print_usage(): i64 {
-    println("bnrmr — figlet-equivalent ASCII-art banner generator");
-    println("");
-    println("Usage:");
-    println("  bnrmr [FLAGS] TEXT...");
-    println("");
-    println("Flags:");
-    println("  -f, --font NAME       load fonts/NAME.cyml (default: embedded block)");
-    println("                        or a path ending in .flf for a legacy figlet font");
-    println("      --align V         left | center | right (default: left)");
-    println("  -w, --width N         truncate at glyph boundary at N columns");
-    println("                        (default: 0 = unlimited; if N is smaller");
-    println("                        than one glyph, no glyphs render — the");
-    println("                        banner comes out as blank rows)");
-    println("      --pad N           N blank lines above and below banner (default: 0)");
-    println("      --color NAME      colorize: black, red, green, yellow, blue,");
-    println("                        magenta, cyan, white (or bright_<name> /");
-    println("                        bright-<name>), or 'rainbow'");
-    println("                        for per-row cycling. Suppressed on non-TTY stdout.");
-    println("      --list-fonts      list available fonts and exit");
-    println("      --version         print version and exit");
-    println("  -h, --help            print this help and exit");
-    println("      --                end of flags: everything after it is TEXT,");
-    println("                        even a word starting with '-' (bnrmr -- -HI)");
-    println("");
-    println("Coverage: A-Z, 0-9, space, printable punctuation. Lowercase folds");
-    println("to uppercase when the font has no lowercase glyphs. Unsupported");
-    println("characters render as blank.");
+# The usage block, composed into one buffer and written with one write:
+# to stdout for --help and a bare `bnrmr` (both exit 0), to stderr after
+# a parse error (1.5.0, issue 0016: the usage that follows an error goes
+# where the error went, so `bnrmr --typo > /etc/motd` leaves the file
+# empty).
+var _ub_buf = 0;
+var _ub_len = 0;
+
+fn _ub(s): i64 {
+    var n = strlen(s);
+    memcpy(_ub_buf + _ub_len, s, n);
+    store8(_ub_buf + _ub_len + n, 10);
+    _ub_len = _ub_len + n + 1;
     return 0;
+}
+
+fn _usage_to(fd): i64 {
+    var buf[4096];
+    _ub_buf = &buf;
+    _ub_len = 0;
+    _ub("bnrmr — figlet-equivalent ASCII-art banner generator");
+    _ub("");
+    _ub("Usage:");
+    _ub("  bnrmr [FLAGS] TEXT...");
+    _ub("");
+    _ub("Flags:");
+    _ub("  -f, --font NAME       load fonts/NAME.cyml (default: embedded block)");
+    _ub("                        or a path ending in .flf for a legacy figlet font");
+    _ub("      --align V         left | center | right (default: left)");
+    _ub("  -w, --width N         truncate at glyph boundary at N columns");
+    _ub("                        (default: 0 = unlimited; if N is smaller");
+    _ub("                        than one glyph, no glyphs render — the");
+    _ub("                        banner comes out as blank rows)");
+    _ub("      --pad N           N blank lines above and below banner (default: 0)");
+    _ub("      --color NAME      colorize: black, red, green, yellow, blue,");
+    _ub("                        magenta, cyan, white (or bright_<name> /");
+    _ub("                        bright-<name>), or 'rainbow'");
+    _ub("                        for per-row cycling. Suppressed on non-TTY stdout.");
+    _ub("      --list-fonts      list available fonts and exit");
+    _ub("      --version         print version and exit");
+    _ub("  -h, --help            print this help and exit");
+    _ub("      --                end of flags: everything after it is TEXT,");
+    _ub("                        even a word starting with '-' (bnrmr -- -HI)");
+    _ub("");
+    _ub("Coverage: A-Z, 0-9, space, printable punctuation. Lowercase folds");
+    _ub("to uppercase when the font has no lowercase glyphs. Unsupported");
+    _ub("characters render as blank.");
+    if (fd == 1) { return _emit(&buf, _ub_len); }
+    file_write(fd, &buf, _ub_len);
+    return 0;
+}
+
+# --help, and the usage a bare `bnrmr` prints: stdout, checked.
+fn print_usage(): i64 {
+    return _usage_to(1);
+}
+
+# The usage after a parse error: stderr.
+fn print_usage_err(): i64 {
+    return _usage_to(2);
 }
 
 # Lexicographic Str compare (byte-wise). Returns <0 / 0 / >0.
@@ -236,6 +331,16 @@ fn _print_padded(cstr, w): i64 {
     return 0;
 }
 
+# A non-negative integer in decimal, to stdout through _emit (so it is
+# checked like every other stdout byte). Replaces lib/fmt.cyr's fmt_int,
+# which writes on its own. darshana's tty_dec_buf formats it.
+fn _emit_int(v): i64 {
+    var b[24];
+    var e = tty_dec_buf(&b, 0, v);
+    if (e < 0) { return 0 - 1; }
+    return _emit(&b, e);
+}
+
 # --list-fonts handler. Walks ./fonts, sorts alphabetically, prints
 # one line per font: "  NAME  WxH gap=N  DESCRIPTION".
 fn cmd_list_fonts(): i64 {
@@ -244,12 +349,12 @@ fn cmd_list_fonts(): i64 {
     var files = find_files(dir, ext);
     _sort_paths(files);
 
-    println("Available fonts (fonts/):");
-    println("");
+    _emit_line("Available fonts (fonts/):");
+    _emit_line("");
 
     var nf = vec_len(files);
     if (nf == 0) {
-        println("  (none found — try running from the project root)");
+        _emit_line("  (none found — try running from the project root)");
         return 0;
     }
 
@@ -266,16 +371,16 @@ fn cmd_list_fonts(): i64 {
             # the bytes here come straight from the filename. A font file
             # named "ev<ESC>[31mil.cyml" would otherwise emit live SGR.
             _write_scrubbed(str_data(path_str), str_len(path_str));
-            println("  (malformed — skipped)");
+            _emit_line("  (malformed — skipped)");
         } else {
             _emit("  ", 2);
             _print_padded(font_hdr_name(h), 10);
             _emit(" ", 1);
-            fmt_int(font_hdr_width(h));
+            _emit_int(font_hdr_width(h));
             _emit("x", 1);
-            fmt_int(font_hdr_height(h));
+            _emit_int(font_hdr_height(h));
             _emit(" gap=", 5);
-            fmt_int(font_hdr_gap(h));
+            _emit_int(font_hdr_gap(h));
             _emit("  ", 2);
             var desc = font_hdr_desc(h);
             _emit(desc, strlen(desc));

@@ -822,11 +822,20 @@ fn t_cyml_entry_rules() {
     # fits; the full loader never reads name.
     assert(font_load_file("tests/fixtures/long_name.cyml") != 0, "64-byte name -> font_load_file loads");
     assert_eq(font_header_load("tests/fixtures/long_name.cyml"), 0, "64-byte name -> font_header_load 0");
-    # Issue 0008, scheduled for 1.5.0: surplus body rows load and are
-    # ignored. This pins today's behavior so the fix is a deliberate flip.
-    var x = font_load_file("tests/fixtures/extra_rows.cyml");
-    assert(x != 0, "surplus rows -> loads today (issue 0008)");
-    if (x != 0) { assert_eq(font_height(x), 1, "surplus rows -> height stays 1"); }
+    # Issue 0008 (fixed 1.5.0): a body with more rows than `height` is
+    # rejected. Through 1.4.2 it loaded and the surplus was ignored.
+    assert_eq(font_load_file("tests/fixtures/extra_rows.cyml"), 0, "surplus rows -> 0 (issue 0008)");
+    var xr = font_header_load("tests/fixtures/extra_rows.cyml");
+    assert(xr != 0, "surplus rows -> still lists (bodies are not read)");
+    # Trailing blank lines after the last row are not rows: still fine.
+    _tb_reset(256);
+    _tb_cyml_header(1, 1, 1, 0);
+    _tb_str("[[entries]]\nchar = \"A\"\n---\n#\n\n\n\n");
+    assert(_font_parse(_tb_buf, _tb_len) != 0, "trailing newlines after the last row -> loads");
+    _tb_reset(256);
+    _tb_cyml_header(1, 1, 1, 0);
+    _tb_str("[[entries]]\nchar = \"A\"\n---\n#\n.");
+    assert_eq(_font_parse(_tb_buf, _tb_len), 0, "one surplus row -> 0");
     # No entries: the header lists, the font does not load.
     _tb_reset(256);
     _tb_cyml_header(1, 3, 3, 1);
@@ -938,21 +947,27 @@ fn _tb_flf(height, w, comments): i64 {
 }
 
 fn t_flf_header_gates() {
-    test_group(".flf / the adapter's envelope and header gates");
+    test_group(".flf / the adapter's envelope (128 x 64) and header gates");
     assert_eq(flf_load_file("tests/fixtures/flf_too_many_comments.flf"), 0, "1025 comment lines -> 0");
-    assert_eq(flf_load_file("tests/fixtures/flf_wide_65.flf"), 0, "65-column glyph rows -> 0");
-    _tb_flf(1, 64, 0);
+    # 128 x 64 since 1.5.0 (was 64 x 32); schema 1's 64 x 32 is untouched.
+    assert_eq(flf_load_file("tests/fixtures/flf_wide_129.flf"), 0, "129-column glyph rows -> 0");
+    _tb_flf(1, 128, 0);
     var f = _flf_parse(_tb_buf, _tb_len);
-    assert(f != 0, "64-column glyph rows -> loads (FLF_MAX_WIDTH)");
-    if (f != 0) { assert_eq(font_width(f), 64, "width 64"); }
+    assert(f != 0, "128-column glyph rows -> loads (FLF_MAX_WIDTH)");
+    if (f != 0) { assert_eq(font_width(f), 128, "width 128"); }
     _tb_flf(1, 65, 0);
-    assert_eq(_flf_parse(_tb_buf, _tb_len), 0, "65 columns, in memory -> 0");
-    _tb_flf(32, 1, 0);
+    assert(_flf_parse(_tb_buf, _tb_len) != 0, "65 columns -> loads since 1.5.0 (was the first rejected width)");
+    _tb_flf(1, 129, 0);
+    assert_eq(_flf_parse(_tb_buf, _tb_len), 0, "129 columns, in memory -> 0");
+    _tb_flf(64, 1, 0);
     f = _flf_parse(_tb_buf, _tb_len);
-    assert(f != 0, "height 32 -> loads (FLF_MAX_HEIGHT)");
-    if (f != 0) { assert_eq(font_height(f), 32, "height 32"); }
+    assert(f != 0, "height 64 -> loads (FLF_MAX_HEIGHT)");
+    if (f != 0) { assert_eq(font_height(f), 64, "height 64"); }
     _tb_flf(33, 1, 0);
-    assert_eq(_flf_parse(_tb_buf, _tb_len), 0, "height 33 -> 0");
+    assert(_flf_parse(_tb_buf, _tb_len) != 0, "height 33 -> loads since 1.5.0");
+    _tb_flf(65, 1, 0);
+    assert_eq(_flf_parse(_tb_buf, _tb_len), 0, "height 65 -> 0");
+    assert(FLF_MAX_WIDTH != MAX_WIDTH, "the .flf envelope is not schema 1's");
     _tb_flf(1, 1, 1024);
     assert(_flf_parse(_tb_buf, _tb_len) != 0, "1024 comment lines -> loads (FLF_MAX_COMMENTS)");
     _tb_flf(1, 1, 1025);
@@ -1166,39 +1181,52 @@ fn t_cli_flags() {
     assert_eq(cmdit_get_bool(fs, CF_LIST), 0, "--list-fonts was consumed as a value, not set");
 }
 
-# The parse-error diagnostics: the stdlib parser's wording, byte for byte.
-fn t_cli_report_parse_error() {
-    test_group("cli / report_parse_error");
-    #ifdef CYRIUS_TARGET_LINUX
+# The parse-error diagnostics (1.5.0): one line on stderr naming what was
+# typed, a blank line, the usage block; nothing on stdout.
+fn _rpe(line, buf, cap, out_n, out_rc): i64 {
+    var r = 0;
+    var fs = _cf(line, &r);
     var rd = 0;
     var wr = 0;
+    var saved = _cap_begin_fd(2, &rd, &wr);
+    if (saved < 0) { return 0 - 1; }
+    var rc = report_parse_error(fs);
+    var n = _cap_end_fd(2, saved, rd, wr, buf, cap);
+    store64(out_n, n);
+    store64(out_rc, rc);
+    return 0;
+}
+
+fn t_cli_report_parse_error() {
+    test_group("cli / report_parse_error (stderr, names the token)");
+    #ifdef CYRIUS_TARGET_LINUX
     var buf = alloc(8192);
-    var codes[48];
-    store64(&codes, CMDIT_ERR_UNKNOWN);
-    store64(&codes + 8, CMDIT_ERR_MISSING_VALUE);
-    store64(&codes + 16, CMDIT_ERR_BAD_INT);
-    store64(&codes + 24, CMDIT_ERR_BUNDLED);
-    store64(&codes + 32, CMDIT_ERR_UNEXPECTED_VALUE);
-    store64(&codes + 40, CMDIT_ERR_ARGV);
-    var want[48];
-    store64(&want, "bnrmr: unknown flag\n\n");
-    store64(&want + 8, "bnrmr: flag missing value\n\n");
-    store64(&want + 16, "bnrmr: bad integer value\n\n");
-    store64(&want + 24, "bnrmr: bundled short flags not supported\n\n");
-    store64(&want + 32, "bnrmr: argument parse error\n\n");
-    store64(&want + 40, "bnrmr: argument parse error\n\n");
+    var n = 0;
+    var rc = 0;
+    var lines[56];
+    store64(&lines, "--bogus HI");
+    store64(&lines + 8, "--font");
+    store64(&lines + 16, "-HI");
+    store64(&lines + 24, "--list-fonts=0");
+    store64(&lines + 32, "--bogus\x1b[31m HI");
+    store64(&lines + 40, "--bogus\x9bx HI");
+    store64(&lines + 48, "--aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+    var want[56];
+    store64(&want, "bnrmr: unknown flag: --bogus\n\n");
+    store64(&want + 8, "bnrmr: --font: missing value\n\n");
+    store64(&want + 16, "bnrmr: -HI: bundled short flags are not supported (write -x -y; put -- before");
+    store64(&want + 24, "bnrmr: --list-fonts=0: this flag takes no value\n\n");
+    store64(&want + 32, "bnrmr: unknown flag: --bogus?[31m\n\n");
+    store64(&want + 40, "bnrmr: unknown flag: --bogus?x\n\n");
+    store64(&want + 48, "bnrmr: unknown flag: --aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa...\n\n");
     var k = 0;
-    while (k < 6) {
-        var saved = _cap_begin(&rd, &wr);
-        if (saved >= 0) {
-            var rc = report_parse_error(load64(&codes + k * 8));
-            var n = _cap_end(saved, rd, wr, buf, 8192);
+    while (k < 7) {
+        if (_rpe(load64(&lines + k * 8), buf, 8192, &n, &rc) == 0) {
             var w = load64(&want + k * 8);
             var wl = strlen(w);
-            assert_eq(rc, 1, "returns exit code 1");
-            assert(n > wl, "the line, a blank line, then the usage block");
-            assert_eq(memeq(buf, w, wl), 1, "the stdlib parser's wording");
-            assert_eq(_has(buf, n, "Usage:"), 1, "usage follows");
+            assert_eq(rc, 1, "exit code 1");
+            assert_eq(memeq(buf, w, wl), 1, "the line names the token, control bytes as '?', long ones cut");
+            assert_eq(_has(buf, n, "Usage:"), 1, "the usage block follows on stderr");
         }
         k = k + 1;
     }
@@ -1458,6 +1486,36 @@ fn _pt_same(a, an, b, bn): i64 {
     return memeq(a, b, an);
 }
 
+# Point fd `target` at a fresh pipe; *rd_out / *wr_out get its ends.
+# Returns the saved fd for _cap_end_fd, or -1.
+fn _cap_begin_fd(target, rd_out, wr_out): i64 {
+    var fds[16];
+    if (sys_pipe(&fds) < 0) { return 0 - 1; }
+    var rd = load32(&fds);
+    var wr = load32(&fds + 4);
+    var saved = syscall(SYS_DUP, target);
+    if (saved < 0) { sys_close(rd); sys_close(wr); return 0 - 1; }
+    if (sys_dup2(wr, target) < 0) { sys_close(saved); sys_close(rd); sys_close(wr); return 0 - 1; }
+    store64(rd_out, rd);
+    store64(wr_out, wr);
+    return saved;
+}
+
+fn _cap_end_fd(target, saved, rd, wr, buf, cap): i64 {
+    sys_dup2(saved, target);
+    sys_close(saved);
+    sys_close(wr);
+    var got = 0;
+    var go = 1;
+    while (go == 1) {
+        var n = sys_read(rd, buf + got, cap - got);
+        if (n > 0) { got = got + n; } else { go = 0; }
+        if (got >= cap) { go = 0; }
+    }
+    sys_close(rd);
+    return got;
+}
+
 # Point fd 1 at a fresh pipe; *rd_out / *wr_out get its ends. Returns
 # the saved fd 1 for _cap_end, or -1. Whatever is written before
 # _cap_end must fit the pipe (64 KB on Linux).
@@ -1699,6 +1757,94 @@ fn t_cli_usage_names_every_flag() {
     #endif
 }
 
+# ---- 1.5.0: checked writes (issue 0009) and stderr (issue 0016) ----
+
+# _emit with fd 1 on /dev/full: the write fails ENOSPC, the failure is
+# recorded, nothing after it is attempted, and render_layout says so.
+# Resets the process-wide flag afterwards: the rest of the suite writes.
+fn t_emit_checked() {
+    test_group("layout / _emit checks write(2) (issue 0009)");
+    #ifdef CYRIUS_TARGET_LINUX
+    var full = sys_open("/dev/full", O_WRONLY, 0);
+    assert(full >= 0, "/dev/full opened");
+    if (full >= 0) {
+        var saved = _pt_redirect(full);
+        var r1 = _emit("x", 1);
+        var failed = out_failed();
+        var r2 = _emit("y", 1);
+        var rl = render_layout(block_font_embed(), "HI", 2, 0, ALIGN_LEFT, 0, COLOR_NONE);
+        var why = write_error_text();
+        _pt_restore(saved);
+        sys_close(full);
+        _out_err = 0;
+        assert_eq(r1, 0 - 1, "a failed write returns -1");
+        assert_eq(failed, 1, "out_failed() after a failed write");
+        assert_eq(r2, 0 - 1, "and every write after it fails without trying");
+        assert_eq(rl, 0 - 4, "render_layout -> -4 on a failed write");
+        assert_eq(streq(why, "bnrmr: write error: no space left on device"), 1, "ENOSPC named");
+    }
+    var dn = sys_open("/dev/null", O_WRONLY, 0);
+    if (dn >= 0) {
+        var saved2 = _pt_redirect(dn);
+        var big = alloc(200000);
+        memset(big, 65, 200000);
+        var r3 = _emit(big, 200000);
+        var ok = out_failed();
+        _pt_restore(saved2);
+        sys_close(dn);
+        _out_err = 0;
+        assert_eq(r3, 0, "a large write to /dev/null succeeds");
+        assert_eq(ok, 0, "no failure recorded");
+    }
+    assert_eq(out_failed(), 0, "flag reset for the rest of the suite");
+    #endif
+}
+
+fn t_write_error_text() {
+    test_group("layout / write_error_text");
+    _out_err = 0 - 28;
+    assert_eq(streq(write_error_text(), "bnrmr: write error: no space left on device"), 1, "ENOSPC");
+    _out_err = 0 - 9;
+    assert_eq(streq(write_error_text(), "bnrmr: write error: stdout is not open"), 1, "EBADF");
+    _out_err = 0 - 5;
+    assert_eq(streq(write_error_text(), "bnrmr: write error: I/O error"), 1, "EIO");
+    _out_err = 0 - 1;
+    assert_eq(streq(write_error_text(), "bnrmr: write error"), 1, "anything else: the bare line");
+    _out_err = 0;
+}
+
+# _emit_line / _err_line: one write with the newline when it fits, two
+# when it does not; _err_line and print_usage_err go to fd 2.
+fn t_line_writers() {
+    test_group("layout / _emit_line, _err_line, print_usage_err");
+    #ifdef CYRIUS_TARGET_LINUX
+    var rd = 0;
+    var wr = 0;
+    var buf = alloc(8192);
+    var long = alloc(400);
+    memset(long, 66, 300);
+    store8(long + 300, 0);
+    var saved = _cap_begin(&rd, &wr);
+    if (saved >= 0) {
+        _emit_line("short");
+        _emit_line(long);
+        var n = _cap_end(saved, rd, wr, buf, 8192);
+        assert_eq(n, 6 + 301, "short + newline, 300-byte line + newline");
+        assert_eq(memeq(buf, "short\n", 6), 1, "short line");
+        assert_eq(load8(buf + 306), 10, "long line ends in a newline");
+    }
+    saved = _cap_begin_fd(2, &rd, &wr);
+    if (saved >= 0) {
+        _err_line("bnrmr: oops");
+        print_usage_err();
+        var m = _cap_end_fd(2, saved, rd, wr, buf, 8192);
+        assert_eq(memeq(buf, "bnrmr: oops\n", 12), 1, "_err_line on stderr");
+        assert_eq(_has(buf, m, "Usage:"), 1, "print_usage_err on stderr");
+    }
+    assert_eq(out_failed(), 0, "stderr writes never touch the stdout failure flag");
+    #endif
+}
+
 # Non-TTY stdout: both probes say "not a terminal". The Linux contract
 # that keeps `bnrmr ... | cat` untruncated and uncolored.
 fn t_probes_non_tty() {
@@ -1879,6 +2025,9 @@ fn main() {
     t_cli_argv();
     t_cli_flags();
     t_cli_report_parse_error();
+    t_emit_checked();
+    t_write_error_text();
+    t_line_writers();
     t_layout_resolve_frame();
     t_font_construction();
     t_load_tiny_flf();

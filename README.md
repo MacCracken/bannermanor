@@ -28,7 +28,7 @@ Fourth member of the terminal-aesthetics set:
 
 ## Status
 
-**1.4.2**. Stable. CLI flag surface, CYML font format (schema 1),
+**1.5.0**. Stable. CLI flag surface, CYML font format (schema 1),
 default font set, and `.flf` adapter contract are all frozen at their
 v1.0.0 shape — see the v1.0.0 [`Breaking`](CHANGELOG.md) section for
 what locked.
@@ -43,6 +43,10 @@ bnrmr --align center --color cyan "WELCOME"
 bnrmr --font ./modular.flf "BNRMR"     # legacy .flf path
 bnrmr --list-fonts                     # what's available
 ```
+
+Errors go to stderr with exit 1, and so does a failed write, so
+`bnrmr --font "$FONT" "$HOST" > /etc/motd` never puts an error message
+into the file, and a full disk is not reported as success (since 1.5.0).
 
 The banner clamps to the terminal width by default; on Linux, piped
 output (`bnrmr ... | cat`) emits the full untruncated banner. On AGNOS
@@ -62,7 +66,7 @@ The frozen surface:
   [`docs/adr/0001-cyml-font-format.md`](docs/adr/0001-cyml-font-format.md).
   Authoring walkthrough at [`docs/guides/fonts.md`](docs/guides/fonts.md).
 - **Legacy `.flf` read path** — `--font path.flf` loads any figlet
-  font that fits the 64-col × 32-row envelope. Uniform-width fit,
+  font that fits the 128-col × 64-row envelope (64 × 32 through 1.4.2). Uniform-width fit,
   no smushing, ASCII 32..126, 1 MB file cap.
 - **Color via [darshana](https://github.com/MacCracken/darshana)** —
   16 ANSI named colors + `rainbow`. Auto-suppressed on pipes, and off
@@ -73,7 +77,7 @@ The frozen surface:
 ```sh
 cyrius deps                            # resolve stdlib + darshana + bayan-cyml + cmdit
 cyrius build src/main.cyr build/bnrmr  # compile (binary: bnrmr)
-cyrius test                            # 3061 assertions
+cyrius test                            # 3082 assertions
 sh scripts/golden.sh                   # the frozen-output contract, byte for byte
 cyrius fuzz tests/bannermanor.fcyr     # font-parser regression gate
 cyrius bench tests/bannermanor.bcyr    # render path, CPU and write side

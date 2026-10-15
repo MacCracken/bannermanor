@@ -29,8 +29,25 @@ include "src/font_block.cyr"
 include "src/flf.cyr"
 include "src/cli.cyr"
 
+# Exit status and the stdout check. Every stdout byte goes through
+# layout's _emit, which records the first failed write (1.5.0, issue
+# 0009). Whatever _run returned, a failed write means the output did
+# not arrive, so the exit is 1 and stderr says why (ADR 0002 ruling 2:
+# exit 0 after a failed write is a defect, not frozen behavior).
 fn main(): i64 {
     alloc_init();
+    var rc = _run();
+    if (out_failed() == 1) {
+        _err_line(write_error_text());
+        return 1;
+    }
+    return rc;
+}
+
+# Everything main() used to do. Diagnostics go to stderr (1.5.0, issue
+# 0016; ADR 0002 ruling 1); output that answers a successful request
+# (a banner, --help, --version, --list-fonts) goes to stdout.
+fn _run(): i64 {
 
     # cmdit_argv reads the process argv into one array (it runs
     # args_init). A command line it cannot read whole (the stdlib's 2 MiB
@@ -40,14 +57,14 @@ fn main(): i64 {
     var fs = cli_flags();
     var ac = cmdit_argv(fs);
     if (cmdit_error(fs) != CMDIT_ERR_NONE) {
-        return report_parse_error(cmdit_error(fs));
+        return report_parse_error(fs);
     }
     if (ac <= 1) {
         print_usage();
         return 0;
     }
     if (ac > 256) {
-        println("bnrmr: too many arguments");
+        _err_line("bnrmr: too many arguments");
         return 1;
     }
 
@@ -56,14 +73,14 @@ fn main(): i64 {
     # messages issue 0002 froze. See cli_flags().
     var pr = cmdit_parse(fs);
     if (pr == CMDIT_RESULT_ERR) {
-        return report_parse_error(cmdit_error(fs));
+        return report_parse_error(fs);
     }
     if (pr == CMDIT_HELP) {
         print_usage();
         return 0;
     }
     if (pr == CMDIT_VERSION) {
-        println("bnrmr 1.4.2");
+        _emit_line("bnrmr 1.5.0");
         return 0;
     }
     if (cmdit_get_bool(fs, CF_LIST) == 1) {
@@ -74,43 +91,43 @@ fn main(): i64 {
     var align_str = cmdit_get_str(fs, CF_ALIGN);
     var align = parse_align(align_str);
     if (align < 0) {
-        println("bnrmr: --align must be left, center, or right");
+        _err_line("bnrmr: --align must be left, center, or right");
         return 1;
     }
 
     var width = _parse_count_flag(cmdit_get_str(fs, CF_WIDTH));
     if (width == 0 - 2) {
-        println("bnrmr: bad integer value");
+        _err_line("bnrmr: bad integer value");
         return 1;
     }
     if (width == 0 - 3) {
-        println("bnrmr: --width must be non-negative");
+        _err_line("bnrmr: --width must be non-negative");
         return 1;
     }
     if (width == 0 - 4 || width > WIDTH_CAP) {
-        println("bnrmr: --width max 4096");
+        _err_line("bnrmr: --width max 4096");
         return 1;
     }
     var pad = _parse_count_flag(cmdit_get_str(fs, CF_PAD));
     if (pad == 0 - 2) {
-        println("bnrmr: bad integer value");
+        _err_line("bnrmr: bad integer value");
         return 1;
     }
     if (pad == 0 - 3) {
-        println("bnrmr: --pad must be non-negative");
+        _err_line("bnrmr: --pad must be non-negative");
         return 1;
     }
     if (pad == 0 - 4 || pad > PAD_CAP) {
-        println("bnrmr: --pad max 64");
+        _err_line("bnrmr: --pad max 64");
         return 1;
     }
 
     var color_str = cmdit_get_str(fs, CF_COLOR);
     var color = parse_color(color_str);
     if (color == 0 - 3) {
-        println("bnrmr: --color must be a known name or 'rainbow'");
-        println("       (black/red/green/yellow/blue/magenta/cyan/white,");
-        println("        bright_<name>, or rainbow)");
+        _err_line("bnrmr: --color must be a known name or 'rainbow'");
+        _err_line("       (black/red/green/yellow/blue/magenta/cyan/white,");
+        _err_line("        bright_<name>, bright-<name>, or rainbow)");
         return 1;
     }
 
@@ -121,26 +138,26 @@ fn main(): i64 {
         if (_is_flf_path(font_name) == 1) {
             font = flf_load_file(font_name);
             if (font == 0) {
-                println("bnrmr: failed to load .flf font (missing or malformed)");
+                _err_line("bnrmr: failed to load .flf font (missing or malformed)");
                 return 1;
             }
         } else {
             var pathbuf[FONT_PATH_CAP];
             var plen = build_font_path(&pathbuf, FONT_PATH_CAP, font_name);
             if (plen <= 0) {
-                println("bnrmr: invalid font name");
+                _err_line("bnrmr: invalid font name");
                 return 1;
             }
             font = font_load_file(&pathbuf);
             if (font == 0) {
-                println("bnrmr: failed to load font (missing or malformed)");
+                _err_line("bnrmr: failed to load font (missing or malformed)");
                 return 1;
             }
         }
     } else {
         font = block_font_embed();
         if (font == 0) {
-            println("bnrmr: failed to build embedded font");
+            _err_line("bnrmr: failed to build embedded font");
             return 1;
         }
     }
@@ -154,7 +171,7 @@ fn main(): i64 {
     var buf[MAX_INPUT];
     var n = join_positionals(&buf, MAX_INPUT, fs);
     if (n < 0) {
-        println("bnrmr: input too long (max 1024 bytes)");
+        _err_line("bnrmr: input too long (max 1024 bytes)");
         return 1;
     }
     if (n == 0) {
@@ -162,7 +179,13 @@ fn main(): i64 {
         return 0;
     }
 
-    render_layout(font, &buf, n, width, align, pad, color);
+    # -1 / -2 cannot happen here: the text is 1..MAX_INPUT bytes and every
+    # font branch above already rejected 0 (accepted risk A-07). -4, a
+    # failed write, is reported by main() through out_failed().
+    if (render_layout(font, &buf, n, width, align, pad, color) == 0 - 3) {
+        _err_line("bnrmr: out of memory");
+        return 1;
+    }
     return 0;
 }
 

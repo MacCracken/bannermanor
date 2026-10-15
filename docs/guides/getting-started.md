@@ -11,7 +11,7 @@ orientation for someone who's about to read or change the source.
 cyrius deps                              # resolve stdlib + darshana + bayan-cyml + cmdit
 cyrius build src/main.cyr build/bnrmr    # compile (binary: bnrmr)
 ./build/bnrmr "AGNOS"                    # smoke render
-cyrius test                              # 3061 assertions
+cyrius test                              # 3082 assertions
 sh scripts/golden.sh                     # 318 invocations, byte for byte
 cyrius fuzz tests/bannermanor.fcyr       # font-parser regression gate
 cyrius bench tests/bannermanor.bcyr      # render path, CPU and write side
@@ -43,9 +43,11 @@ Toolchain pin: `cyrius = "6.7.9"` in `cyrius.cyml`.
   resolution, alignment, padding, color emission, TTY-aware default
   truncation. Pure helpers for `fit_chars` / `banner_width` /
   `align_pad` / `parse_uint` / `_usable_cols`. The stdout width and TTY
-  probes go through darshana's `tty_winsize`; every write goes through
-  `_emit` (`lib/io.cyr`'s `file_write`), and runs of spaces and newlines
-  go out as one write. `src/` uses no raw syscall numbers
+  probes go through darshana's `tty_winsize`. Each banner row is composed
+  in one buffer and written once through `_emit` (`lib/io.cyr`'s
+  `file_write`), which checks the write and makes the exit 1 if stdout
+  fails; diagnostics go to stderr through `_err_line`. `src/` uses no
+  raw syscall numbers
   ([architecture note 001](../architecture/001-no-raw-syscall-numbers.md)).
 - `src/font.cyr` — `Font` struct + CYML loader. Validates schema,
   geometry, body shape. Also exposes the header-only loader used by

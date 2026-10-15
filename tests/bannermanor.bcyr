@@ -19,8 +19,9 @@
 # terminal/pipe throughput, not bnrmr's code". It is bnrmr's code: the
 # renderer issued one write(2) per pad space and per gap column, so the
 # 4096-column rows cost about 200 times the natural one. B4 is what shows
-# the fix: with chunked runs the three rows sit within a small factor of
-# each other, the bytes copied into /dev/null being the only difference.
+# the fix: with chunked runs (1.4.1) and one write per row (1.5.0) the
+# three rows sit within a small factor of each other, the bytes composed
+# and copied into /dev/null being the only difference.
 #
 # B4 must not write its banners where the report goes. Every timed render
 # goes to /dev/null, and fd 1 is put back before bench_report prints. A

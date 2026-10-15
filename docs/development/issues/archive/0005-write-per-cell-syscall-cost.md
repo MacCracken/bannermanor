@@ -107,3 +107,31 @@ for it.
 Option 2, one write per row, is roadmap 1.5.0 together with issue 0009
 (checked writes). It needs darshana's `_buf` SGR composers so that a
 colored row can be assembled in one buffer.
+
+## Option 2 (shipped 1.5.0)
+
+Each banner row is now composed in one buffer and written with one
+`_emit`: the left pad, the color's SGR (darshana's `tty_sgr_buf`), the
+glyph rows and gaps, the reset (`tty_sgr_reset_buf`) and the newline.
+`bnrmr AGNOS` makes 5 writes, down from 50 (1.2.0 through 1.4.2). The
+`--pad` blocks are still one write each. darshana's `tty_sgr` is its
+`_buf` composer followed by a write, so the colored bytes are the same by
+construction, and the golden pty leg confirms it.
+
+The row is copied 8 bytes at a time (`_bulk_copy`). The stdlib's
+`memcpy` and `memset` move one byte per iteration, and the first cut
+using them made a 4096-column row slower than the write it replaced.
+
+In-process B4, interleaved against 1.4.2's `layout.cyr` under a loaded
+host (load average 14–22), three rounds:
+
+| B4 row | 1.4.2 | 1.5.0 |
+|---|---|---|
+| natural (`AGNOS`) | 21.0–22.0 µs | 3.4–4.3 µs |
+| `--width 4096 --align center` | 22.0–23.5 µs | 5.6–7.2 µs |
+| `--width 4096 --align right` (`A`) | 6.1–6.6 µs | 7.3–9.2 µs |
+
+The last row is about 1 µs slower. It used to send its 4 KB pad straight
+from the run buffer; now it copies the pad into the row first. That is
+recorded rather than optimized, because every row is still within a
+small factor of the natural one, which is this issue's bar.

@@ -233,38 +233,133 @@ fn align_pad(banner, frame, align): i64 {
 # ---- the write path ----
 #
 # Every byte bnrmr writes to stdout outside lib/ goes through `_emit`:
-# layout's banner rows here, and src/cli.cyr's --list-fonts printers.
-# (println, fmt_int and darshana's tty_sgr write on their own.) Through
-# 1.2.0 there were 19 inline `syscall(1, 1, ...)` sites instead. They
-# were correct on every target, but only because the write syscall
-# happens to be number 1 on x86_64-Linux and AGNOS, and aarch64
-# translates it (accepted risk A-10). file_write is lib/io.cyr's
-# per-target wrapper, the same route the font readers took in 1.1.3.
+# the banner rows here, and --help, --version and --list-fonts in
+# src/cli.cyr. Through 1.2.0 there were 19 inline `syscall(1, 1, ...)`
+# sites instead, correct on every target only by coincidence (accepted
+# risk A-10; docs/architecture/001). file_write is lib/io.cyr's
+# per-target wrapper.
 #
-# The write return is not checked yet. Issue 0009 (roadmap 1.5.0, ADR
-# 0002 ruling 2) is where that changes, and this function is where it
-# will happen.
-fn _emit(buf, n): i64 {
-    file_write(1, buf, n);
+# Since 1.5.0 `_emit` checks what write(2) returns (issue 0009, ADR 0002
+# ruling 2):
+#   - a short write is not an error: the rest is written, as often as it
+#     takes;
+#   - EINTR is retried at once and EAGAIN after a 1 ms pause (a
+#     non-blocking stdout inherited from a parent), each a bounded number
+#     of times;
+#   - anything else, and a write that makes no progress, is a failure.
+#     It is recorded in `_out_err`, nothing more is written, and main()
+#     exits 1 with `bnrmr: write error` on stderr (out_failed()).
+# Through 1.4.2 none of this was checked, so `bnrmr hi > /dev/full`
+# exited 0 having written nothing.
+#
+# The errno values are named here, not taken from the stdlib, because
+# the AGNOS syscall table defines neither: they are the asm-generic
+# numbers, the same on x86_64 and aarch64 Linux. A failed AGNOS write
+# returns -1, which matches neither and is a failure.
+enum WriteErrno {
+    W_EINTR = 4;
+    W_EAGAIN = 11;
+    W_EIO = 5;
+}
+
+var _out_err = 0;       # 0, or the negative errno of the first failed write
+
+# 1 if any write to stdout has failed this process.
+fn out_failed(): i64 {
+    if (_out_err != 0) { return 1; }
     return 0;
 }
 
-# A run of `n` copies of one byte, written in as few writes as possible
-# (issue 0005, Option 1). Through 1.2.0, pads and gaps went out one
-# write(2) per byte, so a banner's cost scaled with its WIDTH:
-# `--width 4096 --align right A` made 4,091 one-byte writes per row.
-# The bytes and their order are unchanged. Only the syscall boundaries
-# moved, and darshana's SGR writes stay exactly where they were, so
-# colored rows interleave as before.
+# The stderr line main() prints when out_failed(). Names the common
+# reasons by their Linux errno; anything else (and every AGNOS failure,
+# which is -1) is the bare line.
+fn write_error_text(): i64 {
+    var e = 0 - _out_err;
+    if (e == 28)  { return "bnrmr: write error: no space left on device"; }
+    if (e == 9)   { return "bnrmr: write error: stdout is not open"; }
+    if (e == 5)   { return "bnrmr: write error: I/O error"; }
+    if (e == 27)  { return "bnrmr: write error: file too large"; }
+    if (e == 122) { return "bnrmr: write error: disk quota exceeded"; }
+    return "bnrmr: write error";
+}
+
+fn _emit_nap(): i64 {
+    var ts[16];
+    store64(&ts, 0);
+    store64(&ts + 8, 1000000);          # 1 ms
+    sys_nanosleep(&ts, 0);
+    return 0;
+}
+
+# Write all `n` bytes at `buf` to stdout. 0, or -1 once a write has
+# failed (this one or an earlier one).
+fn _emit(buf, n): i64 {
+    if (_out_err != 0) { return 0 - 1; }
+    var off = 0;
+    var intr = 0;
+    var again = 0;
+    while (off < n && _out_err == 0) {
+        var w = file_write(1, buf + off, n - off);
+        if (w > 0) {
+            off = off + w;
+            intr = 0;
+            again = 0;
+        } else {
+            var retry = 0;
+            if (w == 0 - W_EINTR && intr < 100) { intr = intr + 1; retry = 1; }
+            if (w == 0 - W_EAGAIN && again < 1000) { again = again + 1; _emit_nap(); retry = 1; }
+            if (retry == 0) {
+                _out_err = w;
+                if (w == 0) { _out_err = 0 - W_EIO; }      # no progress
+            }
+        }
+    }
+    if (_out_err != 0) { return 0 - 1; }
+    return 0;
+}
+
+# `s` and a newline, to stdout, in one write when it fits.
+fn _emit_line(s): i64 {
+    var n = strlen(s);
+    var buf[256];
+    if (n < 255) {
+        memcpy(&buf, s, n);
+        store8(&buf + n, 10);
+        return _emit(&buf, n + 1);
+    }
+    _emit(s, n);
+    return _emit("\n", 1);
+}
+
+# `s` and a newline, to stderr, in one write when it fits. Diagnostics go
+# here since 1.5.0 (issue 0016). Unchecked: if stderr cannot be written
+# there is nowhere left to say so, and the exit code still reports it.
+fn _err_line(s): i64 {
+    var n = strlen(s);
+    var buf[256];
+    if (n < 255) {
+        memcpy(&buf, s, n);
+        store8(&buf + n, 10);
+        file_write(2, &buf, n + 1);
+        return 0;
+    }
+    file_write(2, s, n);
+    file_write(2, "\n", 1);
+    return 0;
+}
+
+# A run of `n` copies of one byte, in as few writes as possible (issue
+# 0005, Option 1, 1.4.1). Through 1.2.0, pads and gaps went out one
+# write(2) per byte. Since 1.5.0 the banner rows are composed whole
+# (render_layout), so this serves the --pad blocks and the --list-fonts
+# name column.
 #
 # The run buffers are allocated on first use (bump alloc) and kept for
 # the process, which is safe because nothing that renders ever calls
 # alloc_reset(); the fuzz harness resets, and never renders. 4096
-# spaces cover any left pad in one write, since every frame source is
-# capped at 4096 (WIDTH_CAP, WS_COL_CAP); 64 newlines cover PAD_CAP.
-# Longer runs, which no CLI input can reach, take several writes. If
-# the allocation is refused, the old one-byte loop runs instead, which
-# is slow but byte-identical.
+# spaces and 64 newlines (PAD_CAP) cover every run the CLI can ask for
+# in one write; longer runs take several. If the allocation is refused,
+# a one-byte loop runs instead: slow, but the same bytes.
 var _run_spaces = 0;
 var _run_newlines = 0;
 
@@ -317,6 +412,68 @@ fn _write_newlines(n): i64 {
     return _emit_run(10, n);
 }
 
+# ---- the row buffer (1.5.0, issue 0005 Option 2) ----
+#
+# Each banner row is composed in one buffer and written with one _emit:
+# the left pad, the color's SGR, every glyph row and gap, the reset, the
+# newline. darshana's `_buf` composers write the same bytes `tty_sgr` /
+# `tty_sgr_reset` did (those two are literally the composer plus a
+# write), so colored rows are byte-identical, which the golden pty leg
+# checks.
+#
+# Sized per render: lpad + banner width + SGR_SLACK. The banner width is
+# bounded by the 1 KB input cap times (glyph width + gap), which is
+# 1024 × (128 + 16) bytes for the widest font the loaders accept, so a
+# row is at most a few hundred KB. The buffer grows when a render needs
+# more and is kept for the process (same lifetime rule as the run
+# buffers above).
+enum RowLimits {
+    SGR_SLACK = 16;     # ESC [ NNN m (6) + ESC [ 0 m (4) + '\n', rounded up;
+                        # the composers store up to 4 bytes past their output
+}
+
+var _row_buf = 0;
+var _row_cap = 0;
+
+# Copy n bytes, eight at a time where it can. lib/string.cyr's memcpy and
+# memset move one byte per loop iteration, and composing rows with them
+# made a 4096-column row cost more than the write it replaced (the left
+# pad alone was ~12 µs a row). Unaligned 8-byte loads and stores are fine
+# on every target bnrmr builds for (x86_64, aarch64).
+fn _bulk_copy(dst, src, n): i64 {
+    var i = 0;
+    while (i + 8 <= n) {
+        store64(dst + i, load64(src + i));
+        i = i + 8;
+    }
+    while (i < n) {
+        store8(dst + i, load8(src + i));
+        i = i + 1;
+    }
+    return 0;
+}
+
+# n spaces at dst: copied from the run buffer, or byte by byte if there is
+# none or n is past it.
+fn _fill_spaces(dst, n): i64 {
+    if (n <= 0) { return 0; }
+    var cap_box[8];
+    var sp = _run_buf(32, &cap_box);
+    if (sp != 0 && n <= load64(&cap_box)) { return _bulk_copy(dst, sp, n); }
+    memset(dst, 32, n);
+    return 0;
+}
+
+# A row buffer of at least `need` bytes, or 0 if allocation was refused.
+fn _row_buffer(need): i64 {
+    if (need <= _row_cap) { return _row_buf; }
+    var b = alloc(need);
+    if (b == 0) { return 0; }
+    _row_buf = b;
+    _row_cap = need;
+    return b;
+}
+
 # Render `text[0..len-1]` with `font` honoring layout opts:
 #
 #   width  — requested frame width; 0 = unlimited (no truncation, no
@@ -327,7 +484,10 @@ fn _write_newlines(n): i64 {
 #            color.cyr. When stdout isn't a TTY, color is suppressed
 #            silently — `bnrmr --color cyan | cat` writes plain bytes.
 #
-# Returns 0 on success, -1 on bad input (mirrors render() in render.cyr).
+# Returns 0 on success, -1 on bad input (mirrors render() in render.cyr),
+# -2 for a null font, -3 if the row buffer could not be allocated, and
+# -4 if a write to stdout failed (main() reports that one through
+# out_failed(), as for every other stdout write).
 #
 # Behavior:
 #   - With width=0 and align=ALIGN_LEFT, pad=0, color=COLOR_NONE this
@@ -388,45 +548,48 @@ fn render_layout(font, text, len, width, align, pad, color): i64 {
         if (stdout_is_tty() == 1) { emit_color = 1; }
     }
 
-    _write_newlines(pad);
+    # One buffer holds a whole row; see "the row buffer" above.
+    var row = _row_buffer(lpad + bw + SGR_SLACK);
+    if (row == 0) { return 0 - 3; }
 
-    # The inter-glyph gap is at most MAX_GAP (16) spaces from any loader,
-    # well inside one run buffer, so the glyph loop writes it straight
-    # from there rather than through _write_spaces: a natural-width
-    # render is about half gap writes, and each helper layer costs a call
-    # per write. A gap the buffer cannot hold in one write (only a
-    # hand-built Font could have one) takes the chunked path instead.
-    var gap_cap[8];
-    var gap_src = 0;
-    if (g > 0 && g <= WS_COL_CAP) { gap_src = _run_buf(32, &gap_cap); }
+    _write_newlines(pad);
 
     var r = 0;
     while (r < h) {
-        _write_spaces(lpad);
+        var pos = 0;
+        if (lpad > 0) {
+            _fill_spaces(row, lpad);
+            pos = lpad;
+        }
 
         if (emit_color == 1) {
             var c = color;
             if (color == COLOR_RAINBOW) { c = rainbow_color_for_row(r); }
-            tty_sgr(c);
+            var sp = tty_sgr_buf(row, pos, c);
+            if (sp > 0) { pos = sp; }
         }
 
         var i = 0;
         while (i < draw_len) {
-            var c = load8(text + i);
-            var gi = font_glyph_index(font, c);
+            var ch = load8(text + i);
+            var gi = font_glyph_index(font, ch);
             if (gi < 0) { gi = space_idx; }
-            _emit(font_row(font, gi, r), w);
+            _bulk_copy(row + pos, font_row(font, gi, r), w);
+            pos = pos + w;
             if (i + 1 < draw_len && g > 0) {
-                if (gap_src != 0) { _emit(gap_src, g); } else { _write_spaces(g); }
+                _fill_spaces(row + pos, g);
+                pos = pos + g;
             }
             i = i + 1;
         }
 
-        if (emit_color == 1) { tty_sgr_reset(); }
-        _emit("\n", 1);
+        if (emit_color == 1) { pos = tty_sgr_reset_buf(row, pos); }
+        store8(row + pos, 10);
+        _emit(row, pos + 1);
         r = r + 1;
     }
 
     _write_newlines(pad);
+    if (out_failed() == 1) { return 0 - 4; }
     return 0;
 }

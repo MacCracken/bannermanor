@@ -194,7 +194,7 @@ the file.
 Two loaders read a font file, and they check different things.
 
 **`bnrmr --font <name>`** (`font_load_file`) refuses the font, with
-`bnrmr: failed to load font (missing or malformed)` and exit 1, when:
+`bnrmr: failed to load font (missing or malformed)` on stderr and exit 1, when:
 
 - the path is not a regular file, the file is empty, or it is
   **65,536 bytes or larger**: a file of exactly 64 KiB is refused, so
@@ -206,13 +206,14 @@ Two loaders read a font file, and they check different things.
 - the file has no `[[entries]]`, or more than 256;
 - an entry has no `char`, or its value is not a single ASCII byte
   (below 128), or two entries declare the same `char`;
-- an entry body has fewer than `height` rows, a row that is not exactly
-  `width` bytes, or a byte other than `.` and `#`.
+- an entry body does not have exactly `height` rows (only blank lines
+  may follow the last one), has a row that is not exactly `width`
+  bytes, or has a byte other than `.` and `#`.
 
-It never reads `name`, `description`, `author` or `license`. It also
-does not reject a body with **more** rows than `height`. The extra rows
-are ignored, which is a known gap
-([issue 0008](../development/issues/0008-cyml-body-not-fully-consumed.md)).
+It never reads `name`, `description`, `author` or `license`. Surplus
+rows have been a load failure since 1.5.0. Through 1.4.2 they were
+silently ignored, so a font that worked then can fail now
+([issue 0008](../development/issues/archive/0008-cyml-body-not-fully-consumed.md)).
 
 **`bnrmr --list-fonts`** (`font_header_load`) reads only the `[font]`
 block, and shows `(malformed — skipped)` when:

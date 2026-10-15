@@ -25,26 +25,38 @@ include "src/font.cyr"
 include "lib/string.cyr"
 include "lib/io.cyr"
 
-# The adapter's own envelope. FLF_MAX_WIDTH / FLF_MAX_HEIGHT share
-# their values with src/font.cyr's MAX_WIDTH / MAX_HEIGHT, but they are
-# NOT the same limit and must not be kept "in sync": MAX_* is CYML
-# schema 1, frozen at v1.0; FLF_MAX_* is how big a FIGfont bnrmr agrees
-# to load, which the FIGfont spec does not bound. Raising FLF_MAX_* is
-# on the roadmap for 1.5.0 (ADR 0002 ruling 3); raising MAX_* would be a
-# schema change. A comment here once said "match font.cyr", which is
-# exactly the instruction that would have changed both.
+# The adapter's own envelope. FLF_MAX_WIDTH / FLF_MAX_HEIGHT are NOT
+# src/font.cyr's MAX_WIDTH / MAX_HEIGHT and are not kept "in sync":
+# MAX_* is CYML schema 1, frozen at v1.0; FLF_MAX_* is how big a FIGfont
+# bnrmr agrees to load, which the FIGfont spec does not bound. Through
+# 1.4.2 they happened to share 64 x 32, and a comment here said "match
+# font.cyr", the instruction that would have changed both.
 #
-# Three different things in this file are the number 32: FLF_FIRST_CH
-# (the first glyph's char code), FLF_MAX_HEIGHT, and the space byte
-# that hardblanks and control bytes become. Only the first two are
-# named here; the space byte stays a literal, commented where used.
+# 1.5.0 raised the envelope from 64 x 32 to 128 x 64 (ADR 0002 ruling 3:
+# admitting input rejected only by bnrmr's own limit is additive).
+# Measured over the 1,052-font reference corpus (cmatsuoka/figlet-fonts
+# + xero/figlet-fonts): 64 x 32 rejected 79; 73 of those were the Obanner
+# family (up to 125 x 63) and five fonts 70-77 columns wide, all inside
+# 128 x 64. The other six stay rejected: five CJK fonts over the 1 MB cap,
+# which the 1.0.0 adapter contract names, and one malformed 23 MB file.
+# All 973 fonts that loaded before render byte-identically.
+#
+# FLF_MAX_WIDTH is also the scratch stride per glyph row, so the parse
+# scratch is 95 x height x 128 bytes: 778 KB at the 64-row ceiling,
+# freed with the process like every other bump allocation.
+#
+# The number 32 means two different things in this file: FLF_FIRST_CH
+# (the first glyph's char code) and the space byte that hardblanks and
+# control bytes become. The first is named here; the space byte stays a
+# literal, commented where used.
 enum FlfLimits {
     FLF_MAX_FILE = 1048576;     # 1 MB; a file of this size or more is refused
+    # (frozen: CHANGELOG 1.0.0 names the cap)
     FLF_GLYPHS = 95;            # ASCII 32..126 inclusive
     FLF_FIRST_CH = 32;          # char code of glyph 0
-    FLF_MAX_WIDTH = 64;         # widest glyph row, after endmarks are stripped;
+    FLF_MAX_WIDTH = 128;        # widest glyph row, after endmarks are stripped;
     # also the scratch stride per row
-    FLF_MAX_HEIGHT = 32;        # rows per glyph
+    FLF_MAX_HEIGHT = 64;        # rows per glyph
     FLF_MAX_COMMENTS = 1024;    # absurd-but-finite cap on header comments
 }
 

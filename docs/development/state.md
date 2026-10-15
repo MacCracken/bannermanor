@@ -5,6 +5,8 @@
 
 ## Version
 
+**1.5.0** — 2026-10-15. **Diagnostics on stderr, honest exit codes, one write per row, the malformed-input rulings.** Everything ADR 0002 unblocked. Every diagnostic goes to stderr and exit codes are unchanged ([issue 0016](issues/archive/0016-diagnostics-go-to-stdout.md)), so `bnrmr --font typo X > /etc/motd` leaves the file empty. Parse errors name what was typed (`bnrmr: unknown flag: --bogus`), and the `-HI` message points at `--`. Every stdout write is checked ([issue 0009](issues/archive/0009-write-return-never-checked.md)): `bnrmr hi > /dev/full` now exits 1 with `bnrmr: write error: no space left on device`. Each banner row is composed in one buffer, color included through darshana's `_buf` composers, and written once ([issue 0005](issues/archive/0005-write-per-cell-syscall-cost.md) Option 2): `bnrmr AGNOS` makes 5 writes, down from 50, and a natural-width render is about 5× faster in process. A CYML body with more rows than `height` is rejected ([issue 0008](issues/archive/0008-cyml-body-not-fully-consumed.md)). The `.flf` envelope grew from 64×32 to 128×64: over the 1,052-font reference corpus, 73 more fonts load (1,046 in all) and the 973 that loaded before render byte-identically. The golden frozen and snapshot tiers did not move. The error tier was re-baselined once, every record checked by script. Suite 3061 → 3082. See `CHANGELOG.md` [1.5.0].
+
 **1.4.2** — 2026-10-15. **CLI parsing on cmdit.** The stdlib table parser (`lib/flags.cyr`) is replaced by [cmdit](https://github.com/MacCracken/cmdit) 1.4.0, pinned as a `[deps.cmdit]` git dependency. cmdit is the same getopt-long core as a distlib. The flag table moved into `src/cli.cyr` (`cli_flags`), so the suite parses synthetic argv with it, and the parse-error lines into `report_parse_error`. `cmdit_argv` replaced bnrmr's own `build_argv_array`. Before the swap the golden suite gained 33 parser-grammar cases (318 in all), and every record is byte-identical across it, on x86_64 and on aarch64 under qemu. cmdit's auto `-V` is dropped (the freeze adds no flags), and help, the `--version` literal and every value check stay bnrmr's. One diagnostic changed, under ADR 0002 ruling 1: a command line too long for the stdlib's 2 MiB `/proc` read now reports `argument parse error` (exit 1, as before) instead of whatever the truncated argv produced. Binary 244,184 → 292,008 bytes: the whole cmdit bundle links. Suite 3006 → 3061. See `CHANGELOG.md` [1.4.2].
 
 **1.4.1** — 2026-10-15. **The contract checked in CI; one write per run; CYML-only bayan; a real fuzz gate.** The roadmap's planned 1.3.0, 1.3.1, 1.4.0 and 1.4.1 landed as one release (no 1.3.x or 1.4.0 was tagged). The golden matrix is committed and gated (`scripts/golden.sh`: 285 invocations in three tiers — frozen renders, error paths, snapshot help/version/listing — 112 of them on a pty), and its frozen tier is byte-identical to 1.2.0 on x86_64 and on aarch64 under qemu. CI gained `deps --locked`, strict lint, both cross-builds, a smoke step, the golden suite, the fuzz harness and a 100% reference-coverage floor. Pads, gaps and `--pad` lines are written in runs ([issue 0005](issues/archive/0005-write-per-cell-syscall-cost.md)): `--width 4096 --align right A` went from 20,465 `write(2)` calls to 15, and wide renders now cost the same as natural ones. Every stdout write goes through `lib/io.cyr`'s `file_write`. bayan's CYML-only sublib replaced the full bundle ([issue 0013](issues/archive/0013-full-bayan-bundle-linked.md)): 597,040 → 244,184 bytes. The three font readers share one `_slurp` and free their buffers ([issue 0014](issues/archive/0014-transient-read-buffers-never-freed.md)); dead named limits are wired in ([0012](issues/archive/0012-dead-geometry-constants.md)); `src/cli.cyr` made the CLI testable; the fuzz harness drives the real parsers ([0010](issues/archive/0010-fuzz-harness-is-a-no-op.md)). The only stdout change: `--help` lists `--`. ADR 0002 (what the freeze covers) was proposed and accepted, which unblocks roadmap 1.5.0. Suite 2828 → 3006. See `CHANGELOG.md` [1.4.1].
@@ -150,15 +152,19 @@ Single-shot CLI: text in, banner bytes out, exit.
   Reads argv (`cmdit_argv`), parses it with the table from
   `cli_flags()`, validates `--align` / `--width` / `--pad` / `--color`,
   resolves the font (embedded block; `fonts/NAME.cyml`; or a `.flf`
-  path) and calls `render_layout`. The
-  `--version` literal lives here (`scripts/doc-pin-check.sh` reads it).
+  path) and calls `render_layout`. Every diagnostic is written to
+  stderr, and `main()` wraps it all: if any stdout write failed, the exit
+  is 1 (1.5.0). The `--version` literal lives here
+  (`scripts/doc-pin-check.sh` reads it).
   Entry is a bare top-level `_agnos_entry();`, not `var r = main();`
   (the 1.1.1 AGNOS argv fix), which is why no harness can include this
   file.
 - `src/cli.cyr` — the rest of the command line, split out at 1.4.1 so
   the suite can test it: `cli_flags` (the cmdit flag table, 1.4.2: no
   `-V`, no value validation, which stays below), `report_parse_error`
-  (the stdlib parser's error wording, kept byte for byte),
+  (since 1.5.0: one stderr line naming the typed token, control bytes
+  as `?`, then the usage on stderr), `print_usage` / `print_usage_err`
+  (the same block, composed once, to stdout or stderr),
   `build_font_path` (the `--font NAME` →
   `fonts/NAME.cyml` containment: no `/`, `\`, `.` or control byte, 64
   bytes max), `_is_flf_path`, `parse_align`, `_parse_count_flag` (the
@@ -177,12 +183,15 @@ Single-shot CLI: text in, banner bytes out, exit.
   - **`stdout_is_tty`**: `term_width_ioctl() > 0` on Linux, so a
     0-column terminal is not a TTY (F-020). Always 0 on AGNOS, because
     agnos cannot say whether fd 1 is the console; color stays off there.
-  - **Writes**: every stdout byte bnrmr writes itself goes through
-    `_emit` → `lib/io.cyr`'s `file_write`. Runs of spaces and newlines
-    are written from per-process buffers in as few writes as possible
-    (issue 0005), so a 4096-column row costs what a short one does.
-    darshana's `tty_sgr` / `tty_sgr_reset` write the color around each
-    row.
+  - **Writes**: every stdout byte goes through `_emit` → `lib/io.cyr`'s
+    `file_write`. The banner rows, `--help`, `--version` and
+    `--list-fonts` all take that route. `_emit` checks every write
+    (1.5.0): it continues short writes, retries EINTR / EAGAIN, and
+    records the first failure, after which main() exits 1 with
+    `bnrmr: write error: …`. Each banner row is composed in one buffer
+    (left pad, darshana's `tty_sgr_buf`, glyph rows and gaps,
+    `tty_sgr_reset_buf`, newline) and written once, copied eight bytes at
+    a time (`_bulk_copy`). Diagnostics go to stderr through `_err_line`.
   - `render_layout(font, text, len, width, align, pad, color)` is the
     renderer.
 - `src/color.cyr` — `parse_color` (16 names in `bright_X` and `bright-X`
@@ -205,9 +214,9 @@ Single-shot CLI: text in, banner bytes out, exit.
     (F-011).
 - `src/flf.cyr` — the `.flf` adapter: `flf_load_file` = `_slurp` (1 MB
   cap) + `_flf_parse`. Validates the `flf2a` magic, the FIGfont v2
-  hardblank rule, height 1–32, up to 1024 comment lines, glyph rows up to
-  64 columns after endmarks (`FlfLimits`, deliberately separate from
-  schema 1's). Trims trailing whitespace before endmark detection
+  hardblank rule, height 1–64, up to 1024 comment lines, glyph rows up to
+  128 columns after endmarks (`FlfLimits`, deliberately separate from
+  schema 1's; 64×32 through 1.4.2). Trims trailing whitespace before endmark detection
   (figlet's rule; covers CRLF, issue 0003). Hardblank → space, then
   C0 / DEL / C1 → space (F-001). Uniform-width `Font*`, `gap = 0`,
   ASCII 32–126.
@@ -233,7 +242,7 @@ with lowercase, is on the roadmap.
 
 ## Tests
 
-- `tests/bannermanor.tcyr` — **3061 assertions**, run on x86_64 and on
+- `tests/bannermanor.tcyr` — **3082 assertions**, run on x86_64 and on
   aarch64 under qemu. In outline:
   - **Fonts**: embedded-font geometry, glyph lookup and the lowercase
     fold, and row shape. The three CYML fonts load, and `block.cyml`
@@ -250,14 +259,18 @@ with lowercase, is on the roadmap.
   - **Layout math and color parsing.**
   - **The CLI** (`src/cli.cyr`): the cmdit flag table on synthetic argv
     (values, repeats, `--`, help over version, no `-V`, no prefix
-    matching, bundling, the error codes), the parse-error wording, font
+    matching, bundling, the error codes), the parse-error lines on
+    stderr (token named, control bytes as `?`, long tokens cut), font
     paths, the count parser's sentinels, the 1 KB join, the F-012 scrub,
     `--help` naming every flag, `--list-fonts`.
   - **The probes and the TTY path**: fd 1 pointed at `/dev/null`, a pipe
     and a pty at seven window sizes, and a byte-exact render on a pty
     against a pipe, for color, rainbow, 0 columns and narrow-terminal
     truncation.
-  - **Reference coverage**: 37/37 public functions
+  - **Checked writes**: fd 1 on `/dev/full` (the failure is recorded,
+    later writes are skipped, `render_layout` returns -4), the
+    write-error reasons, and the stdout / stderr line writers.
+  - **Reference coverage**: 40/40 public functions
     (`cyrius coverage --min 100` in CI).
 - `tests/golden/` + `scripts/golden.sh` — the frozen-output contract,
   byte for byte: 318 invocations (217 frozen renders, 76 error paths, 25
@@ -287,9 +300,14 @@ Direct (declared in `cyrius.cyml`):
   arrived at 1.4.1 (`fl_alloc` / `fl_free` for the read buffers).
   `bayan` left the list at 1.4.1 and `flags` at 1.4.2, each replaced by a
   git dependency below.
-- `darshana = 1.3.0` (pinned at 1.2.0) — SGR primitives (`tty_sgr`,
-  `tty_sgr_reset`, `TTY_FG_*`) and `tty_winsize`, all inside darshana's
-  frozen v1.0 surface. Requires cyrius ≥ 6.7.2.
+- `darshana = 1.3.0` (pinned at 1.2.0) — the SGR composers
+  (`tty_sgr_buf`, `tty_sgr_reset_buf`, `TTY_FG_*`; since 1.5.0, before
+  that the writing forms `tty_sgr` / `tty_sgr_reset`) for `--color`,
+  `tty_dec_buf` for the `--list-fonts` digits, and `tty_winsize` for the
+  stdout width / TTY probes. Resolved via `git` + `tag` against
+  https://github.com/MacCracken/darshana.git. Every symbol bnrmr
+  consumes is in darshana's frozen v1.0 surface and cannot move without
+  a major bump. 1.3.0 needs cyrius ≥ 6.7.2.
 - `[deps.bayan]`, tag 1.5.13, module `dist/bayan-cyml.cyr` — the
   CYML-only sublib: nine `bayan_cyml_*` functions. 1.5.13 is the bayan
   the cyrius 6.7.9 stdlib bundles, so the parser is byte-identical to
@@ -325,9 +343,6 @@ bnrmr is end-user-facing; nothing links it. Known uses of its output:
 ## Next
 
 [`roadmap.md`](roadmap.md) is the forward plan, and its issue register is
-current. The next release, 1.5.0, is unblocked:
-[ADR 0002](../adr/0002-freeze-scope-error-paths-and-malformed-input.md)
-was accepted on 2026-10-15. It covers diagnostics on stderr (issue 0016),
-checked writes (0009), surplus-row rejection (0008) and the `.flf`
-ceilings. Shipped milestones are in the roadmap's closed-record table and
+current. Next is 1.6.0, *fonts findable, listing honest* (issue 0015):
+an installed `bnrmr` still finds no fonts outside a checkout. Shipped milestones are in the roadmap's closed-record table and
 in [`CHANGELOG.md`](../../CHANGELOG.md).

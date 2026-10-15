@@ -12,10 +12,9 @@ CLI flag surface, the CYML font format (schema 1), the default font set
 (block / slim / big), and the `.flf` adapter contract. Everything below
 is post-freeze work, and the freeze is what shapes it.
 
-**Next**: 1.5.0 — *Diagnostics, failure honesty, and the malformed-input
-rulings*. **Unblocked**: its gate was
-[ADR 0002](../adr/0002-freeze-scope-error-paths-and-malformed-input.md),
-accepted as written on 2026-10-15.
+**Next**: 1.6.0 — *Fonts findable, listing honest*. An installed `bnrmr`
+finds no fonts outside a checkout (issue 0015), and agnos already stages
+one into its rootfs.
 
 ## What the freeze permits
 
@@ -35,8 +34,9 @@ readings that were never written down:
    (`name` against the stem) are 2.0. bnrmr's own limits (the `.flf`
    envelope) may widen.
 
-Those rulings are what make all of 1.5.0 below 1.x work. The golden
-suite (`scripts/golden.sh`) is the mechanical side of every ruling. Its `frozen` tier must never move in 1.x; its
+1.5.0 shipped everything those rulings unblocked (closed record below).
+The golden suite (`scripts/golden.sh`) is the mechanical side of every
+ruling. Its `frozen` tier must never move in 1.x; its
 `error` tier moves only under ruling 1, re-baselined deliberately, record
 by record.
 
@@ -54,52 +54,6 @@ subtractive)."*
 
 Versions are targets, not commitments — ship-when-ready. Sequencing is
 by dependency, then by value.
-
-### 1.5.0 — Diagnostics, failure honesty, and the malformed-input rulings
-
-**Unblocked** by ADR 0002 (Accepted 2026-10-15). Each item below cites
-the ruling that permits it; quote that ruling in its CHANGELOG entry.
-
-- **Diagnostics to fd 2** ([issue 0016](issues/0016-diagnostics-go-to-stdout.md),
-  ruling 1). `bnrmr --font typo "$HOSTNAME" > /etc/motd` currently writes
-  the error into the MOTD, and `banner=$(bnrmr ...)` captures it as the
-  banner. Every named consumer is exactly this shape. It is not a simple
-  swap: `print_usage()` is called from five sites on both sides of the
-  divide. A requested `--help` stays on stdout; the usage block printed
-  after an error follows the error to stderr. `cmd_list_fonts`'
-  informational lines are exit-0 and stay on stdout. In the same change,
-  add the `bright-<name>` alias to the `--color` error text so it agrees
-  with `--help`. Then the `error` tier moves once. Since 1.4.2 the parser
-  is cmdit, whose `cmdit_print_error` already writes stderr and names the
-  offending token (`unknown flag: --bogus`). Adopting it changes the
-  wording as well as the stream, which ruling 1 permits; decide it here,
-  in the same re-baseline, rather than in a later one.
-- **Check write returns** ([issue 0009](issues/0009-write-return-never-checked.md),
-  ruling 2). A retry-on-partial loop and errno classification, not a bare
-  nonzero check. Exit nonzero when the banner did not reach fd 1:
-  `bnrmr hi > /dev/full` exits 0 today.
-- **One write per row** — issue 0005's Option 2 (Option 1 shipped in
-  1.4.1). Adopt darshana's `_buf` SGR composers and assemble each row,
-  color included, in one buffer. That collapses the emit sites in
-  `render_layout` to one, so the checked write above is a single site.
-  Size the buffer from the 1 KB input cap, not `WIDTH_CAP`: the worst case
-  is 8,191 bytes, which exceeds `PIPE_BUF`.
-- **Reject surplus CYML body rows** ([issue 0008](issues/0008-cyml-body-not-fully-consumed.md),
-  ruling 3). One line in `_font_decode_body`. `t_cyml_entry_rules` pins
-  today's behavior and flips with the fix.
-- **Raise the `.flf` geometry ceilings** (ruling 3, additive). Measured
-  over the 1052-font reference corpus: 973 load, and all 79 rejections are
-  geometry or size. A scratch build with the ceilings widened rendered
-  all 973 loading fonts byte-identically. Raise only `src/flf.cyr`'s
-  `FLF_MAX_WIDTH` / `FLF_MAX_HEIGHT`. **Never** `src/font.cyr`'s
-  `MAX_WIDTH` / `MAX_HEIGHT`: those are schema 1. Since 1.4.1 the two
-  sets are separate constants, with a comment saying so. Mind that
-  `FLF_MAX_WIDTH` is also the scratch stride per glyph row
-  (`95 × height × FLF_MAX_WIDTH`), so a much larger envelope wants the
-  scratch sized from the observed width, not the cap. Update `t_flf_header_gates`.
-
-**Gate (mechanical)**: the frozen tier is byte-identical. The error tier
-is re-baselined deliberately, and its diff reviewed line by line.
 
 ### 1.6.0 — Fonts findable, listing honest
 
@@ -157,9 +111,10 @@ CLAUDE.md's Goal is *"Own ASCII-banner rendering for AGNOS userland."*
   locally (`cyrius test --aarch64`, and `BNRMR_RUNNER=qemu-aarch64
   sh scripts/golden.sh`), but nothing gates them. Two steps once a runner
   has qemu-user.
-- **AGNOS runtime verification** of what 1.4.1 compiled but could not
-  run: the `file_write` route, freelist's 2 MB-granular `mmap`, and the
-  bayan sublib.
+- **AGNOS runtime verification** of what 1.4.1 and 1.5.0 compiled but
+  could not run: the `file_write` route and its error handling (a failed
+  AGNOS write returns -1, not an errno), freelist's 2 MB-granular
+  `mmap`, the bayan sublib, and cmdit's AGNOS argv path.
 
 **Gate**: the color probe must return 0 when stdout is not the console,
 or `bnrmr --color red X > file` writes escape bytes into the file. Ruled
@@ -245,10 +200,7 @@ Open, with a written-up reproducer and acceptance criteria:
 | # | Title | Scheduled |
 |---|---|---|
 | [0006](issues/0006-bayan-cyml-parse-regression.md) | bayan 1.5.2 made `font_load_file` ~45% slower | unscheduled; upstream (bayan). The 1.4.1 sublib did not recover it |
-| [0008](issues/0008-cyml-body-not-fully-consumed.md) | A CYML glyph body is never required to be fully consumed | 1.5.0, unblocked (ADR 0002 ruling 3) |
-| [0009](issues/0009-write-return-never-checked.md) | No `write(2)` return value is checked anywhere | 1.5.0, unblocked (ADR 0002 ruling 2) |
 | [0015](issues/0015-fonts-not-findable-when-installed.md) | An installed `bnrmr` cannot find any font | 1.6.0 |
-| [0016](issues/0016-diagnostics-go-to-stdout.md) | Every diagnostic goes to stdout, corrupting redirected output | 1.5.0, unblocked (ADR 0002 ruling 1) |
 
 Archived — all closed: [0001](issues/archive/0001-keystroke-interleave-during-render.md)
 (deferred past v1.0, still open in principle),
@@ -257,11 +209,14 @@ Archived — all closed: [0001](issues/archive/0001-keystroke-interleave-during-
 [0004](issues/archive/0004-tty-wrap-on-narrow-terminal.md),
 [0005](issues/archive/0005-write-per-cell-syscall-cost.md),
 [0007](issues/archive/0007-positionals-past-128-dropped.md),
+[0008](issues/archive/0008-cyml-body-not-fully-consumed.md),
+[0009](issues/archive/0009-write-return-never-checked.md),
 [0010](issues/archive/0010-fuzz-harness-is-a-no-op.md),
 [0011](issues/archive/0011-list-fonts-hangs-on-fifo.md),
 [0012](issues/archive/0012-dead-geometry-constants.md),
 [0013](issues/archive/0013-full-bayan-bundle-linked.md),
 [0014](issues/archive/0014-transient-read-buffers-never-freed.md),
+[0016](issues/archive/0016-diagnostics-go-to-stdout.md),
 [0017](issues/archive/0017-docs-precision-pass.md),
 [0018](issues/archive/0018-agnos-console-width-never-queried.md),
 [0019](issues/archive/0019-darshana-probes-hand-rolled.md).
@@ -320,6 +275,13 @@ Post-freeze releases carry no milestone:
   1.3.1 (positionals past 128, `--bool=value`) and on a golden suite to
   prove it. The suite gained 33 grammar cases first, and all 318 records
   are byte-identical across the swap.
+- **1.5.0**: everything ADR 0002 unblocked. Diagnostics on stderr with
+  the offending token named (issue 0016), checked writes with exit 1 on
+  failure (0009), one write per banner row with color composed through
+  darshana's `_buf` forms (0005 Option 2), surplus CYML rows rejected
+  (0008), and the `.flf` envelope raised to 128×64 (73 more corpus
+  fonts load, 973 unchanged byte for byte). The golden frozen and
+  snapshot tiers did not move; the error tier was re-baselined once.
 
 Two entries in the pre-1.0 criteria list have since moved. They are
 corrected here rather than left to imply otherwise:

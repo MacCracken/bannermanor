@@ -3,9 +3,8 @@
 **Reported**: 2026-08-25 (1.1.4 audit, finding C-003); filed 2026-10-15
 **Version**: 0.2.0 onward
 **Reporter**: maintainer (P(-1) hardening pass)
-**Status**: **open**, unblocked. [ADR 0002](../../adr/0002-freeze-scope-error-paths-and-malformed-input.md)
-ruling (3), accepted 2026-10-15, permits the fix. Scheduled for roadmap
-1.5.0.
+**Status**: **fixed in 1.5.0** (2026-10-15), under [ADR 0002](../../../adr/0002-freeze-scope-error-paths-and-malformed-input.md)
+ruling (3).
 **Severity**: low. Correctness of the format contract, with no security
 consequence: the extra bytes are never rendered.
 
@@ -57,3 +56,20 @@ byte-identical and every in-tree font still loading.
   unchanged: no shipped font has a surplus row (checked by the golden
   suite, which loads all three).
 - A fixture with one surplus row, plus a test asserting it is rejected.
+
+## Fix (shipped 1.5.0)
+
+`_font_decode_body` now reads every byte after the last row, and anything
+but a newline is a load failure. Trailing blank lines are still accepted:
+they are not rows.
+
+- `tests/fixtures/extra_rows.cyml` (two surplus rows) is rejected by
+  `font_load_file` and still listed by `font_header_load`, which never
+  reads bodies. `t_cyml_entry_rules` flipped from pinning the old
+  behavior to pinning the new one, and adds an in-memory surplus row and
+  an in-memory trailing-newline body.
+- The three in-tree fonts still load. The golden frozen tier, which
+  renders all of them, is byte-identical.
+- An exit code moves for fonts that relied on this: `--font NAME` with a
+  surplus-row body exits 1 where it exited 0. ADR 0002 ruling (3) is
+  what permits that in a minor.

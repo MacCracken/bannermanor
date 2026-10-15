@@ -4,6 +4,74 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.5.0] — 2026-10-15 (diagnostics on stderr, honest exit codes, one write per row, the malformed-input rulings)
+
+Everything [ADR 0002](docs/adr/0002-freeze-scope-error-paths-and-malformed-input.md)
+unblocked. **Rendered banners are unchanged**: the golden suite's frozen
+tier (217 renders, 112 on a pty) and its snapshot tier (`--help`,
+`--version`, `--list-fonts`) are byte-identical to 1.4.2, on x86_64 and on
+aarch64 under qemu. The error tier was re-baselined once, deliberately,
+and checked record by record (below).
+
+### Changed — behavior, each permitted by ADR 0002
+
+CLAUDE.md classes any change to exit codes or output bytes as `Breaking`.
+ADR 0002 (Accepted) defines what the v1.0 freeze covers, and rules that
+none of these four break it. They are listed together, under the ruling
+that permits each one, so nobody has to find them.
+
+- **Diagnostics go to stderr** ([issue 0016](docs/development/issues/archive/0016-diagnostics-go-to-stdout.md), ruling 1). Every error message moves from fd 1 to fd 2, and every exit code is unchanged. `bnrmr --font typo "$HOST" > /etc/motd` leaves the file empty, and `banner=$(bnrmr …)` no longer captures an error as the banner.
+  - The usage block that follows a parse error goes to stderr too.
+  - `--help`, a bare `bnrmr` and an empty text, all exit 0, still print usage on stdout.
+  - `--list-fonts` stays on stdout, including its `(none found …)` and `(malformed — skipped)` lines.
+- **Parse errors name what was typed.** `bnrmr: unknown flag: --bogus`, `bnrmr: --font: missing value`, `bnrmr: --list-fonts=0: this flag takes no value`, and `bnrmr: -HI: bundled short flags are not supported (write -x -y; put -- before text that starts with -)`. That last one is the error someone hits for `bnrmr -HI`, which used to name a cause unrelated to what they meant. The token is echoed with control bytes (C0, DEL and C1) shown as `?`, and cut at 64 bytes.
+  - This settles the question the roadmap left for this change. cmdit's own `cmdit_print_error` was **not** adopted: its echo escapes C0 and DEL but not C1, which bnrmr's control-byte rule covers (F-001), and its bundled-flag text does not mention `--`.
+  - Through 1.4.2 these said only `bnrmr: unknown flag` and similar, with no token. bnrmr's own value diagnostics (`--align`, `--width`, `--pad`, `--color`, the font loaders, `input too long`) keep their wording.
+- **`--color`'s error lists `bright-<name>`**, so it agrees with `--help` (from issue 0017).
+- **A failed write exits 1** ([issue 0009](docs/development/issues/archive/0009-write-return-never-checked.md), ruling 2). Every stdout byte goes through one checked writer, `_emit`: banner rows, `--help`, `--version`, and `--list-fonts`, whose numbers no longer go through the stdlib's unchecked `fmt_int`.
+  - Short writes are continued. `EINTR` is retried at once; `EAGAIN`, from a non-blocking stdout, is retried after a 1 ms pause; both are bounded.
+  - Anything else stops output, and bnrmr exits 1 with `bnrmr: write error: <reason>` on stderr. ENOSPC, EBADF, EIO, EFBIG and EDQUOT are named.
+  - Through 1.4.2, `bnrmr hi > /dev/full` exited 0 having written nothing, and so did a closed stdout. Both now exit 1.
+- **A CYML glyph body with surplus rows is rejected** ([issue 0008](docs/development/issues/archive/0008-cyml-body-not-fully-consumed.md), ruling 3). Only newlines may follow the last of the `height` rows. Through 1.4.2 the surplus was read past and ignored. A font that relied on that now fails `--font` (exit 1), and still lists under `--list-fonts`, which reads no bodies. No in-tree font is affected.
+- **The `.flf` envelope is 128 columns × 64 rows**, up from 64 × 32 (ruling 3: admitting input rejected only by bnrmr's own limit is additive). Measured over the 1,052-font reference corpus (cmatsuoka/figlet-fonts + xero/figlet-fonts), rendering all of printable ASCII with each font against 1.4.2:
+  - all 973 fonts that loaded before are **byte-identical**;
+  - **73 more load**: the Obanner family, up to 125 × 63, and five fonts 70–77 columns wide;
+  - 6 stay rejected: five CJK fonts over the 1 MB cap, which the 1.0.0 adapter contract names and which stays, and one malformed 23 MB file.
+
+  Only `FlfLimits` moved; CYML schema 1 stays 64 × 32 × 16.
+
+### Changed
+
+- **One write per banner row** ([issue 0005](docs/development/issues/archive/0005-write-per-cell-syscall-cost.md), Option 2). Each row is composed in one buffer and written once: the left pad, the color through darshana's `tty_sgr_buf`, the glyph rows and gaps, `tty_sgr_reset_buf`, the newline. `tty_sgr` was always `tty_sgr_buf` plus a write, so the colored bytes are the same, and the golden pty leg confirms it. `bnrmr AGNOS` makes 5 `write(2)` calls, down from 50.
+  - In process (B4), interleaved against 1.4.2 over three rounds: natural width 21–22 → 3.4–4.3 µs; `--width 4096 --align center` 22–23.5 → 5.6–7.2 µs. `--width 4096 --align right A` is about 1 µs slower, 6.1–6.6 → 7.3–9.2 µs, because its 4 KB pad is now copied into the row. That row was already the cheapest of the three, and all three remain within a small factor of each other. The host was loaded (load average 14–22), so only these ratios are claimed, not a benchmark point.
+  - Rows are copied eight bytes at a time (`_bulk_copy`): the stdlib's `memcpy` / `memset` move one byte per iteration, and a first cut using them made the wide rows slower than 1.4.2.
+- **`cyrius.cyml [deps.darshana]`**: bnrmr now consumes `tty_sgr_buf`, `tty_sgr_reset_buf` and `tty_dec_buf`, all in darshana's frozen v1.0 surface.
+- **`src/main.cyr`**: `main()` is a wrapper that turns any failed stdout write into exit 1; the body moved to `_run()`. The `--version` literal is now `bnrmr 1.5.0`.
+
+### Added
+
+- Tests (suite 3061 → 3082):
+  - `t_emit_checked`: fd 1 on `/dev/full`; the failure is recorded, later writes are skipped, and `render_layout` returns -4. Also a 200 KB write to `/dev/null`.
+  - `t_write_error_text`, and `t_line_writers` (the stdout / stderr line writers, and `print_usage_err`).
+  - `t_cli_report_parse_error`, rewritten for stderr: the token named, ESC and C1 shown as `?`, an 80-byte token cut at 64.
+  - Surplus and trailing-newline bodies, in memory.
+  - The 128 / 129 and 64 / 65 `.flf` boundaries. The over-wide fixture became `tests/fixtures/flf_wide_129.flf`, because 65 columns now loads.
+- Reference coverage stays 100% (40/40).
+
+### Notes
+
+- **The error-tier re-baseline, checked by script, not by eye.** All 76 error records keep their exit code and now have empty stdout. 46 moved their text to stderr verbatim; 26 parse errors changed only their first line (the token, listed in the review); 4 `--color` errors gained `bright-<name>`. Nothing else moved.
+- **Fuzz**: the oracle bounds `.flf` geometry by the adapter's envelope, not schema 1's; its self-test now includes a 129-column `.flf`. 0 violations in 78,003 parses. Fewer mutants load than before (3,461 against 4,630), because surplus-row bodies are rejected; the 5% floor still holds.
+- **Verification**:
+  - `cyrius build` clean for x86_64, `--agnos` and `--aarch64`;
+  - `cyrius lint --strict --strict-deferrals` clean;
+  - `cyrius test` 3082 passed on x86_64 and on aarch64 under qemu;
+  - golden 318/318 on both;
+  - `cyrius fuzz` clean, `cyrius coverage --min 100`, `cyrius deps --locked`, `scripts/doc-pin-check.sh`;
+  - the corpus comparison above.
+- **Not runtime-verified on AGNOS**: the checked-write path there. A failed AGNOS write returns -1, which `_emit` treats as a failure (AGNOS defines no `EINTR` / `EAGAIN`, so bnrmr names the Linux values itself).
+- **Binary** 292,008 → 296,552 bytes (x86_64), 304,088 → 308,624 (AGNOS), 341,064 → 407,048 (aarch64). The aarch64 jump is out of line with the other two and not yet investigated; the build is clean, and the suite and golden pass on it under qemu.
+
 ## [1.4.2] — 2026-10-15 (CLI parsing on cmdit)
 
 The command-line parser moves from the stdlib's table parser

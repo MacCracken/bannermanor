@@ -417,12 +417,17 @@ fn _font_decode_body(body, blen, width, height, dst): i64 {
             if (load8(body + pos) != 10) { return 0 - 1; }
             pos = pos + 1;
         } else {
-            # Last row — body may end here, or have trailing \n (cyml_trim
-            # actually strips that, so EOF is expected). Nothing after
-            # that \n is read, so surplus rows load and are ignored:
-            # issue 0008, scheduled for 1.5.0 (ADR 0002 ruling 3).
-            if (pos < blen) {
+            # Last row. The body must end here: only newlines may follow
+            # (bayan's trim normally leaves none). Through 1.4.2 the
+            # decoder checked one byte and ignored the rest, so a glyph
+            # with more rows than `height` loaded with its surplus rows
+            # silently dropped (issue 0008). Since 1.5.0 that is a load
+            # failure: the format says "exactly height rows", and ADR 0002
+            # ruling 3 does not protect a font that breaks a structural
+            # rule.
+            while (pos < blen) {
                 if (load8(body + pos) != 10) { return 0 - 1; }
+                pos = pos + 1;
             }
         }
         row = row + 1;

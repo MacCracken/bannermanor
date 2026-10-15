@@ -3,8 +3,8 @@
 **Reported**: 2026-08-25
 **Version**: 1.1.4 (deferred-work sweep)
 **Reporter**: maintainer
-**Status**: **open**, unblocked. [ADR 0002](../../adr/0002-freeze-scope-error-paths-and-malformed-input.md) ruling (1), accepted
-2026-10-15, permits the move. Scheduled for roadmap 1.5.0.
+**Status**: **fixed in 1.5.0** (2026-10-15), under [ADR 0002](../../../adr/0002-freeze-scope-error-paths-and-malformed-input.md)
+ruling (1).
 **Severity**: correctness — corrupts the project's primary use case
 
 ## Observation
@@ -43,7 +43,7 @@ caller in the documented use case — is not.
 Moving ~20 messages from fd 1 to fd 2 changes the stdout bytes of an
 invalid invocation. Whether the v1.0 freeze covers *invalid* invocations
 was one of three unsettled readings of the freeze sentence.
-[ADR 0002](../../adr/0002-freeze-scope-error-paths-and-malformed-input.md)
+[ADR 0002](../../../adr/0002-freeze-scope-error-paths-and-malformed-input.md)
 ruling (1), accepted 2026-10-15, settles it: diagnostic output is not
 frozen, exit codes are. The move is a `Changed` entry in a 1.x minor,
 with the golden `error` tier re-baselined in the same commit and its diff
@@ -68,3 +68,47 @@ changed `--help` stdout bytes inside a patch release.
 - `bnrmr --font typo "X" > out` leaves `out` empty; the message is on fd 2.
 - Every exit code unchanged, verified against the golden suite.
 - Rendered banner bytes on valid invocations unchanged.
+
+## Fix (shipped 1.5.0)
+
+Every diagnostic goes to fd 2, through `_err_line` (`src/layout.cyr`).
+Exit codes did not change. That covers the parse errors, `too many
+arguments`, every flag-value error, every font-load error, `input too
+long`, and the new `write error` / `out of memory`.
+
+- **The usage block follows the error.** After a parse error it goes to
+  stderr (`print_usage_err`). On request (`--help`), and for a bare
+  `bnrmr` or an empty text (both exit 0), it stays on stdout. A help that
+  was asked for is output, not a diagnostic.
+- **`--list-fonts` stays on stdout**, including `(none found …)` and
+  `(malformed — skipped)`: it exits 0, and the listing is its output.
+- **Parse errors name what was typed.** This was the open question the
+  roadmap left for this change. cmdit's `cmdit_print_error` already did
+  it, but bnrmr composes its own line (`report_parse_error`) for two
+  reasons. cmdit's echo escapes C0 and DEL but not C1 (0x80–0x9F), which
+  bnrmr's control-byte rule covers, and its bundled-flag message says
+  nothing about `--`, which is exactly what someone who typed `bnrmr -HI`
+  needs. The echo shows control bytes as `?` and is cut at 64 bytes.
+  ```
+  bnrmr: unknown flag: --bogus
+  bnrmr: --font: missing value
+  bnrmr: -HI: bundled short flags are not supported (write -x -y; put -- before text that starts with -)
+  bnrmr: --list-fonts=0: this flag takes no value
+  ```
+- **The `--color` error lists `bright-<name>`** (moved here from issue
+  0017), so it agrees with `--help`.
+
+The golden `error` tier was re-baselined once, in the same change, and
+checked record by record by a script rather than by eye. All 76 records
+keep their exit code and have empty stdout. 46 moved their text to
+stderr verbatim, 26 parse errors reworded only their first line, and 4
+`--color` errors gained `bright-<name>`. The frozen and snapshot tiers
+did not move.
+
+```
+$ bnrmr --font typo "$HOSTNAME" > /etc/motd; echo $?
+bnrmr: failed to load font (missing or malformed)
+1
+$ wc -c < /etc/motd
+0
+```
