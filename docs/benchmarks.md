@@ -208,11 +208,15 @@ which retires the other half of the original story: there was no
 gradual drift across 6.0.1 → 6.2.24. B2 was flat for three toolchain
 generations and then stepped once, here.
 
-Root cause is not diagnosed. bayan 1.5.2 folded in PDF, YAML and
-Grisu2 `dtoa`; whether the cost is a changed CYML scan, worse locality
-in a much larger module, or the two-pass entry count that replaced the
-fixed 256-slot scan is open. Filed as follow-up — the parse is 62–65%
-of B2, so it is the only thing worth profiling.
+Root cause (diagnosed at 1.8.1, [issue 0006](development/issues/0006-bayan-cyml-parse-regression.md)):
+the two-pass entry count that replaced the fixed 256-slot scan, in bayan
+1.5.1. It calls `_cyml_is_entries` once per byte in each pass, so the
+parse makes twice the calls 1.4.0 did. A parser-only A/B shows that
+restoring one pass gives back 1.0.1's time, and that looking for markers
+only at line starts takes the parse to 0.33–0.43× of today's. Neither PDF,
+YAML nor `dtoa` is involved, and module size is not the cause. Filed with
+bayan (`docs/development/issues/2026-10-15-cyml-parse-scans-every-byte-twice.md`
+there), with a repro and the proposed fix.
 
 #### Reading the deltas
 

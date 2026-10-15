@@ -5,6 +5,8 @@
 
 ## Version
 
+**1.8.1** — 2026-10-15. **Measurement debts.** No code change. Issue 0006 is diagnosed: bayan 1.5.1's two-pass `[[entries]]` scan calls `_cyml_is_entries` once per byte in each pass, which is the whole ~45% B2 regression. A parser-only A/B shows a newline-driven scan, with the two-pass design kept, at 0.33–0.43× of today's parse with identical results. It is filed with bayan with a repro and the fix; 0006 closes when `[deps.bayan]` moves to that release (roadmap 1.8.2). Architecture note 003 explains the aarch64 binary's 1.5.0 jump: 64 KiB alignment padding, not code. See `CHANGELOG.md` [1.8.1].
+
 **1.8.0** — 2026-10-15. **The fourth font.** `fonts/clean.cyml`, 7×8, the first in-tree font with lowercase: Dale Schumacher's X11 bitmap font Clean (`clR7x8`), transcribed cell for cell from the figlet collection's `clr7x8.flf`, license HPND with its notice in the file. All 95 printable ASCII characters render exactly as the source does through the `.flf` adapter. `--font clean "Welcome home"` no longer shouts. The golden frozen and error tiers did not move; frozen gained 7 `clean` cases (346 in all), and the 7 listing snapshots gained one row each. The roadmap was rewritten to look forward only, pinned 1.8.0 through 1.11.0 with a Deferred to 2.0 section. Suite 3150 → 3268. See `CHANGELOG.md` [1.8.0].
 
 **1.7.0** — 2026-10-15. **AGNOS parity.** `--color` works on the AGNOS console, and a redirected or piped banner on AGNOS has the bytes it has on Linux: plain and uncut. bnrmr asks the kernel what fd 1 is (`sys_fd_kind(1) == FDK_CONSOLE`, agnos 1.57.13's `fd_kind#111`) before trusting darshana's console-wide `tty_winsize`, and derives color from that probe on both targets ([ADR 0004](../adr/0004-terminal-probes-ask-about-fd-1.md)). That needed cyrius 6.7.9 → 6.7.11 (bayan sublib 1.5.13 → 1.5.14, byte-identical), which also fixed `--list-fonts` hanging on a FIFO named like a font directory. Linux bytes did not move: golden 339/339 on x86_64 and aarch64. Checked on AGNOS before release: `scripts/agnos-smoke.py` boots agnos 1.57.14 in QEMU, 9/9; the 1.6.0 binary and a forced-open mutant fail the checks they should. CI now runs the suite and the golden matrix on aarch64 under qemu-user. Suite 3146 → 3150. See `CHANGELOG.md` [1.7.0].
@@ -332,7 +334,7 @@ font is imported. A fifth font is not planned.
   `render_layout` rows, fd 1 on `/dev/null`). The trend is in
   [`docs/benchmarks.md`](../benchmarks.md), seven points from 0.7.0 to
   1.4.1. Point 4 records bayan 1.5.2's ~45% B2 regression (issue 0006,
-  still open). Runs are recorded with `scripts/bench-history.sh` into
+  diagnosed at 1.8.1 and filed with bayan; open until the fix is adopted). Runs are recorded with `scripts/bench-history.sh` into
   `docs/benchmarks/history.csv`.
 - `tests/fixtures/` — 24 fixtures, the malformed and boundary fonts the
   tests and the fuzz seeds share.
@@ -394,8 +396,8 @@ bnrmr is end-user-facing; nothing links it. Known uses of its output:
 
 ## Next
 
-[`roadmap.md`](roadmap.md) is the forward plan, pinned 1.8.0 through
-1.11.0, with what cannot be 1.x deferred to 2.0, and its issue register is
-current. Next is 1.8.0, *the fourth font*, the first with lowercase,
-chosen from an existing catalog and transliterated to CYML. Shipped
-milestones are in [`CHANGELOG.md`](../../CHANGELOG.md).
+[`roadmap.md`](roadmap.md) is the forward plan, pinned through 1.11.0,
+with what cannot be 1.x deferred to 2.0, and its issue register is
+current. Next is 1.8.2, adopting bayan's CYML scan fix once bayan
+releases it (gated), else 1.9.0, AGNOS follow-through. Shipped milestones
+are in [`CHANGELOG.md`](../../CHANGELOG.md).

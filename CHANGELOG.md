@@ -4,6 +4,65 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.8.1] — 2026-10-15 (measurement debts)
+
+No code change: every target builds to the bytes 1.8.0 did, apart from the
+version string. This release settles numbers the project quoted but had
+not measured.
+
+### Changed
+
+- **Issue 0006 is diagnosed and filed with bayan.** bayan 1.5.1 made the
+  `[[entries]]` scan two-pass, to drop a 256-entry cap that truncated
+  silently. Each pass calls `_cyml_is_entries` once per input byte, so
+  `bayan_cyml_parse` makes twice the calls it made before. That is the
+  whole ~45% B2 regression.
+  - **The evidence.** A parser-only A/B: five scratch builds, same
+    compiler, stdlib and input, only the parser varied.
+  - **The result.** One pass gives back bayan 1.0.1's time. Looking for
+    markers only at line starts, with 1.5.1's two-pass design kept, takes
+    the parse to 0.33–0.43× of today's.
+  - **The filing.** It is with bayan as
+    `docs/development/issues/2026-10-15-cyml-parse-scans-every-byte-twice.md`,
+    with a repro that proves the proposed fix parses exactly as 1.5.14
+    does on 12 documents (exit 0) and prints the timings.
+  - **What is left.** 0006 stays open until bnrmr moves `[deps.bayan]` to
+    a release that carries the fix (roadmap 1.8.2).
+- **`docs/benchmarks.md`** now gives that root cause where it said "not
+  diagnosed".
+- **The roadmap.** 1.8.1 is done. 1.8.2, adopting the bayan fix, is added
+  and gated on that bayan release.
+
+### Added
+
+- **Architecture note 003: the aarch64 binary's size moves in 64 KiB
+  steps.** It explains 1.5.0's "out of line, not investigated" jump
+  (341,064 → 407,048 bytes). The code segment grew 6,440 bytes, as on the
+  other targets. That carried it past a 64 KiB boundary, and cyrius's
+  aarch64 ELF writer starts the data segment at a 64 KiB-aligned file
+  offset, so 64,472 bytes of padding appeared. At 1.8.0 the padding is
+  47,752 bytes, 12% of the file. It is never mapped, and the cause is in
+  cyrius's layout (`src/backend/aarch64/fixup.cyr`), not in bnrmr.
+
+### Notes
+
+- **Method.** The A/B parsers were bayan 1.0.1's and 1.5.14's, plus three
+  1.5.14 variants: one pass with a growing array; two passes driven by
+  newlines; one pass driven by newlines. Each was built with cyrius 6.7.11
+  against bnrmr's vendored stdlib, and timed on `block`, `slim`, `big` and
+  `clean` (2,000 parses, 9 interleaved rounds).
+  - All five agree on every font. The four 1.5.14-based ones also agree on
+    1.5.1's leading-newline and 300-entry cases, which 1.0.1 gets wrong.
+  - The host load average was 7–11 throughout, so the issue quotes the
+    fastest round and ratios, not absolute times. The scan work is also
+    given as exact call counts from the input bytes, which load cannot
+    move.
+- **Verification**: build for x86_64, `--agnos` and `--aarch64` (sizes
+  unchanged: 309,488 / 325,768 / 407,696), lint clean, `cyrius test` 3268
+  on x86_64 and on aarch64 under qemu, golden 346/346 on both, `cyrius
+  fuzz` 81,003 parses with 0 violations, coverage 100%, `cyrius deps
+  --locked`, `scripts/doc-pin-check.sh`, `groff -ww`.
+
 ## [1.8.0] — 2026-10-15 (the fourth font)
 
 `bnrmr --font clean "Welcome home"` renders lowercase. **No byte of any

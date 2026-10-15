@@ -10,8 +10,8 @@ The v1.0.0 freeze locked the CLI flag surface, the CYML font format
 item below is placed by what the freeze allows: 1.x when it fits, 2.0
 when it cannot.
 
-**Next**: 1.8.1 — *measurement debts*: the benchmark baseline, issue
-0006, and the aarch64 binary size.
+**Next**: 1.8.2 — *adopt the bayan CYML fix*, once bayan releases it;
+1.9.0 if 1.8.2's gate is not met first.
 
 ## The rules every item is checked against
 
@@ -48,24 +48,24 @@ dependency, then by value. A gated release whose gate is not met does not
 hold up the next one; the two swap numbers, so versions stay in shipping
 order.
 
-### 1.8.1 — Measurement debts
+### 1.8.2 — Adopt the bayan CYML fix
 
-Byte-identical. Three numbers the project quotes but has never measured
-properly:
+Gated on bayan. 1.8.1 found that bayan 1.5.1's two-pass `[[entries]]`
+scan, at one function call per byte, is the whole of issue 0006's ~45%
+B2 regression. It filed the cause, a repro and a proposed fix with bayan
+(`docs/development/issues/2026-10-15-cyml-parse-scans-every-byte-twice.md`
+there). The proposed parser runs at 0.33–0.43× of today's time with
+identical results.
 
-- **The benchmark baseline.** `scripts/bench-history.sh` has existed
-  since 1.4.1, but `docs/benchmarks/history.csv` has never been recorded:
-  each attempt met a loaded host, and the numbers were discarded. Record it on a quiet machine
-  (`cyrius bench tests/bannermanor.bcyr | sh scripts/bench-history.sh`),
-  and add the 1.4.1 → 1.8.0 points to `docs/benchmarks.md`.
-- **Issue 0006, B2's ~45% regression.** Re-measure `font_load_file`
-  against that baseline on bayan 1.5.14, and profile the CYML scan, which
-  is 62–65% of B2 (`docs/benchmarks.md`). File the finding with bayan.
-  The fix is upstream; bnrmr adopts it with a tag move.
-- **The aarch64 binary.** It grew 341,064 → 407,048 bytes at 1.5.0 while
-  x86_64 and AGNOS grew about 4.5 KB each. Not investigated (CHANGELOG
-  1.5.0). Find out what the aarch64 backend emits for the 1.5.0 changes;
-  fix it here if the cause is in bnrmr, file it with cyrius if it is not.
+- Move `[deps.bayan]` to the bayan release that carries the fix, through
+  the same checks as any dependency move: `rm -rf lib/ && cyrius deps`,
+  the lock, and golden on both architectures. Confirm the sublib's diff
+  is the parser change and nothing else.
+- Record B2 before and after with `scripts/bench-history.sh`, and add the
+  point to `docs/benchmarks.md`.
+- Close issue 0006.
+
+*Gate*: that bayan release.
 
 ### 1.9.0 — AGNOS follow-through
 
@@ -188,7 +188,7 @@ Open, with a written-up reproducer and acceptance criteria:
 
 | # | Title | Target |
 |---|---|---|
-| [0006](issues/0006-bayan-cyml-parse-regression.md) | bayan 1.5.2 made `font_load_file` ~45% slower | 1.8.1: re-measure and profile, file with bayan; the fix is upstream |
+| [0006](issues/0006-bayan-cyml-parse-regression.md) | bayan 1.5.2 made `font_load_file` ~45% slower | 1.8.2: diagnosed and filed with bayan at 1.8.1; adopt the fixed release |
 
 Closed issues are in [`issues/archive/`](issues/archive/). The numbering
 rule is in [`issues/README.md`](issues/README.md); the next issue is 0021.
