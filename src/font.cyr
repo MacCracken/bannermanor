@@ -513,8 +513,9 @@ fn _font_parse(buf, total): i64 {
 }
 
 # Find `key = "value"` in a TOML-style header buffer and copy `value`
-# bytes into dst (NUL-terminated, capped at dst_cap-1). Returns the
-# value length on success, -1 if not found or value exceeds the cap.
+# bytes into dst (NUL-terminated). Returns the copied length, or -1 if
+# the key is not found. A value that does not fit dst_cap is shortened
+# to dst_cap - 4 bytes followed by "..." (1.6.0; it used to be -1).
 # Used by font_header_load for `name = "..."` and `description = "..."`.
 # Map a control byte to a space. Same predicate as the .flf glyph-row
 # scrub in src/flf.cyr (F-001): C0 (0x00-0x1F), DEL (0x7F) and C1
@@ -587,6 +588,15 @@ fn _font_get_str(hdr, hlen, key, key_len, dst, dst_cap): i64 {
                                     if (p < hlen) {
                                         if (load8(hdr + p) == 34) {
                                             var vlen = p - start;
+                                            # 1.6.0: a value too long for dst is
+                                            # shortened to dst_cap - 4 bytes and
+                                            # "..." (it used to be dropped:
+                                            # found_len stayed -1).
+                                            var cut = 0;
+                                            if (vlen >= dst_cap && dst_cap > 4) {
+                                                vlen = dst_cap - 4;
+                                                cut = 1;
+                                            }
                                             if (vlen < dst_cap) {
                                                 # Scrub control bytes on the way
                                                 # out (F-011). These strings are
@@ -604,6 +614,10 @@ fn _font_get_str(hdr, hlen, key, key_len, dst, dst_cap): i64 {
                                                     var vb = load8(hdr + start + ci);
                                                     store8(dst + ci, _scrub_ctl(vb));
                                                     ci = ci + 1;
+                                                }
+                                                if (cut == 1) {
+                                                    memcpy(dst + vlen, "...", 3);
+                                                    vlen = vlen + 3;
                                                 }
                                                 store8(dst + vlen, 0);
                                                 found_len = vlen;
@@ -683,14 +697,13 @@ fn _font_header_parse(buf, total): i64 {
     store8(name_buf, 0);
     store8(desc_buf, 0);
 
-    # The listing needs a name, so this loader requires one (and one
-    # that fits HDR_NAME_CAP); font_load_file never reads it. That is
-    # why a font can render and still list as malformed. description
-    # is optional, and one too long for HDR_DESC_CAP is dropped, not
-    # truncated.
-    if (_font_get_str(fhdr, fhlen, "name", 4, name_buf, HDR_NAME_CAP) < 0) {
-        return 0;
-    }
+    # Both strings are optional since 1.6.0, and one too long for its
+    # buffer is shortened with "..." (_font_get_str). Through 1.5.0 the
+    # listing needed `name`, so this loader rejected a font without one
+    # (or with one over 63 bytes) although the font rendered. The listing
+    # now shows file stems (ADR 0003) and validates with font_load_file,
+    # so `name` is metadata here, as everywhere else.
+    _font_get_str(fhdr, fhlen, "name", 4, name_buf, HDR_NAME_CAP);
     _font_get_str(fhdr, fhlen, "description", 11, desc_buf, HDR_DESC_CAP);
 
     store64(h + H_WIDTH, width);

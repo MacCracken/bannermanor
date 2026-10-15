@@ -31,6 +31,8 @@ W255=""; _i=0; while [ $_i -lt 255 ]; do W255="$W255 x"; _i=$((_i + 1)); done
 W256=""; _i=0; while [ $_i -lt 256 ]; do W256="$W256 x"; _i=$((_i + 1)); done
 MIXED=tests/golden/cwd/mixed
 EMPTY=tests/golden/cwd/empty
+ENVF=tests/golden/cwd/envfonts
+ESCDIR="$(printf 'a\033b')"                      # a BNRMR_FONTS value with an ESC in it
 
 # ── frozen: default font ─────────────────────────────────────────────────────
 g frozen default-agnos -- AGNOS
@@ -78,6 +80,23 @@ g frozen cwd-longname-renders cwd=$MIXED -- --font longname HI
 g frozen cwd-longdesc-renders cwd=$MIXED -- --font longdesc HI
 g frozen cwd-ctl-header-renders cwd=$MIXED -- --font ctl_header "A A"
 g frozen cwd-default-font-anywhere cwd=$EMPTY -- AGNOS
+
+# ── frozen: the font search path (ADR 0003, 1.6.0) ───────────────────────────
+# block is built in, so -f block works with no fonts/ anywhere.
+g frozen path-block-builtin-anywhere cwd=$EMPTY -- --font block HI
+g frozen path-block-builtin-equals-embedded cwd=$EMPTY -- -f block AGNOS
+# $BNRMR_FONTS comes first, and shadows ./fonts.
+g frozen path-env-shadows-cwd env=BNRMR_FONTS=$ENVF -- --font block HI
+g frozen path-env-adds-a-dir env=BNRMR_FONTS=$MIXED/fonts -- --font tiny HI
+g frozen path-env-falls-through-to-cwd env=BNRMR_FONTS=$ENVF -- --font slim HI
+g frozen path-env-missing-dir-is-a-miss env=BNRMR_FONTS=no/such/dir -- --font slim HI
+g frozen path-env-empty-is-unset env=BNRMR_FONTS= -- --font slim HI
+# An install: <prefix>/bin/bnrmr finds <prefix>/share/bannermanor/fonts.
+g frozen path-install-slim install cwd=$EMPTY -- --font slim HI
+g frozen path-install-big install cwd=$EMPTY -- -f big AGNOS
+g frozen path-install-cwd-first install cwd=$MIXED -- --font tiny HI
+g frozen path-install-env-first install cwd=$EMPTY env=BNRMR_FONTS=../envfonts -- --font block HI
+g frozen path-install-pty install pty=24x80 cwd=$EMPTY -- --font big --color rainbow HI
 
 # ── frozen: --align (pipe: no terminal width, so COLUMNS or 80) ──────────────
 g frozen align-left -- --align left HI
@@ -216,7 +235,11 @@ g error cyml-zero-entries cwd=$MIXED -- --font zero_entries HI
 g error cyml-width-0 cwd=$MIXED -- --font width0 HI
 g error cyml-listed-name-not-stem cwd=$MIXED -- --font other HI
 g error cyml-nested-unreachable cwd=$MIXED -- --font pack/nested HI
-g error cyml-no-fonts-dir cwd=$EMPTY -- --font block HI
+g error cyml-not-found-anywhere cwd=$EMPTY -- --font slim HI
+g error path-malformed-first-match-wins install cwd=$MIXED -- --font bad_schema HI
+g error path-not-found-names-dirs install cwd=$EMPTY -- --font nosuch HI
+g error path-env-not-found env=BNRMR_FONTS=$ENVF cwd=$EMPTY -- --font slim HI
+g error path-env-control-byte env=BNRMR_FONTS=$ESCDIR -- --font slim HI
 g error align-unknown -- --align x HI
 g error align-uppercase-word -- --align LEFT HI
 g error align-empty -- --align "" HI
@@ -297,3 +320,8 @@ g snapshot dashdash-alone -- --
 g snapshot help-beats-list-fonts -- --list-fonts --help
 g snapshot help-beats-list-fonts-before -- --help --list-fonts
 g snapshot version-beats-list-fonts norm=version -- --version --list-fonts
+g snapshot list-fonts-install install cwd=$EMPTY -- --list-fonts
+g snapshot list-fonts-install-under-checkout install -- --list-fonts
+g snapshot list-fonts-env env=BNRMR_FONTS=$ENVF -- --list-fonts
+g snapshot list-fonts-env-missing env=BNRMR_FONTS=no/such/dir cwd=$EMPTY -- --list-fonts
+g snapshot list-fonts-bad-env env=BNRMR_FONTS=$ESCDIR -- --list-fonts

@@ -80,7 +80,7 @@ fn _run(): i64 {
         return 0;
     }
     if (pr == CMDIT_VERSION) {
-        _emit_line("bnrmr 1.5.0");
+        _emit_line("bnrmr 1.6.0");
         return 0;
     }
     if (cmdit_get_bool(fs, CF_LIST) == 1) {
@@ -142,16 +142,22 @@ fn _run(): i64 {
                 return 1;
             }
         } else {
-            var pathbuf[FONT_PATH_CAP];
-            var plen = build_font_path(&pathbuf, FONT_PATH_CAP, font_name);
-            if (plen <= 0) {
+            # A CYML name: the search path (src/fontpath.cyr, ADR 0003).
+            if (font_name_ok(font_name) == 0) {
                 _err_line("bnrmr: invalid font name");
                 return 1;
             }
-            font = font_load_file(&pathbuf);
-            if (font == 0) {
-                _err_line("bnrmr: failed to load font (missing or malformed)");
+            if (fontpath_setup() != 0) {
+                _err_line("bnrmr: BNRMR_FONTS is not a usable directory path");
                 return 1;
+            }
+            var pathbuf[FP_PATH_CAP];
+            var where = font_resolve(font_name, &pathbuf, FP_PATH_CAP);
+            if (where == FP_BUILTIN) {
+                font = block_font_embed();
+            } else {
+                if (where == FP_FOUND) { font = font_load_file(&pathbuf); }
+                if (font == 0) { return report_font_error(font_name, where, &pathbuf); }
             }
         }
     } else {

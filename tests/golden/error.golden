@@ -2,8 +2,8 @@
 args: [--font] [typo] [HI]
 exit: 1
 stdout: 0 bytes, cksum 4294967295
-stderr: 50 bytes, cksum 2368485592
-| bnrmr: failed to load font (missing or malformed)$
+stderr: 49 bytes, cksum 67239945
+| bnrmr: font 'typo' not found (searched: ./fonts)$
 
 ### font-slash
 args: [--font] [../fonts/block] [HI]
@@ -44,8 +44,8 @@ stderr: 25 bytes, cksum 1922709972
 args: [--font] [nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn] [HI]
 exit: 1
 stdout: 0 bytes, cksum 4294967295
-stderr: 50 bytes, cksum 2368485592
-| bnrmr: failed to load font (missing or malformed)$
+stderr: 109 bytes, cksum 3384390930
+| bnrmr: font 'nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn' not found (searched: ./fonts)$
 
 ### font-empty-arg
 args: [--font] [] [HI]
@@ -116,48 +116,48 @@ args: [--font] [bad_schema] [HI]
 cwd: tests/golden/cwd/mixed
 exit: 1
 stdout: 0 bytes, cksum 4294967295
-stderr: 50 bytes, cksum 2368485592
-| bnrmr: failed to load font (missing or malformed)$
+stderr: 63 bytes, cksum 4029832718
+| bnrmr: font 'bad_schema' is malformed: ./fonts/bad_schema.cyml$
 
 ### cyml-bad-body-byte
 args: [--font] [bad_body_byte] [HI]
 cwd: tests/golden/cwd/mixed
 exit: 1
 stdout: 0 bytes, cksum 4294967295
-stderr: 50 bytes, cksum 2368485592
-| bnrmr: failed to load font (missing or malformed)$
+stderr: 69 bytes, cksum 2139019312
+| bnrmr: font 'bad_body_byte' is malformed: ./fonts/bad_body_byte.cyml$
 
 ### cyml-wrong-row-count
 args: [--font] [wrong_row_count] [HI]
 cwd: tests/golden/cwd/mixed
 exit: 1
 stdout: 0 bytes, cksum 4294967295
-stderr: 50 bytes, cksum 2368485592
-| bnrmr: failed to load font (missing or malformed)$
+stderr: 73 bytes, cksum 1570238465
+| bnrmr: font 'wrong_row_count' is malformed: ./fonts/wrong_row_count.cyml$
 
 ### cyml-zero-entries
 args: [--font] [zero_entries] [HI]
 cwd: tests/golden/cwd/mixed
 exit: 1
 stdout: 0 bytes, cksum 4294967295
-stderr: 50 bytes, cksum 2368485592
-| bnrmr: failed to load font (missing or malformed)$
+stderr: 67 bytes, cksum 2075782834
+| bnrmr: font 'zero_entries' is malformed: ./fonts/zero_entries.cyml$
 
 ### cyml-width-0
 args: [--font] [width0] [HI]
 cwd: tests/golden/cwd/mixed
 exit: 1
 stdout: 0 bytes, cksum 4294967295
-stderr: 50 bytes, cksum 2368485592
-| bnrmr: failed to load font (missing or malformed)$
+stderr: 55 bytes, cksum 178182234
+| bnrmr: font 'width0' is malformed: ./fonts/width0.cyml$
 
 ### cyml-listed-name-not-stem
 args: [--font] [other] [HI]
 cwd: tests/golden/cwd/mixed
 exit: 1
 stdout: 0 bytes, cksum 4294967295
-stderr: 50 bytes, cksum 2368485592
-| bnrmr: failed to load font (missing or malformed)$
+stderr: 50 bytes, cksum 3654286916
+| bnrmr: font 'other' not found (searched: ./fonts)$
 
 ### cyml-nested-unreachable
 args: [--font] [pack/nested] [HI]
@@ -167,13 +167,48 @@ stdout: 0 bytes, cksum 4294967295
 stderr: 25 bytes, cksum 1922709972
 | bnrmr: invalid font name$
 
-### cyml-no-fonts-dir
-args: [--font] [block] [HI]
+### cyml-not-found-anywhere
+args: [--font] [slim] [HI]
 cwd: tests/golden/cwd/empty
 exit: 1
 stdout: 0 bytes, cksum 4294967295
-stderr: 50 bytes, cksum 2368485592
-| bnrmr: failed to load font (missing or malformed)$
+stderr: 59 bytes, cksum 3445997159
+| bnrmr: font 'slim' not found (searched: ./fonts (missing))$
+
+### path-malformed-first-match-wins
+args: [--font] [bad_schema] [HI]
+cwd: tests/golden/cwd/mixed
+binary: @PREFIX@/bin/bnrmr (staged install)
+exit: 1
+stdout: 0 bytes, cksum 4294967295
+stderr: 63 bytes, cksum 4029832718
+| bnrmr: font 'bad_schema' is malformed: ./fonts/bad_schema.cyml$
+
+### path-not-found-names-dirs
+args: [--font] [nosuch] [HI]
+cwd: tests/golden/cwd/empty
+binary: @PREFIX@/bin/bnrmr (staged install)
+exit: 1
+stdout: 0 bytes, cksum 4294967295
+stderr: 95 bytes, cksum 360276516
+| bnrmr: font 'nosuch' not found (searched: ./fonts (missing), @PREFIX@/share/bannermanor/fonts)$
+
+### path-env-not-found
+args: [--font] [slim] [HI]
+env: BNRMR_FONTS=tests/golden/cwd/envfonts
+cwd: tests/golden/cwd/empty
+exit: 1
+stdout: 0 bytes, cksum 4294967295
+stderr: 96 bytes, cksum 3450275408
+| bnrmr: font 'slim' not found (searched: tests/golden/cwd/envfonts (missing), ./fonts (missing))$
+
+### path-env-control-byte
+args: [--font] [slim] [HI]
+env: BNRMR_FONTS=a\033b
+exit: 1
+stdout: 0 bytes, cksum 4294967295
+stderr: 50 bytes, cksum 2009467282
+| bnrmr: BNRMR_FONTS is not a usable directory path$
 
 ### align-unknown
 args: [--align] [x] [HI]
@@ -320,7 +355,7 @@ stderr: 155 bytes, cksum 2148528697
 args: [--bogus] [HI]
 exit: 1
 stdout: 0 bytes, cksum 4294967295
-stderr: 1361 bytes, cksum 3318945579
+stderr: 1654 bytes, cksum 2350331058
 | bnrmr: unknown flag: --bogus$
 | $
 | bnrmr \342\200\224 figlet-equivalent ASCII-art banner generator$
@@ -329,8 +364,10 @@ stderr: 1361 bytes, cksum 3318945579
 |   bnrmr [FLAGS] TEXT...$
 | $
 | Flags:$
-|   -f, --font NAME       load fonts/NAME.cyml (default: embedded block)$
-|                         or a path ending in .flf for a legacy figlet font$
+|   -f, --font NAME       NAME.cyml from $BNRMR_FONTS, ./fonts or the$
+|                         install's share/bannermanor/fonts (block is$
+|                         built in), or a path ending in .flf for a$
+|                         legacy figlet font (default: block)$
 |       --align V         left | center | right (default: left)$
 |   -w, --width N         truncate at glyph boundary at N columns$
 |                         (default: 0 = unlimited; if N is smaller$
@@ -341,7 +378,8 @@ stderr: 1361 bytes, cksum 3318945579
 |                         magenta, cyan, white (or bright_<name> /$
 |                         bright-<name>), or 'rainbow'$
 |                         for per-row cycling. Suppressed on non-TTY stdout.$
-|       --list-fonts      list available fonts and exit$
+|       --list-fonts      list the fonts --font can find, and where it$
+|                         looked, and exit$
 |       --version         print version and exit$
 |   -h, --help            print this help and exit$
 |       --                end of flags: everything after it is TEXT,$
@@ -350,12 +388,15 @@ stderr: 1361 bytes, cksum 3318945579
 | Coverage: A-Z, 0-9, space, printable punctuation. Lowercase folds$
 | to uppercase when the font has no lowercase glyphs. Unsupported$
 | characters render as blank.$
+| $
+| Errors go to stderr with exit status 1, as does a failed write.$
+| See bnrmr(1) for the font search path and environment.$
 
 ### parse-unknown-short
 args: [-x] [HI]
 exit: 1
 stdout: 0 bytes, cksum 4294967295
-stderr: 1356 bytes, cksum 1763683777
+stderr: 1649 bytes, cksum 1323731426
 | bnrmr: unknown flag: -x$
 | $
 | bnrmr \342\200\224 figlet-equivalent ASCII-art banner generator$
@@ -364,8 +405,10 @@ stderr: 1356 bytes, cksum 1763683777
 |   bnrmr [FLAGS] TEXT...$
 | $
 | Flags:$
-|   -f, --font NAME       load fonts/NAME.cyml (default: embedded block)$
-|                         or a path ending in .flf for a legacy figlet font$
+|   -f, --font NAME       NAME.cyml from $BNRMR_FONTS, ./fonts or the$
+|                         install's share/bannermanor/fonts (block is$
+|                         built in), or a path ending in .flf for a$
+|                         legacy figlet font (default: block)$
 |       --align V         left | center | right (default: left)$
 |   -w, --width N         truncate at glyph boundary at N columns$
 |                         (default: 0 = unlimited; if N is smaller$
@@ -376,7 +419,8 @@ stderr: 1356 bytes, cksum 1763683777
 |                         magenta, cyan, white (or bright_<name> /$
 |                         bright-<name>), or 'rainbow'$
 |                         for per-row cycling. Suppressed on non-TTY stdout.$
-|       --list-fonts      list available fonts and exit$
+|       --list-fonts      list the fonts --font can find, and where it$
+|                         looked, and exit$
 |       --version         print version and exit$
 |   -h, --help            print this help and exit$
 |       --                end of flags: everything after it is TEXT,$
@@ -385,12 +429,15 @@ stderr: 1356 bytes, cksum 1763683777
 | Coverage: A-Z, 0-9, space, printable punctuation. Lowercase folds$
 | to uppercase when the font has no lowercase glyphs. Unsupported$
 | characters render as blank.$
+| $
+| Errors go to stderr with exit status 1, as does a failed write.$
+| See bnrmr(1) for the font search path and environment.$
 
 ### parse-wrong-case
 args: [--Font] [slim] [HI]
 exit: 1
 stdout: 0 bytes, cksum 4294967295
-stderr: 1360 bytes, cksum 4135715494
+stderr: 1653 bytes, cksum 1496307215
 | bnrmr: unknown flag: --Font$
 | $
 | bnrmr \342\200\224 figlet-equivalent ASCII-art banner generator$
@@ -399,8 +446,10 @@ stderr: 1360 bytes, cksum 4135715494
 |   bnrmr [FLAGS] TEXT...$
 | $
 | Flags:$
-|   -f, --font NAME       load fonts/NAME.cyml (default: embedded block)$
-|                         or a path ending in .flf for a legacy figlet font$
+|   -f, --font NAME       NAME.cyml from $BNRMR_FONTS, ./fonts or the$
+|                         install's share/bannermanor/fonts (block is$
+|                         built in), or a path ending in .flf for a$
+|                         legacy figlet font (default: block)$
 |       --align V         left | center | right (default: left)$
 |   -w, --width N         truncate at glyph boundary at N columns$
 |                         (default: 0 = unlimited; if N is smaller$
@@ -411,7 +460,8 @@ stderr: 1360 bytes, cksum 4135715494
 |                         magenta, cyan, white (or bright_<name> /$
 |                         bright-<name>), or 'rainbow'$
 |                         for per-row cycling. Suppressed on non-TTY stdout.$
-|       --list-fonts      list available fonts and exit$
+|       --list-fonts      list the fonts --font can find, and where it$
+|                         looked, and exit$
 |       --version         print version and exit$
 |   -h, --help            print this help and exit$
 |       --                end of flags: everything after it is TEXT,$
@@ -420,12 +470,15 @@ stderr: 1360 bytes, cksum 4135715494
 | Coverage: A-Z, 0-9, space, printable punctuation. Lowercase folds$
 | to uppercase when the font has no lowercase glyphs. Unsupported$
 | characters render as blank.$
+| $
+| Errors go to stderr with exit status 1, as does a failed write.$
+| See bnrmr(1) for the font search path and environment.$
 
 ### parse-triple-dash
 args: [---font] [slim] [HI]
 exit: 1
 stdout: 0 bytes, cksum 4294967295
-stderr: 1361 bytes, cksum 1008964372
+stderr: 1654 bytes, cksum 2026735653
 | bnrmr: unknown flag: ---font$
 | $
 | bnrmr \342\200\224 figlet-equivalent ASCII-art banner generator$
@@ -434,8 +487,10 @@ stderr: 1361 bytes, cksum 1008964372
 |   bnrmr [FLAGS] TEXT...$
 | $
 | Flags:$
-|   -f, --font NAME       load fonts/NAME.cyml (default: embedded block)$
-|                         or a path ending in .flf for a legacy figlet font$
+|   -f, --font NAME       NAME.cyml from $BNRMR_FONTS, ./fonts or the$
+|                         install's share/bannermanor/fonts (block is$
+|                         built in), or a path ending in .flf for a$
+|                         legacy figlet font (default: block)$
 |       --align V         left | center | right (default: left)$
 |   -w, --width N         truncate at glyph boundary at N columns$
 |                         (default: 0 = unlimited; if N is smaller$
@@ -446,7 +501,8 @@ stderr: 1361 bytes, cksum 1008964372
 |                         magenta, cyan, white (or bright_<name> /$
 |                         bright-<name>), or 'rainbow'$
 |                         for per-row cycling. Suppressed on non-TTY stdout.$
-|       --list-fonts      list available fonts and exit$
+|       --list-fonts      list the fonts --font can find, and where it$
+|                         looked, and exit$
 |       --version         print version and exit$
 |   -h, --help            print this help and exit$
 |       --                end of flags: everything after it is TEXT,$
@@ -455,12 +511,15 @@ stderr: 1361 bytes, cksum 1008964372
 | Coverage: A-Z, 0-9, space, printable punctuation. Lowercase folds$
 | to uppercase when the font has no lowercase glyphs. Unsupported$
 | characters render as blank.$
+| $
+| Errors go to stderr with exit status 1, as does a failed write.$
+| See bnrmr(1) for the font search path and environment.$
 
 ### parse-missing-value
 args: [--font]
 exit: 1
 stdout: 0 bytes, cksum 4294967295
-stderr: 1361 bytes, cksum 388745847
+stderr: 1654 bytes, cksum 3071943106
 | bnrmr: --font: missing value$
 | $
 | bnrmr \342\200\224 figlet-equivalent ASCII-art banner generator$
@@ -469,8 +528,10 @@ stderr: 1361 bytes, cksum 388745847
 |   bnrmr [FLAGS] TEXT...$
 | $
 | Flags:$
-|   -f, --font NAME       load fonts/NAME.cyml (default: embedded block)$
-|                         or a path ending in .flf for a legacy figlet font$
+|   -f, --font NAME       NAME.cyml from $BNRMR_FONTS, ./fonts or the$
+|                         install's share/bannermanor/fonts (block is$
+|                         built in), or a path ending in .flf for a$
+|                         legacy figlet font (default: block)$
 |       --align V         left | center | right (default: left)$
 |   -w, --width N         truncate at glyph boundary at N columns$
 |                         (default: 0 = unlimited; if N is smaller$
@@ -481,7 +542,8 @@ stderr: 1361 bytes, cksum 388745847
 |                         magenta, cyan, white (or bright_<name> /$
 |                         bright-<name>), or 'rainbow'$
 |                         for per-row cycling. Suppressed on non-TTY stdout.$
-|       --list-fonts      list available fonts and exit$
+|       --list-fonts      list the fonts --font can find, and where it$
+|                         looked, and exit$
 |       --version         print version and exit$
 |   -h, --help            print this help and exit$
 |       --                end of flags: everything after it is TEXT,$
@@ -490,12 +552,15 @@ stderr: 1361 bytes, cksum 388745847
 | Coverage: A-Z, 0-9, space, printable punctuation. Lowercase folds$
 | to uppercase when the font has no lowercase glyphs. Unsupported$
 | characters render as blank.$
+| $
+| Errors go to stderr with exit status 1, as does a failed write.$
+| See bnrmr(1) for the font search path and environment.$
 
 ### parse-missing-value-after-text
 args: [HI] [--width]
 exit: 1
 stdout: 0 bytes, cksum 4294967295
-stderr: 1362 bytes, cksum 3587393913
+stderr: 1655 bytes, cksum 2489570331
 | bnrmr: --width: missing value$
 | $
 | bnrmr \342\200\224 figlet-equivalent ASCII-art banner generator$
@@ -504,8 +569,10 @@ stderr: 1362 bytes, cksum 3587393913
 |   bnrmr [FLAGS] TEXT...$
 | $
 | Flags:$
-|   -f, --font NAME       load fonts/NAME.cyml (default: embedded block)$
-|                         or a path ending in .flf for a legacy figlet font$
+|   -f, --font NAME       NAME.cyml from $BNRMR_FONTS, ./fonts or the$
+|                         install's share/bannermanor/fonts (block is$
+|                         built in), or a path ending in .flf for a$
+|                         legacy figlet font (default: block)$
 |       --align V         left | center | right (default: left)$
 |   -w, --width N         truncate at glyph boundary at N columns$
 |                         (default: 0 = unlimited; if N is smaller$
@@ -516,7 +583,8 @@ stderr: 1362 bytes, cksum 3587393913
 |                         magenta, cyan, white (or bright_<name> /$
 |                         bright-<name>), or 'rainbow'$
 |                         for per-row cycling. Suppressed on non-TTY stdout.$
-|       --list-fonts      list available fonts and exit$
+|       --list-fonts      list the fonts --font can find, and where it$
+|                         looked, and exit$
 |       --version         print version and exit$
 |   -h, --help            print this help and exit$
 |       --                end of flags: everything after it is TEXT,$
@@ -525,12 +593,15 @@ stderr: 1362 bytes, cksum 3587393913
 | Coverage: A-Z, 0-9, space, printable punctuation. Lowercase folds$
 | to uppercase when the font has no lowercase glyphs. Unsupported$
 | characters render as blank.$
+| $
+| Errors go to stderr with exit status 1, as does a failed write.$
+| See bnrmr(1) for the font search path and environment.$
 
 ### parse-bundled
 args: [-hf] [HI]
 exit: 1
 stdout: 0 bytes, cksum 4294967295
-stderr: 1435 bytes, cksum 1554667012
+stderr: 1728 bytes, cksum 2334375026
 | bnrmr: -hf: bundled short flags are not supported (write -x -y; put -- before text that starts with -)$
 | $
 | bnrmr \342\200\224 figlet-equivalent ASCII-art banner generator$
@@ -539,8 +610,10 @@ stderr: 1435 bytes, cksum 1554667012
 |   bnrmr [FLAGS] TEXT...$
 | $
 | Flags:$
-|   -f, --font NAME       load fonts/NAME.cyml (default: embedded block)$
-|                         or a path ending in .flf for a legacy figlet font$
+|   -f, --font NAME       NAME.cyml from $BNRMR_FONTS, ./fonts or the$
+|                         install's share/bannermanor/fonts (block is$
+|                         built in), or a path ending in .flf for a$
+|                         legacy figlet font (default: block)$
 |       --align V         left | center | right (default: left)$
 |   -w, --width N         truncate at glyph boundary at N columns$
 |                         (default: 0 = unlimited; if N is smaller$
@@ -551,7 +624,8 @@ stderr: 1435 bytes, cksum 1554667012
 |                         magenta, cyan, white (or bright_<name> /$
 |                         bright-<name>), or 'rainbow'$
 |                         for per-row cycling. Suppressed on non-TTY stdout.$
-|       --list-fonts      list available fonts and exit$
+|       --list-fonts      list the fonts --font can find, and where it$
+|                         looked, and exit$
 |       --version         print version and exit$
 |   -h, --help            print this help and exit$
 |       --                end of flags: everything after it is TEXT,$
@@ -560,12 +634,15 @@ stderr: 1435 bytes, cksum 1554667012
 | Coverage: A-Z, 0-9, space, printable punctuation. Lowercase folds$
 | to uppercase when the font has no lowercase glyphs. Unsupported$
 | characters render as blank.$
+| $
+| Errors go to stderr with exit status 1, as does a failed write.$
+| See bnrmr(1) for the font search path and environment.$
 
 ### parse-short-equals
 args: [-w=11] [AG]
 exit: 1
 stdout: 0 bytes, cksum 4294967295
-stderr: 1437 bytes, cksum 2290160760
+stderr: 1730 bytes, cksum 3313478254
 | bnrmr: -w=11: bundled short flags are not supported (write -x -y; put -- before text that starts with -)$
 | $
 | bnrmr \342\200\224 figlet-equivalent ASCII-art banner generator$
@@ -574,8 +651,10 @@ stderr: 1437 bytes, cksum 2290160760
 |   bnrmr [FLAGS] TEXT...$
 | $
 | Flags:$
-|   -f, --font NAME       load fonts/NAME.cyml (default: embedded block)$
-|                         or a path ending in .flf for a legacy figlet font$
+|   -f, --font NAME       NAME.cyml from $BNRMR_FONTS, ./fonts or the$
+|                         install's share/bannermanor/fonts (block is$
+|                         built in), or a path ending in .flf for a$
+|                         legacy figlet font (default: block)$
 |       --align V         left | center | right (default: left)$
 |   -w, --width N         truncate at glyph boundary at N columns$
 |                         (default: 0 = unlimited; if N is smaller$
@@ -586,7 +665,8 @@ stderr: 1437 bytes, cksum 2290160760
 |                         magenta, cyan, white (or bright_<name> /$
 |                         bright-<name>), or 'rainbow'$
 |                         for per-row cycling. Suppressed on non-TTY stdout.$
-|       --list-fonts      list available fonts and exit$
+|       --list-fonts      list the fonts --font can find, and where it$
+|                         looked, and exit$
 |       --version         print version and exit$
 |   -h, --help            print this help and exit$
 |       --                end of flags: everything after it is TEXT,$
@@ -595,12 +675,15 @@ stderr: 1437 bytes, cksum 2290160760
 | Coverage: A-Z, 0-9, space, printable punctuation. Lowercase folds$
 | to uppercase when the font has no lowercase glyphs. Unsupported$
 | characters render as blank.$
+| $
+| Errors go to stderr with exit status 1, as does a failed write.$
+| See bnrmr(1) for the font search path and environment.$
 
 ### parse-bool-with-value
 args: [--list-fonts=0]
 exit: 1
 stdout: 0 bytes, cksum 4294967295
-stderr: 1380 bytes, cksum 2213621645
+stderr: 1673 bytes, cksum 4004588145
 | bnrmr: --list-fonts=0: this flag takes no value$
 | $
 | bnrmr \342\200\224 figlet-equivalent ASCII-art banner generator$
@@ -609,8 +692,10 @@ stderr: 1380 bytes, cksum 2213621645
 |   bnrmr [FLAGS] TEXT...$
 | $
 | Flags:$
-|   -f, --font NAME       load fonts/NAME.cyml (default: embedded block)$
-|                         or a path ending in .flf for a legacy figlet font$
+|   -f, --font NAME       NAME.cyml from $BNRMR_FONTS, ./fonts or the$
+|                         install's share/bannermanor/fonts (block is$
+|                         built in), or a path ending in .flf for a$
+|                         legacy figlet font (default: block)$
 |       --align V         left | center | right (default: left)$
 |   -w, --width N         truncate at glyph boundary at N columns$
 |                         (default: 0 = unlimited; if N is smaller$
@@ -621,7 +706,8 @@ stderr: 1380 bytes, cksum 2213621645
 |                         magenta, cyan, white (or bright_<name> /$
 |                         bright-<name>), or 'rainbow'$
 |                         for per-row cycling. Suppressed on non-TTY stdout.$
-|       --list-fonts      list available fonts and exit$
+|       --list-fonts      list the fonts --font can find, and where it$
+|                         looked, and exit$
 |       --version         print version and exit$
 |   -h, --help            print this help and exit$
 |       --                end of flags: everything after it is TEXT,$
@@ -630,12 +716,15 @@ stderr: 1380 bytes, cksum 2213621645
 | Coverage: A-Z, 0-9, space, printable punctuation. Lowercase folds$
 | to uppercase when the font has no lowercase glyphs. Unsupported$
 | characters render as blank.$
+| $
+| Errors go to stderr with exit status 1, as does a failed write.$
+| See bnrmr(1) for the font search path and environment.$
 
 ### parse-help-with-value
 args: [--help=1]
 exit: 1
 stdout: 0 bytes, cksum 4294967295
-stderr: 1374 bytes, cksum 2327222291
+stderr: 1667 bytes, cksum 3759756076
 | bnrmr: --help=1: this flag takes no value$
 | $
 | bnrmr \342\200\224 figlet-equivalent ASCII-art banner generator$
@@ -644,8 +733,10 @@ stderr: 1374 bytes, cksum 2327222291
 |   bnrmr [FLAGS] TEXT...$
 | $
 | Flags:$
-|   -f, --font NAME       load fonts/NAME.cyml (default: embedded block)$
-|                         or a path ending in .flf for a legacy figlet font$
+|   -f, --font NAME       NAME.cyml from $BNRMR_FONTS, ./fonts or the$
+|                         install's share/bannermanor/fonts (block is$
+|                         built in), or a path ending in .flf for a$
+|                         legacy figlet font (default: block)$
 |       --align V         left | center | right (default: left)$
 |   -w, --width N         truncate at glyph boundary at N columns$
 |                         (default: 0 = unlimited; if N is smaller$
@@ -656,7 +747,8 @@ stderr: 1374 bytes, cksum 2327222291
 |                         magenta, cyan, white (or bright_<name> /$
 |                         bright-<name>), or 'rainbow'$
 |                         for per-row cycling. Suppressed on non-TTY stdout.$
-|       --list-fonts      list available fonts and exit$
+|       --list-fonts      list the fonts --font can find, and where it$
+|                         looked, and exit$
 |       --version         print version and exit$
 |   -h, --help            print this help and exit$
 |       --                end of flags: everything after it is TEXT,$
@@ -665,12 +757,15 @@ stderr: 1374 bytes, cksum 2327222291
 | Coverage: A-Z, 0-9, space, printable punctuation. Lowercase folds$
 | to uppercase when the font has no lowercase glyphs. Unsupported$
 | characters render as blank.$
+| $
+| Errors go to stderr with exit status 1, as does a failed write.$
+| See bnrmr(1) for the font search path and environment.$
 
 ### parse-capital-v-is-not-version
 args: [-V]
 exit: 1
 stdout: 0 bytes, cksum 4294967295
-stderr: 1356 bytes, cksum 1776403802
+stderr: 1649 bytes, cksum 3608155708
 | bnrmr: unknown flag: -V$
 | $
 | bnrmr \342\200\224 figlet-equivalent ASCII-art banner generator$
@@ -679,8 +774,10 @@ stderr: 1356 bytes, cksum 1776403802
 |   bnrmr [FLAGS] TEXT...$
 | $
 | Flags:$
-|   -f, --font NAME       load fonts/NAME.cyml (default: embedded block)$
-|                         or a path ending in .flf for a legacy figlet font$
+|   -f, --font NAME       NAME.cyml from $BNRMR_FONTS, ./fonts or the$
+|                         install's share/bannermanor/fonts (block is$
+|                         built in), or a path ending in .flf for a$
+|                         legacy figlet font (default: block)$
 |       --align V         left | center | right (default: left)$
 |   -w, --width N         truncate at glyph boundary at N columns$
 |                         (default: 0 = unlimited; if N is smaller$
@@ -691,7 +788,8 @@ stderr: 1356 bytes, cksum 1776403802
 |                         magenta, cyan, white (or bright_<name> /$
 |                         bright-<name>), or 'rainbow'$
 |                         for per-row cycling. Suppressed on non-TTY stdout.$
-|       --list-fonts      list available fonts and exit$
+|       --list-fonts      list the fonts --font can find, and where it$
+|                         looked, and exit$
 |       --version         print version and exit$
 |   -h, --help            print this help and exit$
 |       --                end of flags: everything after it is TEXT,$
@@ -700,12 +798,15 @@ stderr: 1356 bytes, cksum 1776403802
 | Coverage: A-Z, 0-9, space, printable punctuation. Lowercase folds$
 | to uppercase when the font has no lowercase glyphs. Unsupported$
 | characters render as blank.$
+| $
+| Errors go to stderr with exit status 1, as does a failed write.$
+| See bnrmr(1) for the font search path and environment.$
 
 ### parse-capital-v-with-text
 args: [-V] [HI]
 exit: 1
 stdout: 0 bytes, cksum 4294967295
-stderr: 1356 bytes, cksum 1776403802
+stderr: 1649 bytes, cksum 3608155708
 | bnrmr: unknown flag: -V$
 | $
 | bnrmr \342\200\224 figlet-equivalent ASCII-art banner generator$
@@ -714,8 +815,10 @@ stderr: 1356 bytes, cksum 1776403802
 |   bnrmr [FLAGS] TEXT...$
 | $
 | Flags:$
-|   -f, --font NAME       load fonts/NAME.cyml (default: embedded block)$
-|                         or a path ending in .flf for a legacy figlet font$
+|   -f, --font NAME       NAME.cyml from $BNRMR_FONTS, ./fonts or the$
+|                         install's share/bannermanor/fonts (block is$
+|                         built in), or a path ending in .flf for a$
+|                         legacy figlet font (default: block)$
 |       --align V         left | center | right (default: left)$
 |   -w, --width N         truncate at glyph boundary at N columns$
 |                         (default: 0 = unlimited; if N is smaller$
@@ -726,7 +829,8 @@ stderr: 1356 bytes, cksum 1776403802
 |                         magenta, cyan, white (or bright_<name> /$
 |                         bright-<name>), or 'rainbow'$
 |                         for per-row cycling. Suppressed on non-TTY stdout.$
-|       --list-fonts      list available fonts and exit$
+|       --list-fonts      list the fonts --font can find, and where it$
+|                         looked, and exit$
 |       --version         print version and exit$
 |   -h, --help            print this help and exit$
 |       --                end of flags: everything after it is TEXT,$
@@ -735,12 +839,15 @@ stderr: 1356 bytes, cksum 1776403802
 | Coverage: A-Z, 0-9, space, printable punctuation. Lowercase folds$
 | to uppercase when the font has no lowercase glyphs. Unsupported$
 | characters render as blank.$
+| $
+| Errors go to stderr with exit status 1, as does a failed write.$
+| See bnrmr(1) for the font search path and environment.$
 
 ### parse-version-with-value
 args: [--version=1]
 exit: 1
 stdout: 0 bytes, cksum 4294967295
-stderr: 1377 bytes, cksum 2208097557
+stderr: 1670 bytes, cksum 3605253442
 | bnrmr: --version=1: this flag takes no value$
 | $
 | bnrmr \342\200\224 figlet-equivalent ASCII-art banner generator$
@@ -749,8 +856,10 @@ stderr: 1377 bytes, cksum 2208097557
 |   bnrmr [FLAGS] TEXT...$
 | $
 | Flags:$
-|   -f, --font NAME       load fonts/NAME.cyml (default: embedded block)$
-|                         or a path ending in .flf for a legacy figlet font$
+|   -f, --font NAME       NAME.cyml from $BNRMR_FONTS, ./fonts or the$
+|                         install's share/bannermanor/fonts (block is$
+|                         built in), or a path ending in .flf for a$
+|                         legacy figlet font (default: block)$
 |       --align V         left | center | right (default: left)$
 |   -w, --width N         truncate at glyph boundary at N columns$
 |                         (default: 0 = unlimited; if N is smaller$
@@ -761,7 +870,8 @@ stderr: 1377 bytes, cksum 2208097557
 |                         magenta, cyan, white (or bright_<name> /$
 |                         bright-<name>), or 'rainbow'$
 |                         for per-row cycling. Suppressed on non-TTY stdout.$
-|       --list-fonts      list available fonts and exit$
+|       --list-fonts      list the fonts --font can find, and where it$
+|                         looked, and exit$
 |       --version         print version and exit$
 |   -h, --help            print this help and exit$
 |       --                end of flags: everything after it is TEXT,$
@@ -770,12 +880,15 @@ stderr: 1377 bytes, cksum 2208097557
 | Coverage: A-Z, 0-9, space, printable punctuation. Lowercase folds$
 | to uppercase when the font has no lowercase glyphs. Unsupported$
 | characters render as blank.$
+| $
+| Errors go to stderr with exit status 1, as does a failed write.$
+| See bnrmr(1) for the font search path and environment.$
 
 ### parse-error-beats-help
 args: [--help] [--bogus]
 exit: 1
 stdout: 0 bytes, cksum 4294967295
-stderr: 1361 bytes, cksum 3318945579
+stderr: 1654 bytes, cksum 2350331058
 | bnrmr: unknown flag: --bogus$
 | $
 | bnrmr \342\200\224 figlet-equivalent ASCII-art banner generator$
@@ -784,8 +897,10 @@ stderr: 1361 bytes, cksum 3318945579
 |   bnrmr [FLAGS] TEXT...$
 | $
 | Flags:$
-|   -f, --font NAME       load fonts/NAME.cyml (default: embedded block)$
-|                         or a path ending in .flf for a legacy figlet font$
+|   -f, --font NAME       NAME.cyml from $BNRMR_FONTS, ./fonts or the$
+|                         install's share/bannermanor/fonts (block is$
+|                         built in), or a path ending in .flf for a$
+|                         legacy figlet font (default: block)$
 |       --align V         left | center | right (default: left)$
 |   -w, --width N         truncate at glyph boundary at N columns$
 |                         (default: 0 = unlimited; if N is smaller$
@@ -796,7 +911,8 @@ stderr: 1361 bytes, cksum 3318945579
 |                         magenta, cyan, white (or bright_<name> /$
 |                         bright-<name>), or 'rainbow'$
 |                         for per-row cycling. Suppressed on non-TTY stdout.$
-|       --list-fonts      list available fonts and exit$
+|       --list-fonts      list the fonts --font can find, and where it$
+|                         looked, and exit$
 |       --version         print version and exit$
 |   -h, --help            print this help and exit$
 |       --                end of flags: everything after it is TEXT,$
@@ -805,12 +921,15 @@ stderr: 1361 bytes, cksum 3318945579
 | Coverage: A-Z, 0-9, space, printable punctuation. Lowercase folds$
 | to uppercase when the font has no lowercase glyphs. Unsupported$
 | characters render as blank.$
+| $
+| Errors go to stderr with exit status 1, as does a failed write.$
+| See bnrmr(1) for the font search path and environment.$
 
 ### parse-error-beats-help-after
 args: [--bogus] [--help]
 exit: 1
 stdout: 0 bytes, cksum 4294967295
-stderr: 1361 bytes, cksum 3318945579
+stderr: 1654 bytes, cksum 2350331058
 | bnrmr: unknown flag: --bogus$
 | $
 | bnrmr \342\200\224 figlet-equivalent ASCII-art banner generator$
@@ -819,8 +938,10 @@ stderr: 1361 bytes, cksum 3318945579
 |   bnrmr [FLAGS] TEXT...$
 | $
 | Flags:$
-|   -f, --font NAME       load fonts/NAME.cyml (default: embedded block)$
-|                         or a path ending in .flf for a legacy figlet font$
+|   -f, --font NAME       NAME.cyml from $BNRMR_FONTS, ./fonts or the$
+|                         install's share/bannermanor/fonts (block is$
+|                         built in), or a path ending in .flf for a$
+|                         legacy figlet font (default: block)$
 |       --align V         left | center | right (default: left)$
 |   -w, --width N         truncate at glyph boundary at N columns$
 |                         (default: 0 = unlimited; if N is smaller$
@@ -831,7 +952,8 @@ stderr: 1361 bytes, cksum 3318945579
 |                         magenta, cyan, white (or bright_<name> /$
 |                         bright-<name>), or 'rainbow'$
 |                         for per-row cycling. Suppressed on non-TTY stdout.$
-|       --list-fonts      list available fonts and exit$
+|       --list-fonts      list the fonts --font can find, and where it$
+|                         looked, and exit$
 |       --version         print version and exit$
 |   -h, --help            print this help and exit$
 |       --                end of flags: everything after it is TEXT,$
@@ -840,12 +962,15 @@ stderr: 1361 bytes, cksum 3318945579
 | Coverage: A-Z, 0-9, space, printable punctuation. Lowercase folds$
 | to uppercase when the font has no lowercase glyphs. Unsupported$
 | characters render as blank.$
+| $
+| Errors go to stderr with exit status 1, as does a failed write.$
+| See bnrmr(1) for the font search path and environment.$
 
 ### parse-error-beats-version
 args: [--version] [--bogus]
 exit: 1
 stdout: 0 bytes, cksum 4294967295
-stderr: 1361 bytes, cksum 3318945579
+stderr: 1654 bytes, cksum 2350331058
 | bnrmr: unknown flag: --bogus$
 | $
 | bnrmr \342\200\224 figlet-equivalent ASCII-art banner generator$
@@ -854,8 +979,10 @@ stderr: 1361 bytes, cksum 3318945579
 |   bnrmr [FLAGS] TEXT...$
 | $
 | Flags:$
-|   -f, --font NAME       load fonts/NAME.cyml (default: embedded block)$
-|                         or a path ending in .flf for a legacy figlet font$
+|   -f, --font NAME       NAME.cyml from $BNRMR_FONTS, ./fonts or the$
+|                         install's share/bannermanor/fonts (block is$
+|                         built in), or a path ending in .flf for a$
+|                         legacy figlet font (default: block)$
 |       --align V         left | center | right (default: left)$
 |   -w, --width N         truncate at glyph boundary at N columns$
 |                         (default: 0 = unlimited; if N is smaller$
@@ -866,7 +993,8 @@ stderr: 1361 bytes, cksum 3318945579
 |                         magenta, cyan, white (or bright_<name> /$
 |                         bright-<name>), or 'rainbow'$
 |                         for per-row cycling. Suppressed on non-TTY stdout.$
-|       --list-fonts      list available fonts and exit$
+|       --list-fonts      list the fonts --font can find, and where it$
+|                         looked, and exit$
 |       --version         print version and exit$
 |   -h, --help            print this help and exit$
 |       --                end of flags: everything after it is TEXT,$
@@ -875,12 +1003,15 @@ stderr: 1361 bytes, cksum 3318945579
 | Coverage: A-Z, 0-9, space, printable punctuation. Lowercase folds$
 | to uppercase when the font has no lowercase glyphs. Unsupported$
 | characters render as blank.$
+| $
+| Errors go to stderr with exit status 1, as does a failed write.$
+| See bnrmr(1) for the font search path and environment.$
 
 ### parse-bundled-same-letter
 args: [-hh]
 exit: 1
 stdout: 0 bytes, cksum 4294967295
-stderr: 1435 bytes, cksum 1767702751
+stderr: 1728 bytes, cksum 1935285675
 | bnrmr: -hh: bundled short flags are not supported (write -x -y; put -- before text that starts with -)$
 | $
 | bnrmr \342\200\224 figlet-equivalent ASCII-art banner generator$
@@ -889,8 +1020,10 @@ stderr: 1435 bytes, cksum 1767702751
 |   bnrmr [FLAGS] TEXT...$
 | $
 | Flags:$
-|   -f, --font NAME       load fonts/NAME.cyml (default: embedded block)$
-|                         or a path ending in .flf for a legacy figlet font$
+|   -f, --font NAME       NAME.cyml from $BNRMR_FONTS, ./fonts or the$
+|                         install's share/bannermanor/fonts (block is$
+|                         built in), or a path ending in .flf for a$
+|                         legacy figlet font (default: block)$
 |       --align V         left | center | right (default: left)$
 |   -w, --width N         truncate at glyph boundary at N columns$
 |                         (default: 0 = unlimited; if N is smaller$
@@ -901,7 +1034,8 @@ stderr: 1435 bytes, cksum 1767702751
 |                         magenta, cyan, white (or bright_<name> /$
 |                         bright-<name>), or 'rainbow'$
 |                         for per-row cycling. Suppressed on non-TTY stdout.$
-|       --list-fonts      list available fonts and exit$
+|       --list-fonts      list the fonts --font can find, and where it$
+|                         looked, and exit$
 |       --version         print version and exit$
 |   -h, --help            print this help and exit$
 |       --                end of flags: everything after it is TEXT,$
@@ -910,12 +1044,15 @@ stderr: 1435 bytes, cksum 1767702751
 | Coverage: A-Z, 0-9, space, printable punctuation. Lowercase folds$
 | to uppercase when the font has no lowercase glyphs. Unsupported$
 | characters render as blank.$
+| $
+| Errors go to stderr with exit status 1, as does a failed write.$
+| See bnrmr(1) for the font search path and environment.$
 
 ### parse-attached-short-value
 args: [-w5] [AGNOS]
 exit: 1
 stdout: 0 bytes, cksum 4294967295
-stderr: 1435 bytes, cksum 4019307327
+stderr: 1728 bytes, cksum 294909443
 | bnrmr: -w5: bundled short flags are not supported (write -x -y; put -- before text that starts with -)$
 | $
 | bnrmr \342\200\224 figlet-equivalent ASCII-art banner generator$
@@ -924,8 +1061,10 @@ stderr: 1435 bytes, cksum 4019307327
 |   bnrmr [FLAGS] TEXT...$
 | $
 | Flags:$
-|   -f, --font NAME       load fonts/NAME.cyml (default: embedded block)$
-|                         or a path ending in .flf for a legacy figlet font$
+|   -f, --font NAME       NAME.cyml from $BNRMR_FONTS, ./fonts or the$
+|                         install's share/bannermanor/fonts (block is$
+|                         built in), or a path ending in .flf for a$
+|                         legacy figlet font (default: block)$
 |       --align V         left | center | right (default: left)$
 |   -w, --width N         truncate at glyph boundary at N columns$
 |                         (default: 0 = unlimited; if N is smaller$
@@ -936,7 +1075,8 @@ stderr: 1435 bytes, cksum 4019307327
 |                         magenta, cyan, white (or bright_<name> /$
 |                         bright-<name>), or 'rainbow'$
 |                         for per-row cycling. Suppressed on non-TTY stdout.$
-|       --list-fonts      list available fonts and exit$
+|       --list-fonts      list the fonts --font can find, and where it$
+|                         looked, and exit$
 |       --version         print version and exit$
 |   -h, --help            print this help and exit$
 |       --                end of flags: everything after it is TEXT,$
@@ -945,12 +1085,15 @@ stderr: 1435 bytes, cksum 4019307327
 | Coverage: A-Z, 0-9, space, printable punctuation. Lowercase folds$
 | to uppercase when the font has no lowercase glyphs. Unsupported$
 | characters render as blank.$
+| $
+| Errors go to stderr with exit status 1, as does a failed write.$
+| See bnrmr(1) for the font search path and environment.$
 
 ### parse-short-equals-font
 args: [-f=slim] [HI]
 exit: 1
 stdout: 0 bytes, cksum 4294967295
-stderr: 1439 bytes, cksum 2428385681
+stderr: 1732 bytes, cksum 547271624
 | bnrmr: -f=slim: bundled short flags are not supported (write -x -y; put -- before text that starts with -)$
 | $
 | bnrmr \342\200\224 figlet-equivalent ASCII-art banner generator$
@@ -959,8 +1102,10 @@ stderr: 1439 bytes, cksum 2428385681
 |   bnrmr [FLAGS] TEXT...$
 | $
 | Flags:$
-|   -f, --font NAME       load fonts/NAME.cyml (default: embedded block)$
-|                         or a path ending in .flf for a legacy figlet font$
+|   -f, --font NAME       NAME.cyml from $BNRMR_FONTS, ./fonts or the$
+|                         install's share/bannermanor/fonts (block is$
+|                         built in), or a path ending in .flf for a$
+|                         legacy figlet font (default: block)$
 |       --align V         left | center | right (default: left)$
 |   -w, --width N         truncate at glyph boundary at N columns$
 |                         (default: 0 = unlimited; if N is smaller$
@@ -971,7 +1116,8 @@ stderr: 1439 bytes, cksum 2428385681
 |                         magenta, cyan, white (or bright_<name> /$
 |                         bright-<name>), or 'rainbow'$
 |                         for per-row cycling. Suppressed on non-TTY stdout.$
-|       --list-fonts      list available fonts and exit$
+|       --list-fonts      list the fonts --font can find, and where it$
+|                         looked, and exit$
 |       --version         print version and exit$
 |   -h, --help            print this help and exit$
 |       --                end of flags: everything after it is TEXT,$
@@ -980,12 +1126,15 @@ stderr: 1439 bytes, cksum 2428385681
 | Coverage: A-Z, 0-9, space, printable punctuation. Lowercase folds$
 | to uppercase when the font has no lowercase glyphs. Unsupported$
 | characters render as blank.$
+| $
+| Errors go to stderr with exit status 1, as does a failed write.$
+| See bnrmr(1) for the font search path and environment.$
 
 ### parse-no-british-spelling
 args: [--colour] [red] [HI]
 exit: 1
 stdout: 0 bytes, cksum 4294967295
-stderr: 1362 bytes, cksum 2641325136
+stderr: 1655 bytes, cksum 3756911782
 | bnrmr: unknown flag: --colour$
 | $
 | bnrmr \342\200\224 figlet-equivalent ASCII-art banner generator$
@@ -994,8 +1143,10 @@ stderr: 1362 bytes, cksum 2641325136
 |   bnrmr [FLAGS] TEXT...$
 | $
 | Flags:$
-|   -f, --font NAME       load fonts/NAME.cyml (default: embedded block)$
-|                         or a path ending in .flf for a legacy figlet font$
+|   -f, --font NAME       NAME.cyml from $BNRMR_FONTS, ./fonts or the$
+|                         install's share/bannermanor/fonts (block is$
+|                         built in), or a path ending in .flf for a$
+|                         legacy figlet font (default: block)$
 |       --align V         left | center | right (default: left)$
 |   -w, --width N         truncate at glyph boundary at N columns$
 |                         (default: 0 = unlimited; if N is smaller$
@@ -1006,7 +1157,8 @@ stderr: 1362 bytes, cksum 2641325136
 |                         magenta, cyan, white (or bright_<name> /$
 |                         bright-<name>), or 'rainbow'$
 |                         for per-row cycling. Suppressed on non-TTY stdout.$
-|       --list-fonts      list available fonts and exit$
+|       --list-fonts      list the fonts --font can find, and where it$
+|                         looked, and exit$
 |       --version         print version and exit$
 |   -h, --help            print this help and exit$
 |       --                end of flags: everything after it is TEXT,$
@@ -1015,12 +1167,15 @@ stderr: 1362 bytes, cksum 2641325136
 | Coverage: A-Z, 0-9, space, printable punctuation. Lowercase folds$
 | to uppercase when the font has no lowercase glyphs. Unsupported$
 | characters render as blank.$
+| $
+| Errors go to stderr with exit status 1, as does a failed write.$
+| See bnrmr(1) for the font search path and environment.$
 
 ### parse-no-prefix-match-value
 args: [--col] [red] [HI]
 exit: 1
 stdout: 0 bytes, cksum 4294967295
-stderr: 1359 bytes, cksum 1198981224
+stderr: 1652 bytes, cksum 3252297048
 | bnrmr: unknown flag: --col$
 | $
 | bnrmr \342\200\224 figlet-equivalent ASCII-art banner generator$
@@ -1029,8 +1184,10 @@ stderr: 1359 bytes, cksum 1198981224
 |   bnrmr [FLAGS] TEXT...$
 | $
 | Flags:$
-|   -f, --font NAME       load fonts/NAME.cyml (default: embedded block)$
-|                         or a path ending in .flf for a legacy figlet font$
+|   -f, --font NAME       NAME.cyml from $BNRMR_FONTS, ./fonts or the$
+|                         install's share/bannermanor/fonts (block is$
+|                         built in), or a path ending in .flf for a$
+|                         legacy figlet font (default: block)$
 |       --align V         left | center | right (default: left)$
 |   -w, --width N         truncate at glyph boundary at N columns$
 |                         (default: 0 = unlimited; if N is smaller$
@@ -1041,7 +1198,8 @@ stderr: 1359 bytes, cksum 1198981224
 |                         magenta, cyan, white (or bright_<name> /$
 |                         bright-<name>), or 'rainbow'$
 |                         for per-row cycling. Suppressed on non-TTY stdout.$
-|       --list-fonts      list available fonts and exit$
+|       --list-fonts      list the fonts --font can find, and where it$
+|                         looked, and exit$
 |       --version         print version and exit$
 |   -h, --help            print this help and exit$
 |       --                end of flags: everything after it is TEXT,$
@@ -1050,12 +1208,15 @@ stderr: 1359 bytes, cksum 1198981224
 | Coverage: A-Z, 0-9, space, printable punctuation. Lowercase folds$
 | to uppercase when the font has no lowercase glyphs. Unsupported$
 | characters render as blank.$
+| $
+| Errors go to stderr with exit status 1, as does a failed write.$
+| See bnrmr(1) for the font search path and environment.$
 
 ### parse-no-prefix-match-help
 args: [--he]
 exit: 1
 stdout: 0 bytes, cksum 4294967295
-stderr: 1358 bytes, cksum 4290734296
+stderr: 1651 bytes, cksum 935913233
 | bnrmr: unknown flag: --he$
 | $
 | bnrmr \342\200\224 figlet-equivalent ASCII-art banner generator$
@@ -1064,8 +1225,10 @@ stderr: 1358 bytes, cksum 4290734296
 |   bnrmr [FLAGS] TEXT...$
 | $
 | Flags:$
-|   -f, --font NAME       load fonts/NAME.cyml (default: embedded block)$
-|                         or a path ending in .flf for a legacy figlet font$
+|   -f, --font NAME       NAME.cyml from $BNRMR_FONTS, ./fonts or the$
+|                         install's share/bannermanor/fonts (block is$
+|                         built in), or a path ending in .flf for a$
+|                         legacy figlet font (default: block)$
 |       --align V         left | center | right (default: left)$
 |   -w, --width N         truncate at glyph boundary at N columns$
 |                         (default: 0 = unlimited; if N is smaller$
@@ -1076,7 +1239,8 @@ stderr: 1358 bytes, cksum 4290734296
 |                         magenta, cyan, white (or bright_<name> /$
 |                         bright-<name>), or 'rainbow'$
 |                         for per-row cycling. Suppressed on non-TTY stdout.$
-|       --list-fonts      list available fonts and exit$
+|       --list-fonts      list the fonts --font can find, and where it$
+|                         looked, and exit$
 |       --version         print version and exit$
 |   -h, --help            print this help and exit$
 |       --                end of flags: everything after it is TEXT,$
@@ -1085,12 +1249,15 @@ stderr: 1358 bytes, cksum 4290734296
 | Coverage: A-Z, 0-9, space, printable punctuation. Lowercase folds$
 | to uppercase when the font has no lowercase glyphs. Unsupported$
 | characters render as blank.$
+| $
+| Errors go to stderr with exit status 1, as does a failed write.$
+| See bnrmr(1) for the font search path and environment.$
 
 ### parse-no-prefix-match-bool
 args: [--list]
 exit: 1
 stdout: 0 bytes, cksum 4294967295
-stderr: 1360 bytes, cksum 3906488104
+stderr: 1653 bytes, cksum 51442581
 | bnrmr: unknown flag: --list$
 | $
 | bnrmr \342\200\224 figlet-equivalent ASCII-art banner generator$
@@ -1099,8 +1266,10 @@ stderr: 1360 bytes, cksum 3906488104
 |   bnrmr [FLAGS] TEXT...$
 | $
 | Flags:$
-|   -f, --font NAME       load fonts/NAME.cyml (default: embedded block)$
-|                         or a path ending in .flf for a legacy figlet font$
+|   -f, --font NAME       NAME.cyml from $BNRMR_FONTS, ./fonts or the$
+|                         install's share/bannermanor/fonts (block is$
+|                         built in), or a path ending in .flf for a$
+|                         legacy figlet font (default: block)$
 |       --align V         left | center | right (default: left)$
 |   -w, --width N         truncate at glyph boundary at N columns$
 |                         (default: 0 = unlimited; if N is smaller$
@@ -1111,7 +1280,8 @@ stderr: 1360 bytes, cksum 3906488104
 |                         magenta, cyan, white (or bright_<name> /$
 |                         bright-<name>), or 'rainbow'$
 |                         for per-row cycling. Suppressed on non-TTY stdout.$
-|       --list-fonts      list available fonts and exit$
+|       --list-fonts      list the fonts --font can find, and where it$
+|                         looked, and exit$
 |       --version         print version and exit$
 |   -h, --help            print this help and exit$
 |       --                end of flags: everything after it is TEXT,$
@@ -1120,12 +1290,15 @@ stderr: 1360 bytes, cksum 3906488104
 | Coverage: A-Z, 0-9, space, printable punctuation. Lowercase folds$
 | to uppercase when the font has no lowercase glyphs. Unsupported$
 | characters render as blank.$
+| $
+| Errors go to stderr with exit status 1, as does a failed write.$
+| See bnrmr(1) for the font search path and environment.$
 
 ### parse-empty-long-name
 args: [--=x] [HI]
 exit: 1
 stdout: 0 bytes, cksum 4294967295
-stderr: 1358 bytes, cksum 3029782360
+stderr: 1651 bytes, cksum 2478270609
 | bnrmr: unknown flag: --=x$
 | $
 | bnrmr \342\200\224 figlet-equivalent ASCII-art banner generator$
@@ -1134,8 +1307,10 @@ stderr: 1358 bytes, cksum 3029782360
 |   bnrmr [FLAGS] TEXT...$
 | $
 | Flags:$
-|   -f, --font NAME       load fonts/NAME.cyml (default: embedded block)$
-|                         or a path ending in .flf for a legacy figlet font$
+|   -f, --font NAME       NAME.cyml from $BNRMR_FONTS, ./fonts or the$
+|                         install's share/bannermanor/fonts (block is$
+|                         built in), or a path ending in .flf for a$
+|                         legacy figlet font (default: block)$
 |       --align V         left | center | right (default: left)$
 |   -w, --width N         truncate at glyph boundary at N columns$
 |                         (default: 0 = unlimited; if N is smaller$
@@ -1146,7 +1321,8 @@ stderr: 1358 bytes, cksum 3029782360
 |                         magenta, cyan, white (or bright_<name> /$
 |                         bright-<name>), or 'rainbow'$
 |                         for per-row cycling. Suppressed on non-TTY stdout.$
-|       --list-fonts      list available fonts and exit$
+|       --list-fonts      list the fonts --font can find, and where it$
+|                         looked, and exit$
 |       --version         print version and exit$
 |   -h, --help            print this help and exit$
 |       --                end of flags: everything after it is TEXT,$
@@ -1155,12 +1331,15 @@ stderr: 1358 bytes, cksum 3029782360
 | Coverage: A-Z, 0-9, space, printable punctuation. Lowercase folds$
 | to uppercase when the font has no lowercase glyphs. Unsupported$
 | characters render as blank.$
+| $
+| Errors go to stderr with exit status 1, as does a failed write.$
+| See bnrmr(1) for the font search path and environment.$
 
 ### parse-short-missing-value
 args: [-w]
 exit: 1
 stdout: 0 bytes, cksum 4294967295
-stderr: 1357 bytes, cksum 720146337
+stderr: 1650 bytes, cksum 2994561997
 | bnrmr: -w: missing value$
 | $
 | bnrmr \342\200\224 figlet-equivalent ASCII-art banner generator$
@@ -1169,8 +1348,10 @@ stderr: 1357 bytes, cksum 720146337
 |   bnrmr [FLAGS] TEXT...$
 | $
 | Flags:$
-|   -f, --font NAME       load fonts/NAME.cyml (default: embedded block)$
-|                         or a path ending in .flf for a legacy figlet font$
+|   -f, --font NAME       NAME.cyml from $BNRMR_FONTS, ./fonts or the$
+|                         install's share/bannermanor/fonts (block is$
+|                         built in), or a path ending in .flf for a$
+|                         legacy figlet font (default: block)$
 |       --align V         left | center | right (default: left)$
 |   -w, --width N         truncate at glyph boundary at N columns$
 |                         (default: 0 = unlimited; if N is smaller$
@@ -1181,7 +1362,8 @@ stderr: 1357 bytes, cksum 720146337
 |                         magenta, cyan, white (or bright_<name> /$
 |                         bright-<name>), or 'rainbow'$
 |                         for per-row cycling. Suppressed on non-TTY stdout.$
-|       --list-fonts      list available fonts and exit$
+|       --list-fonts      list the fonts --font can find, and where it$
+|                         looked, and exit$
 |       --version         print version and exit$
 |   -h, --help            print this help and exit$
 |       --                end of flags: everything after it is TEXT,$
@@ -1190,12 +1372,15 @@ stderr: 1357 bytes, cksum 720146337
 | Coverage: A-Z, 0-9, space, printable punctuation. Lowercase folds$
 | to uppercase when the font has no lowercase glyphs. Unsupported$
 | characters render as blank.$
+| $
+| Errors go to stderr with exit status 1, as does a failed write.$
+| See bnrmr(1) for the font search path and environment.$
 
 ### parse-uppercase-long
 args: [--WIDTH] [5] [HI]
 exit: 1
 stdout: 0 bytes, cksum 4294967295
-stderr: 1361 bytes, cksum 3001780658
+stderr: 1654 bytes, cksum 2175436118
 | bnrmr: unknown flag: --WIDTH$
 | $
 | bnrmr \342\200\224 figlet-equivalent ASCII-art banner generator$
@@ -1204,8 +1389,10 @@ stderr: 1361 bytes, cksum 3001780658
 |   bnrmr [FLAGS] TEXT...$
 | $
 | Flags:$
-|   -f, --font NAME       load fonts/NAME.cyml (default: embedded block)$
-|                         or a path ending in .flf for a legacy figlet font$
+|   -f, --font NAME       NAME.cyml from $BNRMR_FONTS, ./fonts or the$
+|                         install's share/bannermanor/fonts (block is$
+|                         built in), or a path ending in .flf for a$
+|                         legacy figlet font (default: block)$
 |       --align V         left | center | right (default: left)$
 |   -w, --width N         truncate at glyph boundary at N columns$
 |                         (default: 0 = unlimited; if N is smaller$
@@ -1216,7 +1403,8 @@ stderr: 1361 bytes, cksum 3001780658
 |                         magenta, cyan, white (or bright_<name> /$
 |                         bright-<name>), or 'rainbow'$
 |                         for per-row cycling. Suppressed on non-TTY stdout.$
-|       --list-fonts      list available fonts and exit$
+|       --list-fonts      list the fonts --font can find, and where it$
+|                         looked, and exit$
 |       --version         print version and exit$
 |   -h, --help            print this help and exit$
 |       --                end of flags: everything after it is TEXT,$
@@ -1225,20 +1413,23 @@ stderr: 1361 bytes, cksum 3001780658
 | Coverage: A-Z, 0-9, space, printable punctuation. Lowercase folds$
 | to uppercase when the font has no lowercase glyphs. Unsupported$
 | characters render as blank.$
+| $
+| Errors go to stderr with exit status 1, as does a failed write.$
+| See bnrmr(1) for the font search path and environment.$
 
 ### parse-value-is-flag-shaped
 args: [--font] [--list-fonts] [HI]
 exit: 1
 stdout: 0 bytes, cksum 4294967295
-stderr: 50 bytes, cksum 2368485592
-| bnrmr: failed to load font (missing or malformed)$
+stderr: 57 bytes, cksum 2810438583
+| bnrmr: font '--list-fonts' not found (searched: ./fonts)$
 
 ### parse-short-value-is-flag-shaped
 args: [-f] [-h] [HI]
 exit: 1
 stdout: 0 bytes, cksum 4294967295
-stderr: 50 bytes, cksum 2368485592
-| bnrmr: failed to load font (missing or malformed)$
+stderr: 47 bytes, cksum 2041282574
+| bnrmr: font '-h' not found (searched: ./fonts)$
 
 ### order-align-before-width
 args: [--align] [x] [--width] [abc] [HI]

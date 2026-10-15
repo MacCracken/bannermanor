@@ -1,0 +1,30 @@
+# Golden-suite fixture (tests/golden/cases.sh). A 3x3 font named block in a
+# BNRMR_FONTS directory: it must shadow ./fonts/block.cyml (ADR 0003).
+[font]
+schema = 1
+name = "block"
+description = "Golden fixture: a block that shadows the real one"
+width = 3
+height = 3
+gap = 1
+
+[[entries]]
+char = " "
+---
+...
+...
+...
+
+[[entries]]
+char = "H"
+---
+#.#
+###
+#.#
+
+[[entries]]
+char = "I"
+---
+###
+.#.
+###

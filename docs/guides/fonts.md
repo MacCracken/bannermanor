@@ -7,14 +7,29 @@ this is the practical how-to.
 
 ## What you'll produce
 
-A single file at `fonts/<name>.cyml` that BannerManor can:
+A single file, `<name>.cyml`, that BannerManor can:
 
 - list via `bnrmr --list-fonts`
 - render with via `bnrmr --font <name> "your text"`
 
 Every shipped font lives in-tree (CLAUDE.md: "self-contained — a user
-can `bnrmr "hello"` with zero config files"). Authoring a font means
-checking it into this repo.
+can `bnrmr "hello"` with zero config files"). Authoring a shipped font
+means checking it into this repo's `fonts/`, which `scripts/install.sh`
+and the release tarball install as `<prefix>/share/bannermanor/fonts/`.
+
+A font of your own does not have to be in-tree. `--font NAME` looks for
+`NAME.cyml` in each of these, and takes the first it finds ([ADR
+0003](../adr/0003-font-search-path.md)):
+
+1. the directory in `$BNRMR_FONTS`, if set;
+2. `./fonts`, relative to where you run `bnrmr`;
+3. `<prefix>/share/bannermanor/fonts`, when `bnrmr` is installed as
+   `<prefix>/bin/bnrmr`;
+4. the built-in `block` font, for `--font block` only.
+
+So `BNRMR_FONTS=~/my-fonts bnrmr --font mine HI` works from anywhere. A
+font named like a shipped one shadows it, and `--list-fonts` shows
+which one wins.
 
 ## File shape
 
@@ -60,8 +75,8 @@ There is no `---` after the file-level `[font]` block — the first
 | Key           | Required | Meaning                                                |
 |---------------|----------|--------------------------------------------------------|
 | `schema`      | yes      | Format version. Must be `1`.                          |
-| `name`        | for `--list-fonts` | The name `--list-fonts` shows, 63 bytes at most. `--list-fonts` calls a font without one (or with a longer one) malformed. `--font` never reads it: it loads `fonts/<NAME>.cyml` by file stem. By convention, match the stem (`example.cyml` → `"example"`) so the listed name is the one `--font` accepts. Nothing enforces that (see [ADR 0002](../adr/0002-freeze-scope-error-paths-and-malformed-input.md), ruling 3). |
-| `description` | no       | One line, shown by `--list-fonts`. 255 bytes at most: a longer one is left out of the listing, not truncated. |
+| `name`        | no       | Metadata. Neither `--font` nor `--list-fonts` uses it: both go by the file stem (`example.cyml` is `--font example`). By convention, match the stem. Nothing enforces that (see [ADR 0002](../adr/0002-freeze-scope-error-paths-and-malformed-input.md), ruling 3). Through 1.5.0 `--list-fonts` showed this field, and called a font without one malformed. |
+| `description` | no       | One line, shown by `--list-fonts`. Over 255 bytes it is shortened with `...` (through 1.5.0 it was left out). |
 | `width`       | yes      | Columns per glyph. Range: 1–64.                        |
 | `height`      | yes      | Rows per glyph. Range: 1–32.                           |
 | `gap`         | yes      | Spaces between adjacent glyphs at render time. Range: 0–16. |
@@ -145,8 +160,9 @@ the file.
 
 ## Drop-in workflow
 
-1. Author `fonts/<name>.cyml`. Pick a short, distinctive `name` —
-   one-word lowercase is the convention. Match the filename stem.
+1. Author `fonts/<name>.cyml`. Pick a short, distinctive file name —
+   one-word lowercase is the convention: it is what `--font` takes. Set
+   `name` to the same word.
 
 2. Verify the file loads:
 
@@ -154,11 +170,12 @@ the file.
    bnrmr --list-fonts
    ```
 
-   Your font should appear in alphabetical order with its geometry
-   and description. A `(malformed — skipped)` line means the header
-   loader rejected it (see the two validation lists below). A clean
-   listing does **not** prove the glyphs load. `--list-fonts` never
-   reads an entry, so step 3 is the real check.
+   Your font should appear in alphabetical order with its geometry and
+   description. Since 1.6.0 the listing runs the same full loader as
+   `--font`, so a clean row means the glyphs load too. A
+   `(malformed — skipped)` line means they do not; see the validation
+   list below. `(--font cannot spell this name — skipped)` means the
+   file name has a character `--font` refuses, such as a second dot.
 
 3. Render a probe string:
 
@@ -215,18 +232,16 @@ rows have been a load failure since 1.5.0. Through 1.4.2 they were
 silently ignored, so a font that worked then can fail now
 ([issue 0008](../development/issues/archive/0008-cyml-body-not-fully-consumed.md)).
 
-**`bnrmr --list-fonts`** (`font_header_load`) reads only the `[font]`
-block, and shows `(malformed — skipped)` when:
+**`bnrmr --list-fonts`** runs the same `font_load_file` on every
+`*.cyml` it finds, and shows `(malformed — skipped)` for exactly the
+fonts `--font` would refuse (since 1.6.0). It reads each search
+directory one level deep, and lists a font by its file stem.
 
-- the path is not a regular file, is empty, or is 65,536 bytes or
-  larger;
-- `schema`, `width`, `height` or `gap` fails the same checks as above;
-- `name` is missing, or longer than 63 bytes.
-
-It never decodes an entry. So the two can disagree in **both**
-directions. A font with a bad glyph body lists cleanly and then fails
-`--font`. A font with no `name` renders with `--font` and lists as
-malformed. Check a new font with both, as in the workflow above.
+Through 1.5.0 the listing used a header-only loader, which never decoded
+an entry and required `name`, so the two disagreed in both directions:
+a font with a bad glyph body listed cleanly and failed `--font`, and a
+font with no `name` rendered and listed as malformed. They no longer
+disagree.
 
 ## Design tips for the body
 

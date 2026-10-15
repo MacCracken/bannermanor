@@ -53,6 +53,7 @@
 #                            version log out of scope.
 #   · `"bnrmr X.Y.Z"`      — src/main.cyr's `--version` literal, the one live
 #                            mention that is code rather than prose.
+#   · `.TH … "BannerManor X.Y.Z"` — man/bnrmr.1's title line (since 1.6.0).
 # Bare version numbers in running prose are deliberately NOT matched. state.md
 # alone carries `added at 1.1.3`, `(pinned, 1.1.3)`, `against 0.8.0`, `the 0.7.0
 # audit` — provenance every one, and a pattern loose enough to catch a real stale
@@ -147,7 +148,7 @@ is_version "$DARSHANA_PIN" || fail "the darshana pin is not version-shaped: '$DA
 #                                      equalling it, so every heading here
 #                                      would read as drift.
 : > "$TMPD/live"
-for f in README.md docs/guides/*.md docs/development/state.md src/main.cyr; do
+for f in README.md docs/guides/*.md docs/development/state.md src/main.cyr man/bnrmr.1; do
     [ -f "$f" ] && printf '%s\n' "$f" >> "$TMPD/live"
 done
 
@@ -161,7 +162,8 @@ README.md:version
 docs/guides/getting-started.md:toolchain
 docs/development/state.md:toolchain
 docs/development/state.md:darshana
-src/main.cyr:version"
+src/main.cyr:version
+man/bnrmr.1:version"
 
 # ── 4. Scan ──────────────────────────────────────────────────────────────────
 # scan_rule <kind> <grep ERE> <sed extractor> [exclude ERE]
@@ -228,6 +230,11 @@ scan_rule version \
 scan_rule version \
     '"bnrmr [0-9]+\.[0-9]+\.[0-9]+' \
     's/.*"bnrmr \([0-9][0-9A-Za-z._-]*\)".*/\1/'
+
+# (f) man/bnrmr.1's title line (1.6.0): .TH BNRMR 1 <date> "BannerManor 1.6.0" ...
+scan_rule version \
+    '^\.TH .*"BannerManor [0-9]+\.[0-9]+\.[0-9]+' \
+    's/^\.TH .*"BannerManor \([0-9][0-9A-Za-z._-]*\)".*/\1/'
 
 if [ -s "$TMPD/unreadable" ]; then
     echo "doc-pin-check: FAILED — a pattern matched a line it could not read a version out of" >&2

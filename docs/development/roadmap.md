@@ -12,9 +12,8 @@ CLI flag surface, the CYML font format (schema 1), the default font set
 (block / slim / big), and the `.flf` adapter contract. Everything below
 is post-freeze work, and the freeze is what shapes it.
 
-**Next**: 1.6.0 — *Fonts findable, listing honest*. An installed `bnrmr`
-finds no fonts outside a checkout (issue 0015), and agnos already stages
-one into its rootfs.
+**Next**: 1.7.0 — *AGNOS parity*. `--color` is still a no-op there,
+blocked on agnos; the rest is verification.
 
 ## What the freeze permits
 
@@ -55,41 +54,6 @@ subtractive)."*
 Versions are targets, not commitments — ship-when-ready. Sequencing is
 by dependency, then by value.
 
-### 1.6.0 — Fonts findable, listing honest
-
-The largest genuinely 1.x-eligible user-facing gap. All the listing items
-ship together so the output moves once.
-
-- **A font search path, plus packaging** ([issue 0015](issues/0015-fonts-not-findable-when-installed.md)).
-  An installed `bnrmr` finds no fonts. Even `-f block` fails, while bare
-  `bnrmr` renders the same font from its embedded copy. And `release.yml`
-  publishes `build/*` without `fonts/`, so slim and big do not exist for
-  anyone who downloads a release. That matters now: agnos stages
-  `/bin/bnrmr` into its rootfs. Search `./fonts` first, so no lookup that
-  succeeds today changes. An env var is a new untrusted input and gets
-  validated like `--font`, with `build_font_path`'s byte rules applied to
-  every search-path entry. *The asymmetry behind this*: the legacy `.flf`
-  branch accepts an absolute path anywhere, so it is more deployable than
-  the first-party format.
-- **`--list-fonts` stops advertising names `--font` refuses.** Print the
-  stem, or add a fallback name scan (byte-neutral, and it turns exit 1s
-  into exit 0s, which ADR 0002 ruling 2 permits). Restrict the walk to
-  depth 1, by enumerating with `lib/fs.cyr`'s `dir_list`: today it
-  recurses to depth 64 while `build_font_path` rejects `/`, so a nested
-  font lists under a name no spelling can load (golden:
-  `cyml-nested-unreachable`).
-- Show an over-long description truncated instead of dropping it, and
-  size the name column from the widest name instead of a fixed 10.
-- Ship `bnrmr.1`, now that there is an install path to put it in.
-
-**Gate**: ADR 0002 does not rule directly on whether a shipped default
-font that fails outside a checkout is a defect. Ruling 2's additive
-exception (a failing invocation may start succeeding when the change adds
-no CLI surface) is the likely basis, since a search path adds a place to
-look, not a flag. Record that reading explicitly when 1.6.0 starts, or
-amend the ADR. The rendered-banner tier is untouched; `snapshot` moves
-once.
-
 ### 1.7.0 — AGNOS parity
 
 CLAUDE.md's Goal is *"Own ASCII-banner rendering for AGNOS userland."*
@@ -111,10 +75,17 @@ CLAUDE.md's Goal is *"Own ASCII-banner rendering for AGNOS userland."*
   locally (`cyrius test --aarch64`, and `BNRMR_RUNNER=qemu-aarch64
   sh scripts/golden.sh`), but nothing gates them. Two steps once a runner
   has qemu-user.
+- **Fonts on AGNOS** (agnos's change, not this repository's). Since 1.6.0
+  an executable at `/bin/bnrmr` looks in `/share/bannermanor/fonts` (ADR
+  0003), provided `argv[0]` is absolute. agnos's
+  `scripts/burn/stage-tools.sh` stages the binary only. Staging `fonts/*.cyml`
+  there too would give AGNOS `slim` and `big`; until then it has the
+  built-in block. Confirm what `argv[0]` agnoshi passes.
 - **AGNOS runtime verification** of what 1.4.1 and 1.5.0 compiled but
   could not run: the `file_write` route and its error handling (a failed
   AGNOS write returns -1, not an errno), freelist's 2 MB-granular
-  `mmap`, the bayan sublib, and cmdit's AGNOS argv path.
+  `mmap`, the bayan sublib, cmdit's AGNOS argv path, and 1.6.0's
+  `argv[0]`-based install directory.
 
 **Gate**: the color probe must return 0 when stdout is not the console,
 or `bnrmr --color red X > file` writes escape bytes into the file. Ruled
@@ -186,7 +157,9 @@ Contract-breaking or unrequested. Each entry states why it cannot be 1.x.
   `--font` from 0 to 1 for third-party fonts that render correctly. ADR
   0002 ruling 3 (Accepted) settles the audit's old contradiction, which
   classed the change `Breaking` and scheduled it for a minor: it is
-  metadata, so it waits for 2.0.
+  metadata, so it waits for 2.0. Since 1.6.0 there is little left to gain: `--list-fonts`
+  shows the stem, so it no longer advertises a name `--font` refuses,
+  and a mismatched `name` is unused metadata.
 - **A `[lib]` distlib surface.** Not a contract question, but a Project
   Identity change ("Type: Binary") that would create a second frozen
   surface. Unrequested: agnoshi has shipped hand-rolled box art through
@@ -200,7 +173,6 @@ Open, with a written-up reproducer and acceptance criteria:
 | # | Title | Scheduled |
 |---|---|---|
 | [0006](issues/0006-bayan-cyml-parse-regression.md) | bayan 1.5.2 made `font_load_file` ~45% slower | unscheduled; upstream (bayan). The 1.4.1 sublib did not recover it |
-| [0015](issues/0015-fonts-not-findable-when-installed.md) | An installed `bnrmr` cannot find any font | 1.6.0 |
 
 Archived — all closed: [0001](issues/archive/0001-keystroke-interleave-during-render.md)
 (deferred past v1.0, still open in principle),
@@ -216,6 +188,7 @@ Archived — all closed: [0001](issues/archive/0001-keystroke-interleave-during-
 [0012](issues/archive/0012-dead-geometry-constants.md),
 [0013](issues/archive/0013-full-bayan-bundle-linked.md),
 [0014](issues/archive/0014-transient-read-buffers-never-freed.md),
+[0015](issues/archive/0015-fonts-not-findable-when-installed.md),
 [0016](issues/archive/0016-diagnostics-go-to-stdout.md),
 [0017](issues/archive/0017-docs-precision-pass.md),
 [0018](issues/archive/0018-agnos-console-width-never-queried.md),
@@ -282,6 +255,13 @@ Post-freeze releases carry no milestone:
   (0008), and the `.flf` envelope raised to 128×64 (73 more corpus
   fonts load, 973 unchanged byte for byte). The golden frozen and
   snapshot tiers did not move; the error tier was re-baselined once.
+- **1.6.0**: fonts findable and the listing honest (issue 0015, ADR
+  0003). A search path: `$BNRMR_FONTS`, `./fonts`, the install directory
+  beside the executable, and the built-in block. Also `scripts/install.sh`,
+  a release tarball with the fonts, and the `bnrmr.1` man page.
+  `--list-fonts` shows stems one level deep, validated by the full
+  loader, which resolved accepted risks A-11 and A-12. The frozen tier
+  did not move.
 
 Two entries in the pre-1.0 criteria list have since moved. They are
 corrected here rather than left to imply otherwise:

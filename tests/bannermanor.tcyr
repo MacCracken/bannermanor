@@ -818,10 +818,16 @@ fn t_cyml_entry_rules() {
     assert_eq(font_load_file("tests/fixtures/dup_char.cyml"), 0, "duplicate char -> font_load_file 0");
     assert(font_header_load("tests/fixtures/dup_char.cyml") != 0, "duplicate char -> font_header_load lists it");
     assert_eq(font_load_file("tests/fixtures/char_non_ascii.cyml"), 0, "non-ASCII char -> 0");
-    # name over the 63-byte buffer: the header loader requires a name that
-    # fits; the full loader never reads name.
+    # name over the 63-byte buffer. Since 1.6.0 name is optional in the
+    # header loader too, and an over-long one is shortened with "...".
     assert(font_load_file("tests/fixtures/long_name.cyml") != 0, "64-byte name -> font_load_file loads");
-    assert_eq(font_header_load("tests/fixtures/long_name.cyml"), 0, "64-byte name -> font_header_load 0");
+    var lnh = font_header_load("tests/fixtures/long_name.cyml");
+    assert(lnh != 0, "64-byte name -> font_header_load loads (1.6.0)");
+    if (lnh != 0) {
+        var lnn = font_hdr_name(lnh);
+        assert_eq(strlen(lnn), 63, "shortened to 60 bytes + ...");
+        assert_eq(memeq(lnn + 60, "...", 3), 1, "ends in ...");
+    }
     # Issue 0008 (fixed 1.5.0): a body with more rows than `height` is
     # rejected. Through 1.4.2 it loaded and the surplus was ignored.
     assert_eq(font_load_file("tests/fixtures/extra_rows.cyml"), 0, "surplus rows -> 0 (issue 0008)");
@@ -1023,28 +1029,108 @@ fn t_cli_is_flf_path() {
     assert_eq(_is_flf_path(""), 0, "empty");
 }
 
-fn t_cli_build_font_path() {
-    test_group("cli / build_font_path (the CYML --font containment)");
-    var out[96];
-    assert_eq(build_font_path(&out, 96, "block"), 16, "block -> 16 bytes");
-    assert_eq(memeq(&out, "fonts/block.cyml", 17), 1, "block -> fonts/block.cyml + NUL");
-    assert_eq(build_font_path(&out, 96, ""), 0, "empty -> 0");
-    assert_eq(build_font_path(&out, 96, "a/b"), 0, "slash -> 0");
-    assert_eq(build_font_path(&out, 96, "../block"), 0, "traversal -> 0");
-    assert_eq(build_font_path(&out, 96, "a\\b"), 0, "backslash -> 0");
-    assert_eq(build_font_path(&out, 96, "a.b"), 0, "dot -> 0");
-    assert_eq(build_font_path(&out, 96, "a\x1bb"), 0, "ESC -> 0");
-    assert_eq(build_font_path(&out, 96, "a\x7fb"), 0, "DEL -> 0");
+fn t_fontpath_name_ok() {
+    test_group("fontpath / font_name_ok + font_path_join (the --font containment)");
+    assert_eq(font_name_ok("block"), 1, "block");
+    assert_eq(font_name_ok("my-font_2"), 1, "dash, underscore, digit");
+    assert_eq(font_name_ok(""), 0, "empty");
+    assert_eq(font_name_ok(0), 0, "null");
+    assert_eq(font_name_ok("a/b"), 0, "slash");
+    assert_eq(font_name_ok("../block"), 0, "traversal");
+    assert_eq(font_name_ok("a\\b"), 0, "backslash");
+    assert_eq(font_name_ok("a.b"), 0, "dot");
+    assert_eq(font_name_ok("a\x1bb"), 0, "ESC");
+    assert_eq(font_name_ok("a\x7fb"), 0, "DEL");
     var n64[72];
     memset(&n64, 110, 64);
     store8(&n64 + 64, 0);
-    assert_eq(build_font_path(&out, 96, &n64), 75, "64-byte name -> 75 bytes (FONT_NAME_CAP)");
+    assert_eq(font_name_ok(&n64), 1, "64 bytes (FONT_NAME_CAP)");
     store8(&n64 + 64, 110);
     store8(&n64 + 65, 0);
-    assert_eq(build_font_path(&out, 96, &n64), 0, "65-byte name -> 0");
-    assert_eq(build_font_path(&out, 16, "block"), 0, "17 bytes needed, 16 available -> 0");
-    assert_eq(build_font_path(&out, 17, "block"), 16, "17 available -> fits");
-    assert(FONT_PATH_CAP >= 12 + FONT_NAME_CAP, "FONT_PATH_CAP holds the longest name");
+    assert_eq(font_name_ok(&n64), 0, "65 bytes");
+    var out[96];
+    assert_eq(font_path_join(&out, 96, "./fonts", "block"), 18, "./fonts/block.cyml");
+    assert_eq(memeq(&out, "./fonts/block.cyml", 19), 1, "joined, NUL-terminated");
+    assert_eq(font_path_join(&out, 18, "./fonts", "block"), 0, "19 bytes needed, 18 available -> 0");
+    assert_eq(font_path_join(&out, 19, "./fonts", "block"), 18, "19 available -> fits");
+    assert(FP_PATH_CAP >= FP_DIR_CAP + 1 + FONT_NAME_CAP + 6, "FP_PATH_CAP holds the longest dir and name");
+}
+
+fn t_fontpath_env_ok() {
+    test_group("fontpath / font_env_ok (BNRMR_FONTS)");
+    assert_eq(font_env_ok("/usr/share/bannermanor/fonts"), 1, "absolute");
+    assert_eq(font_env_ok("my fonts"), 1, "relative, with a space");
+    assert_eq(font_env_ok(""), 0, "empty");
+    assert_eq(font_env_ok(0), 0, "null");
+    assert_eq(font_env_ok("a\x1bb"), 0, "ESC");
+    assert_eq(font_env_ok("a\x9bb"), 0, "C1 CSI");
+    var big = alloc(1100);
+    memset(big, 97, 1023);
+    store8(big + 1023, 0);
+    assert_eq(font_env_ok(big), 1, "1023 bytes");
+    memset(big, 97, 1024);
+    store8(big + 1024, 0);
+    assert_eq(font_env_ok(big), 0, "1024 bytes (FP_ENV_CAP)");
+}
+
+fn t_fontpath_install_dir() {
+    test_group("fontpath / install_dir_from_exe");
+    var out[256];
+    assert_eq(install_dir_from_exe("/usr/local/bin/bnrmr", &out, 256), 34, "/usr/local/bin -> /usr/local/share/...");
+    assert_eq(streq(&out, "/usr/local/share/bannermanor/fonts"), 1, "the path");
+    assert_eq(install_dir_from_exe("/bin/bnrmr", &out, 256), 24, "/bin (AGNOS) -> /share/...");
+    assert_eq(streq(&out, "/share/bannermanor/fonts"), 1, "the AGNOS path");
+    install_dir_from_exe("/opt/bnrmr-1.6.0/bin/bnrmr", &out, 256);
+    assert_eq(streq(&out, "/opt/bnrmr-1.6.0/share/bannermanor/fonts"), 1, "an unpacked tarball");
+    assert_eq(install_dir_from_exe("/home/u/repo/build/bnrmr", &out, 256), 0, "not in bin/ -> none (the golden suite)");
+    assert_eq(install_dir_from_exe("/usr/sbin/bnrmr", &out, 256), 0, "sbin is not bin");
+    assert_eq(install_dir_from_exe("/usr/xbin/bnrmr", &out, 256), 0, "xbin is not bin");
+    assert_eq(install_dir_from_exe("bin/bnrmr", &out, 256), 0, "relative -> none");
+    assert_eq(install_dir_from_exe("/bnrmr", &out, 256), 0, "root -> none");
+    assert_eq(install_dir_from_exe(0, &out, 256), 0, "null -> none");
+    assert_eq(install_dir_from_exe("/usr/local/bin/bnrmr", &out, 34), 0, "no room for the NUL -> none");
+}
+
+# The search path itself, from synthetic BNRMR_FONTS and executable
+# values. Restores the process's real path at the end.
+fn t_fontpath_resolve() {
+    test_group("fontpath / fontpath_setup_from + font_resolve");
+    var out[4200];
+    assert_eq(fontpath_setup_from(0, 0), 0, "no env, no exe");
+    assert_eq(fontpath_count(), 1, "just ./fonts");
+    assert_eq(streq(fontpath_dir(0), "./fonts"), 1, "./fonts");
+    assert_eq(font_resolve("slim", &out, 4200), FP_FOUND, "slim in ./fonts");
+    assert_eq(streq(&out, "./fonts/slim.cyml"), 1, "its path");
+    assert_eq(font_resolve("nosuch", &out, 4200), FP_MISSING, "nosuch -> missing");
+    assert_eq(fontpath_setup_from("tests/golden/cwd/envfonts", "/opt/x/bin/bnrmr"), 0, "env and exe");
+    assert_eq(fontpath_count(), 3, "env, ./fonts, install");
+    assert_eq(streq(fontpath_dir(0), "tests/golden/cwd/envfonts"), 1, "env first");
+    assert_eq(streq(fontpath_dir(1), "./fonts"), 1, "./fonts second");
+    assert_eq(streq(fontpath_dir(2), "/opt/x/share/bannermanor/fonts"), 1, "install third");
+    assert_eq(font_resolve("block", &out, 4200), FP_FOUND, "block: env shadows ./fonts");
+    assert_eq(streq(&out, "tests/golden/cwd/envfonts/block.cyml"), 1, "the env copy");
+    assert_eq(font_resolve("big", &out, 4200), FP_FOUND, "big falls through to ./fonts");
+    assert_eq(streq(&out, "./fonts/big.cyml"), 1, "the ./fonts copy");
+    assert_eq(fontpath_setup_from("", 0), 0, "empty env is unset");
+    assert_eq(fontpath_count(), 1, "just ./fonts again");
+    assert_eq(fontpath_setup_from("a\x1bb", 0), 0 - 1, "a control byte -> -1");
+    var desc[512];
+    fontpath_setup_from("no/such/dir", 0);
+    var dn = fontpath_describe(&desc, 0, 512);
+    store8(&desc + dn, 0);
+    assert_eq(streq(&desc, "no/such/dir (missing), ./fonts"), 1, "describe marks the missing dir");
+    #ifdef CYRIUS_TARGET_LINUX
+    # From a directory with no fonts/: block is built in, slim is nowhere.
+    if (sys_chdir("tests/golden/cwd/empty") == 0) {
+        fontpath_setup_from(0, 0);
+        var rb = font_resolve("block", &out, 4200);
+        var rs = font_resolve("slim", &out, 4200);
+        sys_chdir("../../../..");
+        assert_eq(rb, FP_BUILTIN, "block with no block.cyml anywhere -> built in");
+        assert_eq(rs, FP_MISSING, "slim -> missing");
+    }
+    #endif
+    fontpath_setup();
 }
 
 fn t_cli_parse_align() {
@@ -1683,11 +1769,13 @@ fn t_cli_list_fonts() {
         var rc = cmd_list_fonts();
         var n = _cap_end(saved, rd, wr, buf, 8192);
         assert_eq(rc, 0, "exit 0");
-        assert_eq(memeq(buf, "Available fonts (fonts/):\n\n", 27), 1, "header line, blank line");
+        assert_eq(memeq(buf, "Available fonts (--font NAME):\n\n", 32), 1, "header line, blank line");
         assert_eq(_has(buf, n, "  big        7x7 gap=1  "), 1, "big: name column, geometry");
         assert_eq(_has(buf, n, "  block      5x5 gap=1  "), 1, "block");
         assert_eq(_has(buf, n, "  slim       4x5 gap=1  "), 1, "slim");
         assert_eq(_has(buf, n, "malformed"), 0, "no in-tree font is malformed");
+        assert_eq(_has(buf, n, "\nSearched: ./fonts"), 1, "the directories searched, last");
+        assert_eq(_has(buf, n, "built in"), 0, "./fonts/block.cyml shadows the built-in block");
     }
     #endif
 }
@@ -1727,6 +1815,59 @@ fn t_layout_resolve_frame() {
         sys_close(m);
     }
     #endif
+}
+
+# The --font NAME diagnostics (1.6.0): not found names the directories,
+# malformed names the file, with control bytes as '?'.
+fn t_cli_report_font_error() {
+    test_group("cli / report_font_error");
+    #ifdef CYRIUS_TARGET_LINUX
+    var rd = 0;
+    var wr = 0;
+    var buf = alloc(8192);
+    fontpath_setup_from("no/such/dir", 0);
+    var saved = _cap_begin_fd(2, &rd, &wr);
+    if (saved >= 0) {
+        var rc = report_font_error("x", FP_MISSING, "");
+        report_font_error("y", FP_FOUND, "./fonts/y\x1b.cyml");
+        var n = _cap_end_fd(2, saved, rd, wr, buf, 8192);
+        assert_eq(rc, 1, "returns 1");
+        var want = alloc(256);
+        var wn = _cat(want, 0, "bnrmr: font 'x' not found (searched: no/such/dir (missing), ./fonts)\n");
+        wn = _cat(want, wn, "bnrmr: font 'y' is malformed: ./fonts/y?.cyml\n");
+        store8(want + wn, 0);
+        assert_eq(_pt_same(buf, n, want, strlen(want)), 1, "both lines, exactly");
+    }
+    fontpath_setup();
+    #endif
+}
+
+# man/bnrmr.1 (1.6.0) must document every flag, the environment and the
+# exit status. A doc-drift check, like the --help one below; the CI step
+# runs groff -ww over it for the formatting.
+fn t_man_page() {
+    test_group("man/bnrmr.1 names every flag");
+    var lb[8];
+    store64(&lb, 0);
+    var m = _slurp("man/bnrmr.1", 65536, &lb);
+    assert(m != 0, "man/bnrmr.1 read");
+    if (m != 0) {
+        var n = load64(&lb);
+        assert_eq(_has(m, n, "\\-\\-font"), 1, "--font");
+        assert_eq(_has(m, n, "\\-\\-align"), 1, "--align");
+        assert_eq(_has(m, n, "\\-\\-width"), 1, "--width");
+        assert_eq(_has(m, n, "\\-\\-pad"), 1, "--pad");
+        assert_eq(_has(m, n, "\\-\\-color"), 1, "--color");
+        assert_eq(_has(m, n, "\\-\\-list\\-fonts"), 1, "--list-fonts");
+        assert_eq(_has(m, n, "\\-\\-version"), 1, "--version");
+        assert_eq(_has(m, n, "\\-\\-help"), 1, "--help");
+        assert_eq(_has(m, n, ".B \\-\\-\n"), 1, "the -- terminator");
+        assert_eq(_has(m, n, "BNRMR_FONTS"), 1, "BNRMR_FONTS");
+        assert_eq(_has(m, n, "COLUMNS"), 1, "COLUMNS");
+        assert_eq(_has(m, n, ".SH EXIT STATUS"), 1, "exit status");
+        assert_eq(_has(m, n, "share/bannermanor/fonts"), 1, "the install directory");
+        fl_free(m);
+    }
 }
 
 # Every flag the parser registers must appear in --help, and so must the
@@ -2013,7 +2154,11 @@ fn main() {
     t_flf_header_gates();
     t_flf_size_gate();
     t_cli_is_flf_path();
-    t_cli_build_font_path();
+    t_fontpath_name_ok();
+    t_fontpath_env_ok();
+    t_fontpath_install_dir();
+    t_fontpath_resolve();
+    t_cli_report_font_error();
     t_cli_parse_align();
     t_cli_parse_count_flag();
     t_cli_join_positionals();
@@ -2021,6 +2166,7 @@ fn main() {
     t_cli_write_scrubbed();
     t_cli_print_padded();
     t_cli_usage_names_every_flag();
+    t_man_page();
     t_cli_list_fonts();
     t_cli_argv();
     t_cli_flags();

@@ -15,6 +15,8 @@
 # `syscall(1, 1, ...)`.
 
 include "src/render.cyr"
+include "src/font_block.cyr"
+include "src/fontpath.cyr"
 include "lib/cmdit.cyr"
 include "lib/fs.cyr"
 
@@ -121,6 +123,40 @@ fn report_parse_error(fs): i64 {
     return 1;
 }
 
+# The stderr line for a --font NAME that did not load, by font_resolve's
+# answer. Returns 1. Through 1.5.0 one line covered both cases ("failed
+# to load font (missing or malformed)"); since 1.6.0 the search path makes
+# the difference worth saying (ADR 0003):
+#   bnrmr: font 'X' not found (searched: ./fonts, /usr/share/... (missing))
+#   bnrmr: font 'X' is malformed: ./fonts/X.cyml
+# The name passed font_name_ok, so it holds no control byte; the path and
+# the directories are scrubbed on the way out.
+fn report_font_error(name, where, path): i64 {
+    var line[8192];
+    var p = &line;
+    var n = _cat(p, 0, "bnrmr: font '");
+    n = _cat(p, n, name);
+    if (where == FP_FOUND) {
+        n = _cat(p, n, "' is malformed: ");
+        var pl = strlen(path);
+        var k = 0;
+        while (k < pl && n < 8000) {
+            var b = load8(path + k);
+            if (_scrub_ctl(b) != b) { b = 63; }
+            store8(p + n, b);
+            n = n + 1;
+            k = k + 1;
+        }
+    } else {
+        n = _cat(p, n, "' not found (searched: ");
+        n = fontpath_describe(p, n, 8000);
+        n = _cat(p, n, ")");
+    }
+    store8(p + n, 0);
+    _err_line(p);
+    return 1;
+}
+
 # Append cstring `s` to buf at `n`; return the new length.
 fn _cat(buf, n, s): i64 {
     var sl = strlen(s);
@@ -146,11 +182,6 @@ fn _err_token(buf, n, tok): i64 {
     return n;
 }
 
-enum CliLimits {
-    FONT_NAME_CAP = 64;       # longest --font NAME build_font_path accepts
-    FONT_PATH_CAP = 80;       # "fonts/" + NAME + ".cyml" + NUL = 76 at most
-}
-
 # Does `name` end in ".flf"? Used to dispatch --font to the legacy
 # figlet-font adapter (src/flf.cyr) instead of the CYML loader.
 # When true, the name is treated as a literal path — no path-segment
@@ -160,33 +191,6 @@ fn _is_flf_path(name): i64 {
     var n = strlen(name);
     if (n < 5) { return 0; }
     return memeq(name + n - 4, ".flf", 4);
-}
-
-# Build "fonts/<name>.cyml" into out, null-terminated. Returns 0 if
-# the name is empty, too long, or contains a byte that we won't allow
-# (path separators, dots, control chars — keeps --font scoped to
-# `fonts/` regardless of caller intent).
-fn build_font_path(out, out_cap, name): i64 {
-    var nlen = strlen(name);
-    if (nlen <= 0) { return 0; }
-    if (nlen > FONT_NAME_CAP) { return 0; }
-    var i = 0;
-    while (i < nlen) {
-        var c = load8(name + i);
-        if (c == 47)  { return 0; }   # '/'
-        if (c == 92)  { return 0; }   # '\'
-        if (c == 46)  { return 0; }   # '.'
-        if (c < 32)   { return 0; }
-        if (c == 127) { return 0; }
-        i = i + 1;
-    }
-    var need = 12 + nlen;
-    if (need > out_cap) { return 0; }
-    memcpy(out + 0, "fonts/", 6);
-    memcpy(out + 6, name, nlen);
-    memcpy(out + 6 + nlen, ".cyml", 5);
-    store8(out + 11 + nlen, 0);
-    return 11 + nlen;
 }
 
 # The usage block, composed into one buffer and written with one write:
@@ -215,8 +219,10 @@ fn _usage_to(fd): i64 {
     _ub("  bnrmr [FLAGS] TEXT...");
     _ub("");
     _ub("Flags:");
-    _ub("  -f, --font NAME       load fonts/NAME.cyml (default: embedded block)");
-    _ub("                        or a path ending in .flf for a legacy figlet font");
+    _ub("  -f, --font NAME       NAME.cyml from $BNRMR_FONTS, ./fonts or the");
+    _ub("                        install's share/bannermanor/fonts (block is");
+    _ub("                        built in), or a path ending in .flf for a");
+    _ub("                        legacy figlet font (default: block)");
     _ub("      --align V         left | center | right (default: left)");
     _ub("  -w, --width N         truncate at glyph boundary at N columns");
     _ub("                        (default: 0 = unlimited; if N is smaller");
@@ -227,7 +233,8 @@ fn _usage_to(fd): i64 {
     _ub("                        magenta, cyan, white (or bright_<name> /");
     _ub("                        bright-<name>), or 'rainbow'");
     _ub("                        for per-row cycling. Suppressed on non-TTY stdout.");
-    _ub("      --list-fonts      list available fonts and exit");
+    _ub("      --list-fonts      list the fonts --font can find, and where it");
+    _ub("                        looked, and exit");
     _ub("      --version         print version and exit");
     _ub("  -h, --help            print this help and exit");
     _ub("      --                end of flags: everything after it is TEXT,");
@@ -236,6 +243,9 @@ fn _usage_to(fd): i64 {
     _ub("Coverage: A-Z, 0-9, space, printable punctuation. Lowercase folds");
     _ub("to uppercase when the font has no lowercase glyphs. Unsupported");
     _ub("characters render as blank.");
+    _ub("");
+    _ub("Errors go to stderr with exit status 1, as does a failed write.");
+    _ub("See bnrmr(1) for the font search path and environment.");
     if (fd == 1) { return _emit(&buf, _ub_len); }
     file_write(fd, &buf, _ub_len);
     return 0;
@@ -341,53 +351,233 @@ fn _emit_int(v): i64 {
     return _emit(&b, e);
 }
 
-# --list-fonts handler. Walks ./fonts, sorts alphabetically, prints
-# one line per font: "  NAME  WxH gap=N  DESCRIPTION".
-fn cmd_list_fonts(): i64 {
-    var dir = str_from("fonts");
-    var ext = str_from(".cyml");
-    var files = find_files(dir, ext);
-    _sort_paths(files);
+# ---- --list-fonts (rewritten 1.6.0, ADR 0003) ----
+#
+# Lists exactly what `--font NAME` accepts:
+#   - every directory on the search path (fontpath.cyr), read one level
+#     deep with dir_list. The walk through 1.5.0 recursed 64 levels, and
+#     a nested font listed under a name no spelling could load (A-12);
+#   - each font by its file STEM, the spelling --font takes. Through
+#     1.5.0 the listing showed the `name` field, which --font never reads
+#     (A-11);
+#   - checked with the full loader, so a font whose glyph body is broken
+#     is reported, not listed clean;
+#   - the first directory to define a stem wins, as in a lookup;
+#   - the built-in block font, when no block.cyml shadows it.
+# Rows are sorted by stem, the name column is one past the widest stem
+# (at least 10, the old fixed width, so a listing of short names is
+# unchanged), and the last line names the directories searched.
+#
+# A row is an alloc'd LR_SIZE record.
+enum ListRow {
+    LR_STEM = 0;              # cstring: the --font spelling
+    LR_KIND = 8;              # LK_*
+    LR_PATH = 16;             # cstring: the file, for a skipped row
+    LR_W = 24;
+    LR_H = 32;
+    LR_GAP = 40;
+    LR_DESC = 48;             # cstring, possibly empty
+    LR_SIZE = 56;
+}
 
-    _emit_line("Available fonts (fonts/):");
-    _emit_line("");
+enum ListKind {
+    LK_FONT = 0;
+    LK_BUILTIN = 1;
+    LK_MALFORMED = 2;
+    LK_UNNAMED = 3;           # a stem --font cannot spell
+}
 
-    var nf = vec_len(files);
-    if (nf == 0) {
-        _emit_line("  (none found — try running from the project root)");
-        return 0;
-    }
+fn _lr_new(stem, kind, path): i64 {
+    var r = alloc(LR_SIZE);
+    if (r == 0) { return 0; }
+    store64(r + LR_STEM, stem);
+    store64(r + LR_KIND, kind);
+    store64(r + LR_PATH, path);
+    store64(r + LR_W, 0);
+    store64(r + LR_H, 0);
+    store64(r + LR_GAP, 0);
+    store64(r + LR_DESC, "");
+    return r;
+}
 
+# Copy buf[0..n) to a fresh NUL-terminated cstring.
+fn _cdup(buf, n): i64 {
+    var c = alloc(n + 1);
+    if (c == 0) { return 0; }
+    memcpy(c, buf, n);
+    store8(c + n, 0);
+    return c;
+}
+
+# Has `stem` been listed already?
+fn _lr_seen(rows, stem): i64 {
     var i = 0;
-    while (i < nf) {
-        var path_str = vec_get(files, i);
-        var path_cstr = str_cstr(path_str);
-        var h = font_header_load(path_cstr);
-        if (h == 0) {
-            _emit("  ", 2);
-            # Scrub the path before echoing it (F-012). This branch runs
-            # precisely because the parser REJECTED the file, so the
-            # parser-boundary scrub in _font_get_str cannot cover it, and
-            # the bytes here come straight from the filename. A font file
-            # named "ev<ESC>[31mil.cyml" would otherwise emit live SGR.
-            _write_scrubbed(str_data(path_str), str_len(path_str));
-            _emit_line("  (malformed — skipped)");
-        } else {
-            _emit("  ", 2);
-            _print_padded(font_hdr_name(h), 10);
-            _emit(" ", 1);
-            _emit_int(font_hdr_width(h));
-            _emit("x", 1);
-            _emit_int(font_hdr_height(h));
-            _emit(" gap=", 5);
-            _emit_int(font_hdr_gap(h));
-            _emit("  ", 2);
-            var desc = font_hdr_desc(h);
-            _emit(desc, strlen(desc));
-            _emit("\n", 1);
+    var n = vec_len(rows);
+    while (i < n) {
+        if (streq(load64(vec_get(rows, i) + LR_STEM), stem) == 1) { return 1; }
+        i = i + 1;
+    }
+    return 0;
+}
+
+# Insertion sort of row records by stem, bytewise.
+fn _lr_sort(rows): i64 {
+    var n = vec_len(rows);
+    var i = 1;
+    while (i < n) {
+        var cur = vec_get(rows, i);
+        var cs = str_from(load64(cur + LR_STEM));
+        var j = i - 1;
+        var done = 0;
+        while (j >= 0 && done == 0) {
+            var prev = vec_get(rows, j);
+            if (_str_lex_cmp(str_from(load64(prev + LR_STEM)), cs) > 0) {
+                vec_set(rows, j + 1, prev);
+                j = j - 1;
+            } else { done = 1; }
+        }
+        vec_set(rows, j + 1, cur);
+        i = i + 1;
+    }
+    return 0;
+}
+
+# Add the rows for one search directory. Its entries are sorted so a
+# directory holding both a.cyml and a stem collision is read in a fixed
+# order. Returns 0, or -1 if the directory could not be read.
+fn _lr_scan_dir(rows, dir): i64 {
+    var entries = vec_new();
+    if (dir_list_checked(str_from(dir), entries) < 0) { return 0 - 1; }
+    _sort_paths(entries);
+    var path[4200];
+    var i = 0;
+    var ne = vec_len(entries);
+    while (i < ne) {
+        var e = vec_get(entries, i);
+        var el = str_len(e);
+        var ed = str_data(e);
+        if (el > 5 && memeq(ed + el - 5, ".cyml", 5) == 1) {
+            var stem = _cdup(ed, el - 5);
+            if (stem != 0 && _lr_seen(rows, stem) == 0) {
+                var dl = strlen(dir);
+                var pl = dl + 1 + el;
+                var full = alloc(pl + 1);
+                memcpy(full, dir, dl);
+                store8(full + dl, 47);
+                memcpy(full + dl + 1, ed, el);
+                store8(full + pl, 0);
+                if (font_name_ok(stem) == 0) {
+                    vec_push(rows, _lr_new(stem, LK_UNNAMED, full));
+                } else {
+                    var f = font_load_file(full);
+                    if (f == 0) {
+                        vec_push(rows, _lr_new(stem, LK_MALFORMED, full));
+                    } else {
+                        var r = _lr_new(stem, LK_FONT, full);
+                        store64(r + LR_W, font_width(f));
+                        store64(r + LR_H, font_height(f));
+                        store64(r + LR_GAP, font_gap(f));
+                        # The full loader passed, so the header loader does
+                        # too; it supplies the (scrubbed) description.
+                        var h = font_header_load(full);
+                        if (h != 0) { store64(r + LR_DESC, font_hdr_desc(h)); }
+                        vec_push(rows, r);
+                    }
+                }
+            }
         }
         i = i + 1;
     }
+    return 0;
+}
+
+fn cmd_list_fonts(): i64 {
+    if (fontpath_setup() != 0) {
+        _err_line("bnrmr: BNRMR_FONTS is not a usable directory path");
+        return 1;
+    }
+    var rows = vec_new();
+    var nd = fontpath_count();
+    var unreadable = vec_new();
+    var di = 0;
+    while (di < nd) {
+        var d = fontpath_dir(di);
+        var st[144];
+        if (xstat(d, &st) == 0) {
+            if (_lr_scan_dir(rows, d) != 0) { vec_push(unreadable, d); }
+        }
+        di = di + 1;
+    }
+    if (_lr_seen(rows, "block") == 0) {
+        var b = _lr_new("block", LK_BUILTIN, 0);
+        var ef = block_font_embed();
+        if (b != 0 && ef != 0) {
+            store64(b + LR_W, font_width(ef));
+            store64(b + LR_H, font_height(ef));
+            store64(b + LR_GAP, font_gap(ef));
+            store64(b + LR_DESC, "built in: the default font");
+            vec_push(rows, b);
+        }
+    }
+    _lr_sort(rows);
+
+    var col = 10;
+    var nr = vec_len(rows);
+    var i = 0;
+    while (i < nr) {
+        var sl = strlen(load64(vec_get(rows, i) + LR_STEM));
+        # One column past the widest name, so it is padded like the rest
+        # (_print_padded gives a name at or past the width one space).
+        if (load64(vec_get(rows, i) + LR_KIND) <= LK_BUILTIN && sl + 1 > col) { col = sl + 1; }
+        i = i + 1;
+    }
+
+    _emit_line("Available fonts (--font NAME):");
+    _emit_line("");
+    i = 0;
+    while (i < nr) {
+        var r = vec_get(rows, i);
+        var kind = load64(r + LR_KIND);
+        _emit("  ", 2);
+        if (kind <= LK_BUILTIN) {
+            _print_padded(load64(r + LR_STEM), col);
+            _emit(" ", 1);
+            _emit_int(load64(r + LR_W));
+            _emit("x", 1);
+            _emit_int(load64(r + LR_H));
+            _emit(" gap=", 5);
+            _emit_int(load64(r + LR_GAP));
+            _emit("  ", 2);
+            var desc = load64(r + LR_DESC);
+            _emit(desc, strlen(desc));
+            _emit("\n", 1);
+        } else {
+            # Scrub the path before echoing it (F-012): the bytes come
+            # straight from the filesystem, and a file named
+            # "ev<ESC>[31mil.cyml" would otherwise emit live SGR.
+            var fp = load64(r + LR_PATH);
+            _write_scrubbed(fp, strlen(fp));
+            if (kind == LK_MALFORMED) { _emit_line("  (malformed — skipped)"); }
+            else { _emit_line("  (--font cannot spell this name — skipped)"); }
+        }
+        i = i + 1;
+    }
+
+    var line[8192];
+    var n = _cat(&line, 0, "Searched: ");
+    n = fontpath_describe(&line, n, 8000);
+    var nu = vec_len(unreadable);
+    if (nu > 0) { n = _cat(&line, n, " (unreadable: "); }
+    var u = 0;
+    while (u < nu && n < 7900) {
+        if (u > 0) { n = _cat(&line, n, ", "); }
+        n = _err_token(&line, n, vec_get(unreadable, u));
+        u = u + 1;
+    }
+    if (nu > 0) { n = _cat(&line, n, ")"); }
+    store8(&line + n, 0);
+    _emit_line("");
+    _emit_line(&line);
     return 0;
 }
 

@@ -1,0 +1,243 @@
+# fontpath.cyr — where `--font NAME` looks (1.6.0, ADR 0003).
+#
+# In order, the first NAME.cyml that exists is the font:
+#   1. $BNRMR_FONTS, if set and non-empty (one directory)
+#   2. ./fonts                      (the only entry through 1.5.0)
+#   3. <prefix>/share/bannermanor/fonts, when the running executable is
+#      <prefix>/bin/bnrmr (an install, or an unpacked release tarball)
+#   4. the built-in block font, for NAME = block only
+# A first match that fails to load is an error, never a fall-through.
+#
+# Through 1.5.0 bnrmr could load only fonts/NAME.cyml relative to the
+# current directory, so an installed bnrmr found no fonts at all (issue
+# 0015). With $BNRMR_FONTS unset, ./fonts is still consulted first, so
+# every lookup that worked then resolves to the same file now.
+#
+# Everything that reads the process (the environment, /proc/self/exe,
+# argv[0]) is in fontpath_setup(); the rules are in pure functions the
+# test suite drives with synthetic inputs.
+
+include "src/font.cyr"
+
+enum FontPathLimits {
+    FP_ENV_CAP = 1024;        # BNRMR_FONTS must be shorter than this
+    FP_DIR_CAP = 4096;        # longest directory the path can hold (PATH_MAX)
+    FP_PATH_CAP = 4200;       # directory + '/' + 64-byte name + ".cyml" + NUL
+    FP_MAX_DIRS = 3;          # BNRMR_FONTS, ./fonts, the install directory
+    FONT_NAME_CAP = 64;       # longest --font NAME accepted
+}
+
+# font_resolve results.
+enum FontPathResult {
+    FP_FOUND = 0;             # a file: its path is in `out`
+    FP_BUILTIN = 1;           # NAME is block and no block.cyml exists: embedded
+    FP_MISSING = 2;           # nowhere on the path
+}
+
+var FP_INSTALL_SUFFIX = "/share/bannermanor/fonts";
+var FP_CWD_DIR = "./fonts";
+
+# The search path, built once by fontpath_setup / fontpath_setup_from.
+# Each entry is an alloc'd, NUL-terminated directory path.
+var _fp_dirs = 0;             # FP_MAX_DIRS pointers
+var _fp_n = 0;
+
+# Does `name` pass the --font NAME byte rules? 1 or 0. The rules keep the
+# lookup inside each search directory whatever that directory is: no
+# path separator, no dot (so no "..", and no second extension), no control
+# byte, 1..FONT_NAME_CAP bytes. Through 1.5.0 this was the inside of
+# build_font_path, which hardcoded the "fonts/" prefix.
+fn font_name_ok(name): i64 {
+    if (name == 0) { return 0; }
+    var nlen = strlen(name);
+    if (nlen <= 0) { return 0; }
+    if (nlen > FONT_NAME_CAP) { return 0; }
+    var i = 0;
+    while (i < nlen) {
+        var c = load8(name + i);
+        if (c == 47)  { return 0; }   # '/'
+        if (c == 92)  { return 0; }   # '\'
+        if (c == 46)  { return 0; }   # '.'
+        if (c < 32)   { return 0; }
+        if (c == 127) { return 0; }
+        i = i + 1;
+    }
+    return 1;
+}
+
+# Is `v` a usable BNRMR_FONTS value? 1 or 0. Non-empty, shorter than
+# FP_ENV_CAP, and no control byte (C0, DEL, C1), so it can be echoed in a
+# diagnostic as it is. Validated like the --font value it extends.
+fn font_env_ok(v): i64 {
+    if (v == 0) { return 0; }
+    var n = strlen(v);
+    if (n <= 0) { return 0; }
+    if (n >= FP_ENV_CAP) { return 0; }
+    var i = 0;
+    while (i < n) {
+        var b = load8(v + i);
+        if (_scrub_ctl(b) != b) { return 0; }
+        i = i + 1;
+    }
+    return 1;
+}
+
+# "<dir>/<name>.cyml" into out, NUL-terminated. Returns the length, or 0
+# if it does not fit `cap`. `name` must already have passed font_name_ok.
+fn font_path_join(out, cap, dir, name): i64 {
+    var dl = strlen(dir);
+    var nl = strlen(name);
+    var need = dl + 1 + nl + 5 + 1;
+    if (need > cap) { return 0; }
+    memcpy(out, dir, dl);
+    store8(out + dl, 47);
+    memcpy(out + dl + 1, name, nl);
+    memcpy(out + dl + 1 + nl, ".cyml", 5);
+    store8(out + need - 1, 0);
+    return need - 1;
+}
+
+# The install directory for an executable at `exe` (an absolute path),
+# into out: "<prefix>/share/bannermanor/fonts" when exe is
+# "<prefix>/bin/<anything>". Returns the length, or 0 when exe is not
+# absolute, is not in a directory named "bin", or the result does not fit
+# `cap`. Pure. "/bin/bnrmr" (the AGNOS layout) gives
+# "/share/bannermanor/fonts"; "/repo/build/bnrmr" gives 0, which is what
+# keeps the golden suite from seeing a host's installed fonts.
+fn install_dir_from_exe(exe, out, cap): i64 {
+    if (exe == 0) { return 0; }
+    var n = strlen(exe);
+    if (n < 2) { return 0; }
+    if (load8(exe) != 47) { return 0; }
+    # The executable's directory ends at the last '/'.
+    var d = n - 1;
+    while (d > 0 && load8(exe + d) != 47) { d = d - 1; }
+    # That directory's last component must be "bin": exe[d-4 .. d) == "/bin".
+    if (d < 4) { return 0; }
+    if (memeq(exe + d - 4, "/bin", 4) != 1) { return 0; }
+    var plen = d - 4;                         # the prefix, possibly empty
+    var sl = strlen(FP_INSTALL_SUFFIX);
+    if (plen + sl + 1 > cap) { return 0; }
+    memcpy(out, exe, plen);
+    memcpy(out + plen, FP_INSTALL_SUFFIX, sl);
+    store8(out + plen + sl, 0);
+    return plen + sl;
+}
+
+# The running executable's path into out (NUL-terminated); 0 if unknown.
+# Linux: /proc/self/exe, which is right however bnrmr was started. Else,
+# and on AGNOS (no /proc), argv[0] when it is an absolute path.
+fn _exe_path(out, cap): i64 {
+    #ifndef CYRIUS_TARGET_AGNOS
+    var n = xreadlink("/proc/self/exe", out, cap - 1);
+    if (n > 0 && n < cap) {
+        store8(out + n, 0);
+        return n;
+    }
+    #endif
+    var a0 = argv(0);
+    if (a0 == 0) { return 0; }
+    if (load8(a0) != 47) { return 0; }
+    var al = strlen(a0);
+    if (al >= cap) { return 0; }
+    memcpy(out, a0, al);
+    store8(out + al, 0);
+    return al;
+}
+
+fn _fp_add(dir): i64 {
+    var n = strlen(dir);
+    var copy = alloc(n + 1);
+    if (copy == 0) { return 0 - 1; }
+    memcpy(copy, dir, n);
+    store8(copy + n, 0);
+    store64(_fp_dirs + _fp_n * 8, copy);
+    _fp_n = _fp_n + 1;
+    return 0;
+}
+
+# Build the search path from an explicit BNRMR_FONTS value (`env`, 0 if
+# unset) and executable path (`exe`, 0 if unknown). Returns 0, or -1 if
+# `env` is set but not usable (font_env_ok), in which case the path is
+# not built: the caller reports it. Pure apart from the allocation.
+fn fontpath_setup_from(env, exe): i64 {
+    _fp_n = 0;
+    if (_fp_dirs == 0) { _fp_dirs = alloc(FP_MAX_DIRS * 8); }
+    if (_fp_dirs == 0) { return 0 - 1; }
+    if (env != 0) {
+        if (strlen(env) > 0) {
+            if (font_env_ok(env) == 0) { return 0 - 1; }
+            if (_fp_add(env) != 0) { return 0 - 1; }
+        }
+    }
+    if (_fp_add(FP_CWD_DIR) != 0) { return 0 - 1; }
+    var inst[4200];
+    if (install_dir_from_exe(exe, &inst, FP_DIR_CAP) > 0) {
+        if (_fp_add(&inst) != 0) { return 0 - 1; }
+    }
+    return 0;
+}
+
+# fontpath_setup_from with this process's environment and executable.
+fn fontpath_setup(): i64 {
+    var exe[4200];
+    var en = _exe_path(&exe, FP_DIR_CAP);
+    var ep = 0;
+    if (en > 0) { ep = &exe; }
+    return fontpath_setup_from(getenv("BNRMR_FONTS"), ep);
+}
+
+fn fontpath_count(): i64 { return _fp_n; }
+
+# The i-th search directory (0-based), or 0.
+fn fontpath_dir(i): i64 {
+    if (i < 0 || i >= _fp_n) { return 0; }
+    return load64(_fp_dirs + i * 8);
+}
+
+# Look `name` (already font_name_ok) up on the search path. FP_FOUND with
+# the file's path in `out`; FP_BUILTIN for block when no block.cyml
+# exists; FP_MISSING otherwise. "Exists" is anything at that path, not
+# just a regular file: a FIFO or a directory named NAME.cyml is the first
+# match, and the loader's regular-file gate then rejects it loudly.
+fn font_resolve(name, out, cap): i64 {
+    var st[144];
+    var i = 0;
+    while (i < _fp_n) {
+        if (font_path_join(out, cap, fontpath_dir(i), name) > 0) {
+            if (xstat(out, &st) == 0) { return FP_FOUND; }
+        }
+        i = i + 1;
+    }
+    if (streq(name, "block") == 1) { return FP_BUILTIN; }
+    return FP_MISSING;
+}
+
+# Append the search directories to buf at n, comma-separated, each marked
+# " (missing)" if nothing is there. Returns the new length. BNRMR_FONTS
+# was checked for control bytes; the install directory comes from the
+# executable's path, so it is scrubbed like any echoed path.
+fn fontpath_describe(buf, n, cap): i64 {
+    var st[144];
+    var i = 0;
+    while (i < _fp_n) {
+        var d = fontpath_dir(i);
+        var dl = strlen(d);
+        if (n + dl + 16 > cap) { return n; }
+        if (i > 0) { memcpy(buf + n, ", ", 2); n = n + 2; }
+        var k = 0;
+        while (k < dl) {
+            var b = load8(d + k);
+            if (_scrub_ctl(b) != b) { b = 63; }
+            store8(buf + n + k, b);
+            k = k + 1;
+        }
+        n = n + dl;
+        if (xstat(d, &st) != 0) {
+            memcpy(buf + n, " (missing)", 10);
+            n = n + 10;
+        }
+        i = i + 1;
+    }
+    return n;
+}

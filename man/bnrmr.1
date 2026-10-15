@@ -1,0 +1,224 @@
+.\" bnrmr(1) - BannerManor. Keep in step with print_usage (src/cli.cyr);
+.\" tests/bannermanor.tcyr checks that every flag appears here.
+.TH BNRMR 1 2026-10-15 "BannerManor 1.6.0" "User Commands"
+.SH NAME
+bnrmr \- render text as an ASCII-art banner
+.SH SYNOPSIS
+.B bnrmr
+.RI [ flags ]
+.I text
+\&...
+.br
+.B bnrmr
+.B \-\-list\-fonts
+.br
+.B bnrmr
+.BR \-\-help " | " \-\-version
+.SH DESCRIPTION
+.B bnrmr
+writes
+.I text
+to standard output as a banner of
+.B #
+characters, one font row per output line.
+The words of
+.I text
+are joined with single spaces;
+the joined text may be at most 1024 bytes.
+It renders and exits: no configuration file, no daemon, no cache.
+.PP
+Fonts are CYML files (BannerManor's own format) or legacy figlet
+.B .flf
+files.
+Without
+.BR \-\-font ,
+the built-in
+.B block
+font is used, so
+.B bnrmr
+needs no files at all.
+.PP
+Printable ASCII (space through
+.BR ~ )
+renders.
+Lowercase letters fold to uppercase when the font has no lowercase glyphs.
+Any other byte, including every byte of a multi-byte UTF-8 character,
+renders as the font's blank glyph.
+.SH OPTIONS
+.TP
+.BR \-f ", " \-\-font " \fINAME\fR"
+Use font
+.IR NAME ,
+found on the font search path (see
+.BR FONTS ).
+.I NAME
+may not contain
+.BR / ,
+.BR \e ,
+.B .
+or a control character, and is at most 64 bytes.
+A value ending in
+.B .flf
+is instead the path of a figlet font, used as given.
+.TP
+.BI \-\-align " WHERE"
+.BR left " (default), " center " or " right ;
+also
+.BR L ", " C ", " R " and " centre .
+Alignment is within the frame: the
+.B \-\-width
+value if given, else the terminal's width, else
+.BR $COLUMNS ,
+else 80.
+.TP
+.BR \-w ", " \-\-width " \fIN\fR"
+Draw only the glyphs that fit in
+.I N
+columns, cutting at a glyph boundary.
+0 (the default) means no limit.
+At most 4096.
+A width narrower than one glyph draws blank rows.
+Without
+.BR \-\-width ,
+output to a terminal is cut to the terminal's width;
+output to a pipe or file is not.
+.TP
+.BI \-\-pad " N"
+Write
+.I N
+blank lines above and below the banner (default 0, at most 64).
+.TP
+.BI \-\-color " NAME"
+Color each row:
+.BR black ", " red ", " green ", " yellow ", " blue ", " magenta ,
+.BR cyan ", " white ,
+their
+.BI bright_ name
+or
+.BI bright\- name
+forms, or
+.B rainbow
+for a different color per row.
+Color is written only when standard output is a terminal;
+in a pipe or file the bytes are plain.
+.TP
+.B \-\-list\-fonts
+List the fonts
+.B \-\-font
+can find: name, glyph size, gap and description.
+Files that fail to load, or whose names
+.B \-\-font
+cannot spell, are listed as skipped.
+The last line names the directories searched.
+.TP
+.B \-\-version
+Print the version and exit.
+.TP
+.BR \-h ", " \-\-help
+Print a summary of the flags and exit.
+.TP
+.B \-\-
+End of flags: everything after it is text, even a word that starts with
+.BR \- .
+.PP
+Long flags take their value as the next word or after
+.BR = ;
+flags may come before or after the text.
+Short flags cannot be bundled
+.RB ( \-hf ),
+and a short flag's value is the next word
+.RB ( "\-w 20" ,
+not
+.BR \-w20 ).
+.SH FONTS
+.B \-\-font
+.I NAME
+looks for
+.IB NAME .cyml
+in these places, in order, and uses the first that exists:
+.IP 1. 4
+the directory named by
+.BR $BNRMR_FONTS ,
+if it is set and not empty;
+.IP 2. 4
+.BR ./fonts ,
+relative to the current directory;
+.IP 3. 4
+.IR prefix /share/bannermanor/fonts ,
+when
+.B bnrmr
+itself is
+.IR prefix /bin/bnrmr ,
+as it is after
+.B scripts/install.sh
+or in an unpacked release archive;
+.IP 4. 4
+for
+.B block
+only, the built-in copy.
+.PP
+The first file found is the font even if it fails to load:
+a broken font is an error that names the file,
+never a silent fall-back to another font of the same name.
+.PP
+The fonts shipped with BannerManor are
+.B block
+(5\(mu5),
+.B slim
+(4\(mu5) and
+.B big
+(7\(mu7).
+A figlet font may be at most 1 MB and its glyphs at most
+128 columns by 64 rows.
+.SH ENVIRONMENT
+.TP
+.B BNRMR_FONTS
+A directory searched before
+.BR ./fonts .
+It must be under 1024 bytes and contain no control characters;
+any other value is an error when a font is looked up.
+.TP
+.B COLUMNS
+The frame width for
+.B \-\-align
+when standard output is not a terminal and
+.B \-\-width
+is not given.
+Values above 4096 count as 4096.
+.SH EXIT STATUS
+.TP
+.B 0
+The banner, listing, help or version was written.
+.TP
+.B 1
+Anything else: an unknown or malformed flag, a font that is not found or
+does not load, text over 1024 bytes, more than 255 arguments, or a write to
+standard output that failed (a full disk, a closed descriptor).
+.PP
+Diagnostics go to standard error, so
+.RB \(dq bnrmr " ... > " file \(dq
+never writes an error message into
+.IR file .
+.SH EXAMPLES
+.nf
+bnrmr AGNOS
+bnrmr \-\-font slim \-\-align center "Welcome home"
+bnrmr \-\-color rainbow \-\-font big HI
+bnrmr \-\-font ./standard.flf hello
+bnrmr \-\- \-5 C
+bnrmr \-\-font big "$(hostname)" > /etc/motd
+.fi
+.SH FILES
+.TP
+.IB prefix /share/bannermanor/fonts/*.cyml
+The installed fonts.
+.SH SEE ALSO
+.BR figlet (6)
+.PP
+The font format:
+.I docs/adr/0001\-cyml\-font\-format.md
+and
+.I docs/guides/fonts.md
+in the BannerManor source.
+.SH BUGS
+Report them at https://github.com/MacCracken/bannermanor/issues.

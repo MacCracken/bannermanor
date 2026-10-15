@@ -5,6 +5,8 @@
 
 ## Version
 
+**1.6.0** — 2026-10-15. **Fonts findable, listing honest.** `--font NAME` now searches a path ([ADR 0003](../adr/0003-font-search-path.md), [issue 0015](issues/archive/0015-fonts-not-findable-when-installed.md)): `$BNRMR_FONTS`, then `./fonts`, then `<prefix>/share/bannermanor/fonts` when the executable is `<prefix>/bin/bnrmr`, then the built-in block for `--font block`. With `BNRMR_FONTS` unset, every lookup that worked before resolves to the same file. An installed `bnrmr`, or one from an unpacked release tarball, finds its fonts from any directory. `scripts/install.sh` and a release tarball carry the fonts and a new `bnrmr.1` man page. `--list-fonts` lists exactly what `--font` finds: file stems, one level deep, validated by the full loader, the built-in block included, and the directories searched on the last line. That resolved accepted risks A-11 and A-12. A missing font and a malformed one now get separate diagnostics that name the directories or the file. The golden frozen tier did not move; it gained 12 search-path cases, run against a staged install. Suite 3082 → 3146. See `CHANGELOG.md` [1.6.0].
+
 **1.5.0** — 2026-10-15. **Diagnostics on stderr, honest exit codes, one write per row, the malformed-input rulings.** Everything ADR 0002 unblocked. Every diagnostic goes to stderr and exit codes are unchanged ([issue 0016](issues/archive/0016-diagnostics-go-to-stdout.md)), so `bnrmr --font typo X > /etc/motd` leaves the file empty. Parse errors name what was typed (`bnrmr: unknown flag: --bogus`), and the `-HI` message points at `--`. Every stdout write is checked ([issue 0009](issues/archive/0009-write-return-never-checked.md)): `bnrmr hi > /dev/full` now exits 1 with `bnrmr: write error: no space left on device`. Each banner row is composed in one buffer, color included through darshana's `_buf` composers, and written once ([issue 0005](issues/archive/0005-write-per-cell-syscall-cost.md) Option 2): `bnrmr AGNOS` makes 5 writes, down from 50, and a natural-width render is about 5× faster in process. A CYML body with more rows than `height` is rejected ([issue 0008](issues/archive/0008-cyml-body-not-fully-consumed.md)). The `.flf` envelope grew from 64×32 to 128×64: over the 1,052-font reference corpus, 73 more fonts load (1,046 in all) and the 973 that loaded before render byte-identically. The golden frozen and snapshot tiers did not move. The error tier was re-baselined once, every record checked by script. Suite 3061 → 3082. See `CHANGELOG.md` [1.5.0].
 
 **1.4.2** — 2026-10-15. **CLI parsing on cmdit.** The stdlib table parser (`lib/flags.cyr`) is replaced by [cmdit](https://github.com/MacCracken/cmdit) 1.4.0, pinned as a `[deps.cmdit]` git dependency. cmdit is the same getopt-long core as a distlib. The flag table moved into `src/cli.cyr` (`cli_flags`), so the suite parses synthetic argv with it, and the parse-error lines into `report_parse_error`. `cmdit_argv` replaced bnrmr's own `build_argv_array`. Before the swap the golden suite gained 33 parser-grammar cases (318 in all), and every record is byte-identical across it, on x86_64 and on aarch64 under qemu. cmdit's auto `-V` is dropped (the freeze adds no flags), and help, the `--version` literal and every value check stay bnrmr's. One diagnostic changed, under ADR 0002 ruling 1: a command line too long for the stdlib's 2 MiB `/proc` read now reports `argument parse error` (exit 1, as before) instead of whatever the truncated argv produced. Binary 244,184 → 292,008 bytes: the whole cmdit bundle links. Suite 3006 → 3061. See `CHANGELOG.md` [1.4.2].
@@ -159,6 +161,14 @@ Single-shot CLI: text in, banner bytes out, exit.
   Entry is a bare top-level `_agnos_entry();`, not `var r = main();`
   (the 1.1.1 AGNOS argv fix), which is why no harness can include this
   file.
+- `src/fontpath.cyr` — the font search path (1.6.0, ADR 0003):
+  `font_name_ok` (the `--font NAME` byte rules, which keep every lookup
+  inside its directory), `font_env_ok` (`BNRMR_FONTS`),
+  `install_dir_from_exe` (`<prefix>/bin/bnrmr` → `<prefix>/share/
+  bannermanor/fonts`), `fontpath_setup_from` / `fontpath_setup` (the
+  list), `font_resolve` (first match, or the built-in block),
+  `fontpath_describe` (the "searched:" text). Everything that reads the
+  process is in `fontpath_setup`.
 - `src/cli.cyr` — the rest of the command line, split out at 1.4.1 so
   the suite can test it: `cli_flags` (the cmdit flag table, 1.4.2: no
   `-V`, no value validation, which stays below), `report_parse_error`
@@ -227,7 +237,9 @@ Single-shot CLI: text in, banner bytes out, exit.
 
 ## Fonts
 
-In-tree (`fonts/`), all schema 1, full printable ASCII (95 characters
+In-tree in `fonts/`, installed by `scripts/install.sh` and the release
+tarball as `<prefix>/share/bannermanor/fonts/`, where an installed
+`bnrmr` finds them (1.6.0); all schema 1, full printable ASCII (95 characters
 as 69 glyphs: no lowercase, which folds to uppercase), author
 BannerManor, GPL-3.0-only:
 
@@ -242,7 +254,7 @@ with lowercase, is on the roadmap.
 
 ## Tests
 
-- `tests/bannermanor.tcyr` — **3082 assertions**, run on x86_64 and on
+- `tests/bannermanor.tcyr` — **3146 assertions**, run on x86_64 and on
   aarch64 under qemu. In outline:
   - **Fonts**: embedded-font geometry, glyph lookup and the lowercase
     fold, and row shape. The three CYML fonts load, and `block.cyml`
@@ -267,15 +279,21 @@ with lowercase, is on the roadmap.
     and a pty at seven window sizes, and a byte-exact render on a pty
     against a pipe, for color, rainbow, 0 columns and narrow-terminal
     truncation.
+  - **The font search path**: name and `BNRMR_FONTS` rules, the install
+    directory from an executable path, resolution order and shadowing,
+    the built-in block from a directory with no fonts, the diagnostics;
+    and `man/bnrmr.1` naming every flag.
   - **Checked writes**: fd 1 on `/dev/full` (the failure is recorded,
     later writes are skipped, `render_layout` returns -4), the
     write-error reasons, and the stdout / stderr line writers.
-  - **Reference coverage**: 40/40 public functions
+  - **Reference coverage**: 50/50 public functions
     (`cyrius coverage --min 100` in CI).
 - `tests/golden/` + `scripts/golden.sh` — the frozen-output contract,
-  byte for byte: 318 invocations (217 frozen renders, 76 error paths, 25
-  snapshot), 112 on a pty through script(1). The `parse-*` cases (1.4.2)
-  pin the flag grammar the cmdit swap had to keep. Since 1.4.1 this is a CI
+  byte for byte: 339 invocations (229 frozen renders, 80 error paths, 30
+  snapshot), 113 on a pty through script(1). The `parse-*` cases (1.4.2)
+  pin the flag grammar the cmdit swap had to keep; the `path-*` and
+  `list-fonts-install*` cases (1.6.0) run a staged
+  `<prefix>/bin/bnrmr` install. Since 1.4.1 this is a CI
   step; before that it existed only as shell history.
 - `tests/bannermanor.fcyr` — the fuzz gate: 26 seeds × 1,000 mutants
   through all three parsers (78,003 parses), with scrub, geometry and
@@ -335,14 +353,15 @@ bnrmr is end-user-facing; nothing links it. Known uses of its output:
   pipeline (README, `docs/guides/integrating-anuenue.md`).
 - **agnos** stages `bnrmr` into the AGNOS rootfs at `/bin/bnrmr`
   (`scripts/burn/stage-tools.sh`), and **agnoshi** uses `bnrmr AGNOS` as
-  its bareword-launch example. An installed `bnrmr` still finds no fonts
-  outside a checkout (issue 0015), which is why roadmap 1.6.0 exists.
+  its bareword-launch example. Since 1.6.0 that binary has the built-in
+  block font anywhere, and would find the others in
+  `/share/bannermanor/fonts` if agnos staged them there (roadmap 1.7.0).
 - Intended, not yet wired: [`iam`](https://github.com/MacCracken/iam)
   logo rendering, and user script intros.
 
 ## Next
 
 [`roadmap.md`](roadmap.md) is the forward plan, and its issue register is
-current. Next is 1.6.0, *fonts findable, listing honest* (issue 0015):
-an installed `bnrmr` still finds no fonts outside a checkout. Shipped milestones are in the roadmap's closed-record table and
+current. Next is 1.7.0, *AGNOS parity*: color there is blocked on agnos,
+and the rest is runtime verification and staging fonts in the rootfs. Shipped milestones are in the roadmap's closed-record table and
 in [`CHANGELOG.md`](../../CHANGELOG.md).

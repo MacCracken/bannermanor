@@ -4,6 +4,77 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.6.0] — 2026-10-15 (fonts findable, listing honest)
+
+An installed `bnrmr` finds its fonts, the release ships them, and
+`--list-fonts` lists exactly what `--font` can load. Decisions are in
+[ADR 0003](docs/adr/0003-font-search-path.md). **No rendered byte of any
+invocation that succeeded under 1.5.0 changes**: the golden frozen tier is
+byte-identical, on x86_64 and on aarch64 under qemu.
+
+### Changed — behavior, each permitted by ADR 0002
+
+- **`--font NAME` searches a path** ([issue 0015](docs/development/issues/archive/0015-fonts-not-findable-when-installed.md)). The first `NAME.cyml` found is the font, in this order:
+  1. the directory in `$BNRMR_FONTS`, if set and not empty;
+  2. `./fonts`;
+  3. `<prefix>/share/bannermanor/fonts`, when the running executable is `<prefix>/bin/bnrmr`. The executable is found through `/proc/self/exe`, or from `argv[0]` when that is absolute (AGNOS);
+  4. for `block` only, the built-in copy.
+
+  With `BNRMR_FONTS` unset, `./fonts` comes first among the implicit entries, so every lookup that worked under 1.5.0 resolves to the same file (ruling 2: failing invocations may start succeeding, and no flag was added). A first match that fails to load is an error, never a fall-through to another font of the same name.
+  - Through 1.5.0 only `fonts/NAME.cyml` relative to the current directory was tried. An installed `bnrmr` found no fonts, and `bnrmr -f block` failed outside a checkout while a bare `bnrmr` rendered the same font.
+  - `BNRMR_FONTS` is validated like the `--font` value it extends: non-empty, under 1024 bytes, no control byte. A bad value is an error (`bnrmr: BNRMR_FONTS is not a usable directory path`, exit 1), but only when a font is looked up.
+  - There is no hardcoded `/usr/share` entry. The bin-relative rule covers every prefix, and keeps the golden suite from depending on the host's installed state (ADR 0003).
+- **Font errors say which failure it was** (ruling 1). They replace `failed to load font (missing or malformed)`, which covered both:
+  - `bnrmr: font 'X' not found (searched: ./fonts (missing), …)`
+  - `bnrmr: font 'X' is malformed: ./fonts/X.cyml`
+
+  Paths are echoed with control bytes as `?`.
+- **`--list-fonts` lists what `--font` finds** (snapshot tier; it moves once, here):
+  - **Every directory on the search path, one level deep.** It used to recurse 64 levels, and a nested font listed under a name no spelling could load (accepted risk A-12, resolved).
+  - **Each font by its file stem**, the spelling `--font` takes, not by its `name` field, which `--font` never reads (A-11, resolved). The first directory to define a stem wins, as in a lookup.
+  - **Validated with the full loader.** A font with a broken glyph body is now reported malformed instead of listed clean. A font with no `name`, or an over-long one, now lists, since `name` is optional metadata. A file whose stem `--font` cannot spell is shown as skipped.
+  - **The built-in block font is listed** when no `block.cyml` shadows it. So `(none found — try running from the project root)` is gone.
+  - **Layout.** Rows are sorted by stem, and the name column is one past the widest stem, at least 10, so the default listing's rows are unchanged. A description over 255 bytes is shortened with `...` instead of dropped. The header reads `Available fonts (--font NAME):`, and the last line names the directories searched, marking missing ones.
+- **`--help`** describes the search path under `--font`, says what `--list-fonts` now shows, and ends with a note on stderr and exit status, pointing at `bnrmr(1)`.
+
+### Added
+
+- **`man/bnrmr.1`**: flags, the font search path, the environment (`BNRMR_FONTS`, `COLUMNS`), exit status, examples. It formats under `groff -ww` with no warnings, which CI checks. `t_man_page` fails if a flag is missing from it. `scripts/doc-pin-check.sh` now also holds its `.TH` version line to `VERSION`, and was checked to fail when they differed.
+- **`scripts/install.sh [PREFIX]`** (default `/usr/local`; honors `DESTDIR`) installs `bin/bnrmr`, `share/bannermanor/fonts/*.cyml` and `share/man/man1/bnrmr.1`. It refuses a binary whose `--version` disagrees with `VERSION`.
+- **A release tarball**, `bnrmr-<version>-x86_64-linux.tar.gz`, with that layout plus README, LICENSE and CHANGELOG, and a `.sha256`. Before publishing, the release job unpacks it in a scratch directory and renders `big` from `/`. Through 1.5.0 the release published the binary alone, so `slim` and `big` existed for nobody who downloaded it. The bare binary is still published.
+- **CI**: an `Install smoke` step (install to a scratch prefix, run `--font slim` from `/`) and a `Man page` step.
+- **`src/fontpath.cyr`**, the search path, in pure functions the suite drives with synthetic inputs.
+- **Golden suite: 21 new cases** (339 in all):
+  - 12 frozen and 5 error search-path cases (`path-*`), including shadowing by `BNRMR_FONTS`, a missing directory, an empty value, an ESC in the value, and a malformed first match;
+  - 4 snapshot listings.
+
+  An `install` case option stages `<prefix>/bin/bnrmr` beside `<prefix>/share/bannermanor/fonts` and normalizes the prefix to `@PREFIX@`. The suite now refuses to run a binary that sits in a `bin/` directory, whose install directory would read the host's fonts. The record's `env:` line is escaped like its arguments.
+- **Tests** (suite 3082 → 3146):
+  - `t_fontpath_name_ok`, `t_fontpath_env_ok`, `t_fontpath_install_dir` (`/usr/local/bin`, `/bin` for AGNOS, an unpacked tarball, and `build/`, `sbin`, relative and root paths that must not count);
+  - `t_fontpath_resolve`: order, shadowing, fall-through, and the built-in block from a directory with no fonts;
+  - `t_cli_report_font_error`, `t_man_page`, and the listing test's new header and footer.
+
+  Reference coverage stays 100% (50/50).
+
+### Removed
+
+- `build_font_path` (`src/cli.cyr`), replaced by `font_name_ok` and `font_path_join` (`src/fontpath.cyr`), which keep the same byte rules.
+
+### Notes
+
+- **The golden re-baseline**, checked by script against the 1.5.0 records:
+  - **frozen**: 0 of 217 existing records changed; 12 added.
+  - **error**: 10 changed, every one only the font diagnostic (8 `not found` / `is malformed` lines and two flag-shaped names); 1 removed (`cyml-no-fonts-dir`, `--font block` with no fonts dir, which now succeeds and is frozen case `path-block-builtin-anywhere`); 5 added.
+  - **snapshot**: 6 changed, the listing format only; 5 added.
+  - **Help text**: a second pass re-baselined it; 26 error and 15 snapshot records differ only by the new help lines.
+- **Verification**:
+  - build clean for x86_64, `--agnos` and `--aarch64`, and `cyrius lint --strict --strict-deferrals` clean;
+  - `cyrius test` 3146 passed on x86_64 and on aarch64 under qemu;
+  - golden 339/339 on both, the staged-install cases included (qemu resolves `/proc/self/exe` to the guest binary);
+  - `cyrius fuzz` clean, `cyrius coverage --min 100`, `cyrius deps --locked`, `scripts/doc-pin-check.sh`, `groff -ww`;
+  - `scripts/install.sh` into a scratch prefix and with `DESTDIR`, and the release packaging run end to end locally.
+- **AGNOS**: `/bin/bnrmr` maps to `/share/bannermanor/fonts`, if `argv[0]` is absolute. agnos stages the binary only, so until its `stage-tools.sh` stages fonts there, AGNOS has the built-in block and `BNRMR_FONTS`. That change belongs to agnos (roadmap 1.7.0). None of this has run on AGNOS.
+
 ## [1.5.0] — 2026-10-15 (diagnostics on stderr, honest exit codes, one write per row, the malformed-input rulings)
 
 Everything [ADR 0002](docs/adr/0002-freeze-scope-error-paths-and-malformed-input.md)

@@ -11,10 +11,11 @@ orientation for someone who's about to read or change the source.
 cyrius deps                              # resolve stdlib + darshana + bayan-cyml + cmdit
 cyrius build src/main.cyr build/bnrmr    # compile (binary: bnrmr)
 ./build/bnrmr "AGNOS"                    # smoke render
-cyrius test                              # 3082 assertions
-sh scripts/golden.sh                     # 318 invocations, byte for byte
+cyrius test                              # 3146 assertions
+sh scripts/golden.sh                     # 339 invocations, byte for byte
 cyrius fuzz tests/bannermanor.fcyr       # font-parser regression gate
 cyrius bench tests/bannermanor.bcyr      # render path, CPU and write side
+sh scripts/install.sh "$HOME/.local"     # bin/, share/bannermanor/fonts/, man page
 ```
 
 CI (`.github/workflows/ci.yml`) runs all of these, plus the doc pin check,
@@ -31,6 +32,11 @@ Toolchain pin: `cyrius = "6.7.9"` in `cyrius.cyml`.
 - `src/main.cyr` — `main()` only: read argv (`cmdit_argv`), parse,
   validate, resolve the font, call the renderer. Nothing can include it (its
   entry statement runs at include time), so logic goes in `src/cli.cyr`.
+- `src/fontpath.cyr` — where `--font NAME` looks (1.6.0,
+  [ADR 0003](../adr/0003-font-search-path.md)): `$BNRMR_FONTS`,
+  `./fonts`, the install directory beside the executable, the built-in
+  block. The rules are pure functions; `fontpath_setup` reads the
+  environment and `/proc/self/exe`.
 - `src/cli.cyr` — the testable rest of the CLI: the flag table
   (`cli_flags`, on [cmdit](https://github.com/MacCracken/cmdit) since
   1.4.2) and its error lines, `--font` name containment, the `--width` /

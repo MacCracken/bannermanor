@@ -108,10 +108,31 @@ case "$BNRMR" in /*) ;; *) BNRMR="$ROOT/$BNRMR" ;; esac
     "Build it first:  cyrius build src/main.cyr build/bnrmr"
 BNRMR_RUNNER="${BNRMR_RUNNER:-}"
 
+# The font search path (ADR 0003, 1.6.0) includes <prefix>/share/bannermanor/
+# fonts when the executable is <prefix>/bin/bnrmr. A binary under test that
+# sits in a bin/ directory would therefore read whatever fonts the host has
+# installed there, and the records would depend on the machine. build/bnrmr
+# does not; refuse anything that does. The `install` cases below stage their
+# own prefix instead.
+case "$(basename "$(dirname "$BNRMR")")" in
+    bin) die "the binary under test is in a bin/ directory: $BNRMR" \
+        "Its install-relative font directory would make the suite depend on the" \
+        "host. Point BNRMR at a build output such as build/bnrmr." ;;
+esac
+
 T="$(mktemp -d)" || die "mktemp -d failed"
 trap 'rm -rf "$T"' EXIT INT TERM
 OUT="$T/out"
 mkdir -p "$OUT"
+
+# A staged install for the `install` cases: <prefix>/bin/bnrmr and
+# <prefix>/share/bannermanor/fonts/*.cyml, the layout scripts/install.sh and
+# the release tarball produce. Its path is random, so records replace it
+# with @PREFIX@.
+INST="$T/inst"
+mkdir -p "$INST/bin" "$INST/share/bannermanor/fonts"
+cp "$BNRMR" "$INST/bin/bnrmr" || die "could not stage the install tree"
+cp fonts/*.cyml "$INST/share/bannermanor/fonts/" || die "could not stage the fonts"
 for _tier in frozen error snapshot; do : > "$OUT/$_tier.golden"; done
 
 NL='
@@ -138,17 +159,20 @@ stream() {  # <label> <file>
     fi
 }
 
-# g <tier> <id> [pty=RxC] [cwd=DIR] [env=NAME=VAL]... [norm=version] -- <bnrmr args>
+# g <tier> <id> [pty=RxC] [cwd=DIR] [env=NAME=VAL]... [norm=version] [install]
+#   -- <bnrmr args>
+# `install` runs the staged <prefix>/bin/bnrmr instead of $BNRMR.
 g() {
     _tier="$1"; _id="$2"; shift 2
     case "$_tier" in frozen|error|snapshot) ;; *) die "case $_id: unknown tier '$_tier'" ;; esac
-    _pty=""; _cwd="."; _env=""; _norm=""
+    _pty=""; _cwd="."; _env=""; _norm=""; _bin="$BNRMR"; _inst=0
     while [ $# -gt 0 ] && [ "$1" != "--" ]; do
         case "$1" in
             pty=*)  _pty="${1#pty=}" ;;
             cwd=*)  _cwd="${1#cwd=}" ;;
             env=*)  _env="$_env ${1#env=}" ;;
             norm=version) _norm=version ;;
+            install) _bin="$INST/bin/bnrmr"; _inst=1 ;;
             *) die "case $_id: unknown option '$1'" ;;
         esac
         shift
@@ -164,12 +188,12 @@ g() {
         # $_env and $BNRMR_RUNNER are split on purpose: NAME=VAL words, and a
         # runner such as `qemu-aarch64`.
         # shellcheck disable=SC2086
-        ( cd "$_cwd" && exec env -i PATH="$PATH" LC_ALL=C $_env $BNRMR_RUNNER "$BNRMR" "$@" ) \
+        ( cd "$_cwd" && exec env -i PATH="$PATH" LC_ALL=C $_env $BNRMR_RUNNER "$_bin" "$@" ) \
             < /dev/null > "$T/o" 2> "$T/e"
         _rc=$?
     else
         _rows="${_pty%x*}"; _cols="${_pty#*x}"
-        _cmd="stty rows $_rows cols $_cols -opost && exec env -i PATH=$(q "$PATH") LC_ALL=C$_env $BNRMR_RUNNER $(q "$BNRMR")"
+        _cmd="stty rows $_rows cols $_cols -opost && exec env -i PATH=$(q "$PATH") LC_ALL=C$_env $BNRMR_RUNNER $(q "$_bin")"
         for _a in "$@"; do _cmd="$_cmd $(q "$_a")"; done
         ( cd "$_cwd" && SHELL=/bin/sh exec script -qec "$_cmd" /dev/null ) \
             < /dev/null > "$T/o" 2> "$T/e"
@@ -181,6 +205,13 @@ g() {
         N_PTY=$((N_PTY + 1))
     fi
 
+    if [ "$_inst" = 1 ]; then
+        for _f in "$T/o" "$T/e"; do
+            [ -f "$_f" ] || continue
+            _ipre="$(printf '%s' "$INST" | sed 's/[][\\.*^$/]/\\&/g')"
+            sed "s/$_ipre/@PREFIX@/g" "$_f" > "$_f.n" && mv "$_f.n" "$_f"
+        done
+    fi
     if [ "$_norm" = version ]; then
         _vre="$(printf '%s' "$VERSION" | sed 's/[.]/\\./g')"
         grep -q "^bnrmr $_vre\$" "$T/o" \
@@ -193,9 +224,10 @@ g() {
         printf 'args:'
         for _a in "$@"; do printf ' [%s]' "$(escarg "$_a")"; done
         printf '\n'
-        [ -n "$_env" ] && printf 'env:%s\n' "$_env"
+        [ -n "$_env" ] && printf 'env:%s\n' "$(escarg "$_env")"
         [ "$_cwd" != "." ] && printf 'cwd: %s\n' "$_cwd"
         [ -n "$_pty" ] && printf 'pty: %s\n' "$_pty"
+        [ "$_inst" = 1 ] && printf 'binary: @PREFIX@/bin/bnrmr (staged install)\n'
         printf 'exit: %s\n' "$_rc"
         if [ -z "$_pty" ]; then
             stream stdout "$T/o"

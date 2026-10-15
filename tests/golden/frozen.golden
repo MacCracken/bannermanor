@@ -411,6 +411,152 @@ stdout: 150 bytes, cksum 771253357
 | #   #  #### #   #  ###  #### $
 stderr: 0 bytes, cksum 4294967295
 
+### path-block-builtin-anywhere
+args: [--font] [block] [HI]
+cwd: tests/golden/cwd/empty
+exit: 0
+stdout: 60 bytes, cksum 2359129690
+| #   # #####$
+| #   #   #  $
+| #####   #  $
+| #   #   #  $
+| #   # #####$
+stderr: 0 bytes, cksum 4294967295
+
+### path-block-builtin-equals-embedded
+args: [-f] [block] [AGNOS]
+cwd: tests/golden/cwd/empty
+exit: 0
+stdout: 150 bytes, cksum 771253357
+|  ###   #### #   #  ###   ####$
+| #   # #     ##  # #   # #    $
+| ##### #  ## # # # #   #  ### $
+| #   # #   # #  ## #   #     #$
+| #   #  #### #   #  ###  #### $
+stderr: 0 bytes, cksum 4294967295
+
+### path-env-shadows-cwd
+args: [--font] [block] [HI]
+env: BNRMR_FONTS=tests/golden/cwd/envfonts
+exit: 0
+stdout: 24 bytes, cksum 2434779399
+| # # ###$
+| ###  # $
+| # # ###$
+stderr: 0 bytes, cksum 4294967295
+
+### path-env-adds-a-dir
+args: [--font] [tiny] [HI]
+env: BNRMR_FONTS=tests/golden/cwd/mixed/fonts
+exit: 0
+stdout: 24 bytes, cksum 2434779399
+| # # ###$
+| ###  # $
+| # # ###$
+stderr: 0 bytes, cksum 4294967295
+
+### path-env-falls-through-to-cwd
+args: [--font] [slim] [HI]
+env: BNRMR_FONTS=tests/golden/cwd/envfonts
+exit: 0
+stdout: 50 bytes, cksum 2344360495
+| #  # ####$
+| #  #  ## $
+| ####  ## $
+| #  #  ## $
+| #  # ####$
+stderr: 0 bytes, cksum 4294967295
+
+### path-env-missing-dir-is-a-miss
+args: [--font] [slim] [HI]
+env: BNRMR_FONTS=no/such/dir
+exit: 0
+stdout: 50 bytes, cksum 2344360495
+| #  # ####$
+| #  #  ## $
+| ####  ## $
+| #  #  ## $
+| #  # ####$
+stderr: 0 bytes, cksum 4294967295
+
+### path-env-empty-is-unset
+args: [--font] [slim] [HI]
+env: BNRMR_FONTS=
+exit: 0
+stdout: 50 bytes, cksum 2344360495
+| #  # ####$
+| #  #  ## $
+| ####  ## $
+| #  #  ## $
+| #  # ####$
+stderr: 0 bytes, cksum 4294967295
+
+### path-install-slim
+args: [--font] [slim] [HI]
+cwd: tests/golden/cwd/empty
+binary: @PREFIX@/bin/bnrmr (staged install)
+exit: 0
+stdout: 50 bytes, cksum 2344360495
+| #  # ####$
+| #  #  ## $
+| ####  ## $
+| #  #  ## $
+| #  # ####$
+stderr: 0 bytes, cksum 4294967295
+
+### path-install-big
+args: [-f] [big] [AGNOS]
+cwd: tests/golden/cwd/empty
+binary: @PREFIX@/bin/bnrmr (staged install)
+exit: 0
+stdout: 280 bytes, cksum 3045207797
+|    #     ###### #     #  #####   ######$
+|   # #   #       ##    # #     # #      $
+|  #   #  #       # #   # #     # #      $
+|  #####  #  #### #  #  # #     #  ##### $
+| #     # #     # #   # # #     #       #$
+| #     # #     # #    ## #     #       #$
+| #     #  ###### #     #  #####  ###### $
+stderr: 0 bytes, cksum 4294967295
+
+### path-install-cwd-first
+args: [--font] [tiny] [HI]
+cwd: tests/golden/cwd/mixed
+binary: @PREFIX@/bin/bnrmr (staged install)
+exit: 0
+stdout: 24 bytes, cksum 2434779399
+| # # ###$
+| ###  # $
+| # # ###$
+stderr: 0 bytes, cksum 4294967295
+
+### path-install-env-first
+args: [--font] [block] [HI]
+env: BNRMR_FONTS=../envfonts
+cwd: tests/golden/cwd/empty
+binary: @PREFIX@/bin/bnrmr (staged install)
+exit: 0
+stdout: 24 bytes, cksum 2434779399
+| # # ###$
+| ###  # $
+| # # ###$
+stderr: 0 bytes, cksum 4294967295
+
+### path-install-pty
+args: [--font] [big] [--color] [rainbow] [HI]
+cwd: tests/golden/cwd/empty
+pty: 24x80
+binary: @PREFIX@/bin/bnrmr (staged install)
+exit: 0
+pty: 175 bytes, cksum 1469818329
+| \033[31m#     # #######\033[0m$
+| \033[33m#     #    #   \033[0m$
+| \033[32m#     #    #   \033[0m$
+| \033[36m#######    #   \033[0m$
+| \033[34m#     #    #   \033[0m$
+| \033[35m#     #    #   \033[0m$
+| \033[31m#     # #######\033[0m$
+
 ### align-left
 args: [--align] [left] [HI]
 exit: 0

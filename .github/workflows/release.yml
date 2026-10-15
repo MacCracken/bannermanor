@@ -52,12 +52,35 @@ jobs:
       - name: Build
         # Binary is `bnrmr`, not the repo name — see ci.yml for the rationale.
         run: |
-          cyrius deps
+          cyrius deps --locked
           mkdir -p build
           cyrius build src/main.cyr build/bnrmr
+
+      - name: Package
+        # Through 1.5.0 the release published build/* (the binary alone), so
+        # slim and big did not exist for anyone who downloaded it (issue
+        # 0015). The tarball is scripts/install.sh run into a staging prefix:
+        # bin/bnrmr beside share/bannermanor/fonts, which is where an
+        # executable at <prefix>/bin/bnrmr looks (ADR 0003). Unpack it
+        # anywhere and `bin/bnrmr -f slim` works.
+        run: |
+          V="$(tr -d '[:space:]' < VERSION)"
+          N="bnrmr-$V-x86_64-linux"
+          mkdir -p dist
+          sh scripts/install.sh "$PWD/dist/$N"
+          cp README.md LICENSE CHANGELOG.md "dist/$N/"
+          tar -C dist -czf "dist/$N.tar.gz" "$N"
+          ( cd dist && sha256sum "$N.tar.gz" > "$N.tar.gz.sha256" )
+          # Unpacked somewhere else, run from /, it still finds its fonts.
+          mkdir -p "$RUNNER_TEMP/unpack"
+          tar -C "$RUNNER_TEMP/unpack" -xzf "dist/$N.tar.gz"
+          ( cd / && "$RUNNER_TEMP/unpack/$N/bin/bnrmr" --font big HI > /dev/null )
 
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
-          files: build/*
+          files: |
+            build/bnrmr
+            dist/*.tar.gz
+            dist/*.tar.gz.sha256

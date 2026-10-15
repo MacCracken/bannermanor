@@ -133,7 +133,7 @@ jobs:
 
       - name: Golden suite
         # The v1.0 frozen-output contract, byte for byte: every invocation in
-        # tests/golden/cases.sh (318 at 1.4.2) in three tiers (frozen
+        # tests/golden/cases.sh (339 at 1.6.0) in three tiers (frozen
         # renders, error paths, snapshot help/version/listing), 112 of them
         # on a pty through script(1), which ubuntu-latest ships in
         # util-linux. A missing script(1) FAILS the suite; it never skips
@@ -148,6 +148,28 @@ jobs:
         # 1.4.1 this target was a stub that always passed; see
         # tests/bannermanor.fcyr before citing it as evidence of anything.
         run: cyrius fuzz tests/bannermanor.fcyr
+
+      - name: Install smoke
+        # Issue 0015: an installed bnrmr must find its fonts from any
+        # directory. Installs into a scratch prefix with the same script the
+        # release tarball uses, then runs from / (no ./fonts there), so only
+        # the install directory beside the executable can supply slim.
+        run: |
+          P="$RUNNER_TEMP/prefix"
+          sh scripts/install.sh "$P"
+          cd /
+          "$P/bin/bnrmr" --font slim HI > /dev/null
+          "$P/bin/bnrmr" --font block HI > /dev/null
+          "$P/bin/bnrmr" --list-fonts | grep -q '^  slim '
+          test -f "$P/share/man/man1/bnrmr.1"
+
+      - name: Man page
+        # man/bnrmr.1 must format without a single groff warning (-ww). The
+        # suite separately checks it names every flag (t_man_page).
+        run: |
+          command -v groff > /dev/null || sudo apt-get install -y groff-base
+          groff -man -Tutf8 -ww -z man/bnrmr.1 2> "$RUNNER_TEMP/groff.log"
+          if [ -s "$RUNNER_TEMP/groff.log" ]; then cat "$RUNNER_TEMP/groff.log"; exit 1; fi
 
       - name: Coverage floor
         # Reference coverage: the share of src/'s public functions the test

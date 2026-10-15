@@ -23,6 +23,7 @@ Decisions about bannermanor — what we chose, the context, and the consequences
 |-----|----------|--------|
 | [0001](0001-cyml-font-format.md) | CYML as the in-tree font format, `.` for background, `.flf` as a read-only adapter | Accepted (amended 1.1.3, 1.1.4, 1.4.1) |
 | [0002](0002-freeze-scope-error-paths-and-malformed-input.md) | What the v1.0 freeze covers: diagnostics are not frozen, a failed write is a defect, malformed input is not protected | Accepted (2026-10-15) |
+| [0003](0003-font-search-path.md) | `--font NAME` searches `$BNRMR_FONTS`, `./fonts`, the install directory beside the executable, then the built-in block font; `--list-fonts` lists exactly what that finds | Accepted (2026-10-15) |
 
-Add the next as `0003-kebab-case-title.md`. Never renumber an
+Add the next as `0004-kebab-case-title.md`. Never renumber an
 existing ADR.

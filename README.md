@@ -28,7 +28,7 @@ Fourth member of the terminal-aesthetics set:
 
 ## Status
 
-**1.5.0**. Stable. CLI flag surface, CYML font format (schema 1),
+**1.6.0**. Stable. CLI flag surface, CYML font format (schema 1),
 default font set, and `.flf` adapter contract are all frozen at their
 v1.0.0 shape — see the v1.0.0 [`Breaking`](CHANGELOG.md) section for
 what locked.
@@ -41,8 +41,14 @@ bnrmr --font slim "HELLO"              # narrower font from the default set
 bnrmr --font big "1.0"                 # chunky 7×7 banner
 bnrmr --align center --color cyan "WELCOME"
 bnrmr --font ./modular.flf "BNRMR"     # legacy .flf path
-bnrmr --list-fonts                     # what's available
+bnrmr --list-fonts                     # what's available, and where
+BNRMR_FONTS=~/fonts bnrmr -f mine HI   # a font of your own
 ```
+
+`--font NAME` looks for `NAME.cyml` in `$BNRMR_FONTS`, then `./fonts`,
+then `<prefix>/share/bannermanor/fonts` beside an installed
+`<prefix>/bin/bnrmr`; `block` is also built in, so `bnrmr -f block`
+works anywhere (since 1.6.0, [ADR 0003](docs/adr/0003-font-search-path.md)).
 
 Errors go to stderr with exit 1, and so does a failed write, so
 `bnrmr --font "$FONT" "$HOST" > /etc/motd` never puts an error message
@@ -77,7 +83,7 @@ The frozen surface:
 ```sh
 cyrius deps                            # resolve stdlib + darshana + bayan-cyml + cmdit
 cyrius build src/main.cyr build/bnrmr  # compile (binary: bnrmr)
-cyrius test                            # 3082 assertions
+cyrius test                            # 3146 assertions
 sh scripts/golden.sh                   # the frozen-output contract, byte for byte
 cyrius fuzz tests/bannermanor.fcyr     # font-parser regression gate
 cyrius bench tests/bannermanor.bcyr    # render path, CPU and write side
@@ -85,6 +91,18 @@ cyrius bench tests/bannermanor.bcyr    # render path, CPU and write side
 
 Toolchain pin: `cyrius = "6.7.9"` in `cyrius.cyml` is the source of
 truth.
+
+## Install
+
+```sh
+sh scripts/install.sh            # /usr/local: bin/bnrmr, share/bannermanor/fonts, man page
+sh scripts/install.sh ~/.local   # any prefix works; no configuration needed
+```
+
+Or download a release tarball and unpack it anywhere: it holds the same
+`bin/`, `share/bannermanor/fonts/` and `share/man/man1/` layout, and its
+`bin/bnrmr` finds the fonts beside it. `man bnrmr` (or
+`man -l man/bnrmr.1` in a checkout) documents everything.
 
 ## Docs
 
