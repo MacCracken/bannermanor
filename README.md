@@ -28,7 +28,7 @@ Fourth member of the terminal-aesthetics set:
 
 ## Status
 
-**1.6.0**. Stable. CLI flag surface, CYML font format (schema 1),
+**1.7.0**. Stable. CLI flag surface, CYML font format (schema 1),
 default font set, and `.flf` adapter contract are all frozen at their
 v1.0.0 shape — see the v1.0.0 [`Breaking`](CHANGELOG.md) section for
 what locked.
@@ -54,10 +54,11 @@ Errors go to stderr with exit 1, and so does a failed write, so
 `bnrmr --font "$FONT" "$HOST" > /etc/motd` never puts an error message
 into the file, and a full disk is not reported as success (since 1.5.0).
 
-The banner clamps to the terminal width by default; on Linux, piped
-output (`bnrmr ... | cat`) emits the full untruncated banner. On AGNOS
-the width is the framebuffer console's even when stdout is redirected,
-because agnos cannot tell bnrmr whether fd 1 is the console (1.2.0).
+The banner clamps to the terminal width by default; piped or
+redirected output (`bnrmr ... | cat`) emits the full untruncated banner.
+On AGNOS the terminal is the console: since 1.7.0 bnrmr asks the kernel
+what fd 1 is (`fd_kind`, [ADR 0004](docs/adr/0004-terminal-probes-ask-about-fd-1.md)),
+so a redirected banner there is uncut too.
 
 ## v1.0 contract
 
@@ -75,21 +76,22 @@ The frozen surface:
   font that fits the 128-col × 64-row envelope (64 × 32 through 1.4.2). Uniform-width fit,
   no smushing, ASCII 32..126, 1 MB file cap.
 - **Color via [darshana](https://github.com/MacCracken/darshana)** —
-  16 ANSI named colors + `rainbow`. Auto-suppressed on pipes, and off
-  on AGNOS for the same reason as the width note above.
+  16 ANSI named colors + `rainbow`. Written only to a terminal, never
+  into a pipe or a file. On AGNOS that means the console (since 1.7.0;
+  off there before).
 
 ## Build
 
 ```sh
 cyrius deps                            # resolve stdlib + darshana + bayan-cyml + cmdit
 cyrius build src/main.cyr build/bnrmr  # compile (binary: bnrmr)
-cyrius test                            # 3146 assertions
+cyrius test                            # 3150 assertions
 sh scripts/golden.sh                   # the frozen-output contract, byte for byte
 cyrius fuzz tests/bannermanor.fcyr     # font-parser regression gate
 cyrius bench tests/bannermanor.bcyr    # render path, CPU and write side
 ```
 
-Toolchain pin: `cyrius = "6.7.9"` in `cyrius.cyml` is the source of
+Toolchain pin: `cyrius = "6.7.11"` in `cyrius.cyml` is the source of
 truth.
 
 ## Install

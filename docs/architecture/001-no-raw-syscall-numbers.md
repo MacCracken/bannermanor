@@ -55,8 +55,12 @@ own flag bits, so a corrected number alone would still have been wrong.
 
 - `grep -n 'syscall(' src/` should show only named constants (`SYS_EXIT`).
   Lint will not tell you: it is a style scanner and never reads syscall arguments.
-- A new kind of call goes through a stdlib wrapper. If none exists, gate it
-  `#ifdef CYRIUS_TARGET_AGNOS` and say why, as `stdout_is_tty` does.
+- A new kind of call goes through a stdlib wrapper. If the wrapper exists
+  on one target only, gate it `#ifdef CYRIUS_TARGET_AGNOS` and say why, as
+  `_winsize_describes_stdout` (`src/layout.cyr`) does with `sys_fd_kind`
+  since 1.7.0 ([ADR 0004](../adr/0004-terminal-probes-ask-about-fd-1.md)).
+  Syscall 111 is `fd_kind` on AGNOS and `getpgrp` on x86_64 Linux: the
+  wrapper and the `#ifdef` are what keep that number off Linux.
 - The test harnesses are held to the same rule (1.4.1 replaced their
   `syscall(60, ...)`, which is `exit` on x86_64 only, with `SYS_EXIT`).
   `SYS_EXIT` is 93 on aarch64 and 0 on AGNOS.

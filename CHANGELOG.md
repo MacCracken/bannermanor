@@ -4,6 +4,149 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.7.0] — 2026-10-15 (AGNOS parity)
+
+`--color` works on the AGNOS console. A redirected or piped banner on AGNOS
+now has the bytes it has on Linux. The decision is
+[ADR 0004](docs/adr/0004-terminal-probes-ask-about-fd-1.md); it needs
+agnos's new `fd_kind` syscall, which cyrius 6.7.11 is the first release to
+wrap, so the toolchain moves too. **No Linux byte changes**: the golden
+suite is byte-identical, 339/339, on x86_64 and on aarch64 under qemu.
+It was also checked on AGNOS before release, with a new QEMU harness,
+`scripts/agnos-smoke.py`, on agnos 1.57.14.
+
+### Changed
+
+- **AGNOS: the terminal probes ask about fd 1** (ADR 0004). darshana's
+  AGNOS `tty_winsize` reports the console's grid whatever fd 1 is, so
+  bnrmr now asks it only when `sys_fd_kind(1) == FDK_CONSOLE`
+  (`_winsize_describes_stdout`, `src/layout.cyr`). Color is derived from
+  the width probe again, on both targets (`stdout_is_tty`), so the two
+  cannot disagree (F-020).
+  - **`--color` on the AGNOS console writes SGR.** Through 1.6.0
+    `stdout_is_tty` returned 0 on AGNOS, so `--color` did nothing there.
+  - **AGNOS output change: a redirected or piped banner is no longer cut
+    to the console's width.** Through 1.6.0, `bnrmr TEXT > file` with a
+    banner wider than the console (128 columns under QEMU) was cut at a
+    glyph boundary (issue 0018 recorded it as deliberate, because nothing
+    could tell a file from the console). It is now whole, as the man page
+    has always said: "output to a pipe or file is not" cut. Linux bytes
+    do not move.
+  - Not terminals on AGNOS: a file (agnsh's `>`), a pipe (agnsh's `|`),
+    the channel a terminal emulator hands its child (`FDK_CHAN`: its size
+    is not the console's), and fd 1 on a kernel older than 1.57.13, where
+    the syscall does not exist. darshana's planned per-fd `tty_isatty`
+    draws the same line, so routing through it later changes no byte.
+- **cyrius 6.7.9 → 6.7.11.** `lib/` re-vendored from the manifest (34
+  files). Four stdlib files changed: `alloc` (comments only), `str`
+  (additions bnrmr does not call), `fs` (the FIFO fix below) and the
+  AGNOS syscall table (`sys_fd_kind`). `cyrius.lock` regenerated from
+  empty, so the superseded bayan row did not linger.
+  - `[deps.bayan]` 1.5.13 → 1.5.14, the bayan the 6.7.11 stdlib bundles.
+    Its CYML sublib differs from 1.5.13 only in the version comment.
+  - darshana 1.3.0 and cmdit 1.4.0 are unchanged. cmdit pins 6.7.9 and
+    has no later tag.
+  - The 6.7.10 and 6.7.11 migration notes were read against bnrmr's
+    source: bnrmr uses none of the struct, tuple or generic forms they
+    tighten, and the new lint rules (overruns, write lengths) report
+    nothing.
+- **`--color` in the man page** says that on AGNOS only the console
+  counts as a terminal, for color and for the width cut.
+
+### Fixed
+
+- **`--list-fonts` hung when a search directory was a FIFO**
+  (`mkfifo fonts`; [issue 0020](docs/development/issues/archive/0020-list-fonts-hangs-when-fonts-is-a-fifo.md)).
+  The stdlib's directory listing opened it `O_RDONLY` and blocked until a
+  writer came. cyrius 6.7.11 opens with `O_DIRECTORY`, so the listing
+  gets `ENOTDIR` at once and reports `./fonts (unreadable: ./fonts)`.
+  Found in the 6.7.11 migration notes, then confirmed against the 1.5.0
+  and 1.6.0 binaries (each killed by `timeout` after 3 s). Issue 0011
+  had closed the hang on a FIFO *inside* `fonts/`, not on `fonts`
+  itself. `--font NAME` was never affected: it `stat`s the joined path,
+  which fails on a FIFO.
+
+### Added
+
+- **`scripts/agnos-smoke.py`** boots agnos in QEMU with this `bnrmr` at
+  `/bin/bnrmr` and the fonts at `/share/bannermanor/fonts`, types at
+  agnsh over the QEMU monitor, and reads the console back from the serial
+  log. Nine checks:
+  - the binary runs (`--version`);
+  - `--color` writes SGR on the console;
+  - `--color` writes plain bytes into a file and into a pipe;
+  - a banner wider than the console is whole in a file;
+  - `-f slim` is found through `argv[0]`;
+  - a `.flf` font by path renders;
+  - `--list-fonts` names the install directory;
+  - a missing font is reported on stderr.
+
+  File, pipe, width and font results are byte counts from agnos's own
+  `wc -c`, compared with the host binary's output for the same command,
+  so they do not depend on how the console draws escapes. It is manual,
+  not CI: it needs the agnos tree's kernel and rootfs, gnoboot, OVMF and
+  qemu-system-x86_64.
+- **ADR 0004**, the probe rule: route through a target-bridged wrapper
+  when one answers the question; gate inline, with a stdlib `sys_*`
+  wrapper and a comment naming its replacement, where none does.
+- **CI: `aarch64 at runtime (qemu-user)`.** It installs qemu-user and
+  runs the suite (`cyrius test --aarch64`) and the golden matrix
+  (`BNRMR_RUNNER=qemu-aarch64`) on the cross-built binary. Both were run
+  by hand before releases, but nothing gated them.
+- **Tests** (suite 3146 → 3150):
+  - `t_list_dir_fifo` (the hang above). It was shown to hang on a tree
+    pinned back to 6.7.9; the 300 s test deadline turns that into a
+    failure.
+  - An assertion that the new gate stays open on Linux. Shut, it would
+    take width and color from every Linux terminal.
+
+  Reference coverage stays 100%.
+
+### Notes
+
+- **Run on AGNOS** (agnos 1.57.14 in QEMU, `-machine q35`):
+  - **1.7.0: 9/9.**
+  - **Control, the 1.6.0 binary:** it failed exactly the two checks this
+    release changes, on the then seven-check harness: no SGR on the
+    console, and a 40-glyph banner redirected to a file came out at 630
+    bytes (cut at 125 columns) instead of 1,200. The other five passed.
+  - **Mutant**, the gate forced open on AGNOS (the console-wide answer):
+    `--color` wrote 105 bytes into the file and into the pipe, where
+    plain is 60, and the wide banner in a file was cut to 630 bytes
+    again (4/7). So the file, pipe and width checks can fail.
+- **What that run verifies**, which 1.4.1–1.6.0 compiled for AGNOS but
+  never ran:
+  - the `file_write` route;
+  - `fl_alloc`'s `mmap` and the bayan CYML sublib (`-f slim`);
+  - the `.flf` adapter;
+  - cmdit's argv path (`--color`, `-f`, `--list-fonts`, `--version`);
+  - the stderr route.
+
+  agnsh passes the absolute `/bin/bnrmr` as `argv[0]`, so 1.6.0's install
+  directory works on AGNOS. **Not verified**: a failed write on AGNOS,
+  since there is no full device to point fd 1 at.
+- **Fonts on AGNOS**: agnos's `stage-tools.sh` now stages
+  `fonts/*.cyml` at `/share/bannermanor/fonts` beside `/bin/bnrmr` (an
+  agnos change, after its 1.57.14; through 1.57.14 it staged the binary
+  only). Fonts at that path are found and load (above).
+- **The kernel** was agnos `main` at 7b50feff (1.57.14), built in a
+  scratch clone with agnos's own pin (cyrius 6.6.20). The tools (agnsh,
+  `wc`) came from agnos's staged `build/rootfs`.
+- **Corrected the [1.4.1] notes**, which said "cyrius 6.7.12 is out".
+  It was not: 6.7.12 is still in progress. 6.7.11 is the newest release
+  and is what 1.7.0 pins.
+- **Sizes**: x86_64 305,384 → 309,488 bytes, all of it the toolchain
+  (the bump alone builds the same size); AGNOS 317,448 → 325,768.
+- **Verification**:
+  - build clean for x86_64, `--agnos` and `--aarch64`, and
+    `cyrius lint --strict --strict-deferrals` clean;
+  - `cyrius test` 3150 passed on x86_64 and on aarch64 under qemu;
+  - golden 339/339 byte-identical on both, with the bump alone and with
+    the release;
+  - `cyrius fuzz` clean, `cyrius coverage --min 100`,
+    `cyrius deps --locked`, `scripts/doc-pin-check.sh`, `groff -ww`;
+  - `scripts/agnos-smoke.py` as above.
+
 ## [1.6.0] — 2026-10-15 (fonts findable, listing honest)
 
 An installed `bnrmr` finds its fonts, the release ships them, and
@@ -295,7 +438,7 @@ exactly those two lines.
 - **Natural-width renders cost ~0.9 µs more in process** (B4: 18.0 against 17.1 µs). That is the price of the extra call layers through the `file_write` wrapper on each of its 50 writes. It does not show at the process level, where the smaller binary more than pays for it (562 against ~570 µs per invocation).
 - **B2 (`font_load_file`) did not move.** The sublib is the same parser code; [issue 0006](docs/development/issues/0006-bayan-cyml-parse-regression.md)'s ~45% bayan regression remains, as expected.
 - **Not runtime-verified on AGNOS** (no AGNOS target here): the `file_write` route, freelist's AGNOS `mmap` (2 MB-granular there) and the sublib. All three compile through their AGNOS branches, which the stdlib's other AGNOS consumers already use.
-- **Toolchain unchanged at 6.7.9**, darshana at 1.3.0. cyrius 6.7.12 is out; moving to it is a separate change, with the bump checklist.
+- **Toolchain unchanged at 6.7.9**, darshana at 1.3.0. Moving to a newer cyrius is a separate change, with the bump checklist. (Corrected at 1.7.0: this line said "cyrius 6.7.12 is out", which was false. 6.7.12 was in progress, and a locally installed build of it was mistaken for a release.)
 
 ## [1.2.0] — 2026-10-12 (cyrius 6.7.9, darshana 1.3.0, stdout probes through darshana)
 

@@ -1,6 +1,6 @@
 .\" bnrmr(1) - BannerManor. Keep in step with print_usage (src/cli.cyr);
 .\" tests/bannermanor.tcyr checks that every flag appears here.
-.TH BNRMR 1 2026-10-15 "BannerManor 1.6.0" "User Commands"
+.TH BNRMR 1 2026-10-15 "BannerManor 1.7.0" "User Commands"
 .SH NAME
 bnrmr \- render text as an ASCII-art banner
 .SH SYNOPSIS
@@ -101,6 +101,9 @@ forms, or
 for a different color per row.
 Color is written only when standard output is a terminal;
 in a pipe or file the bytes are plain.
+On AGNOS only the console counts as a terminal,
+here and for the width cut under
+.BR \-\-width .
 .TP
 .B \-\-list\-fonts
 List the fonts

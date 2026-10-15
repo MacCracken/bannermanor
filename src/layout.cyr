@@ -106,25 +106,53 @@ fn _usable_cols(rc, cols): i64 {
     return cols;
 }
 
+# Does darshana's `tty_winsize(1, ...)` describe fd 1? 1 or 0.
+#
+# Linux: 1. TIOCGWINSZ is asked of fd 1 itself, so a pipe or a file
+# fails the ioctl and the width probe answers 0 on its own.
+#
+# AGNOS: only when fd 1 IS the console. winsize#60, which darshana's
+# AGNOS peer calls, reports the console grid whatever fd 1 is, so
+# through 1.6.0 a redirected or piped banner was cut to the console's
+# width, and color had to stay off altogether (it would have put escape
+# bytes into `bnrmr --color red X > /etc/motd`). agnos 1.57.13 added
+# fd_kind#111 and cyrius 6.7.11 wraps it as `sys_fd_kind`, so this asks
+# the kernel what fd 1 is (ADR 0004). Only FDK_CONSOLE counts:
+#   - FDK_FILE (`>`) and FDK_PIPE (`|`, agnsh's pipelines) are not
+#     terminals, as on Linux.
+#   - FDK_CHAN, the channel a terminal emulator hands its child, is not
+#     counted either: winsize#60 would report the console's size, not
+#     that window's, and darshana's planned per-fd `tty_isatty` draws
+#     the same line (agnos's ABI doc: `fd_kind(fd) == 1`).
+#   - -1, a kernel older than 1.57.13 (an unknown syscall) or a closed
+#     fd 1, is not a terminal: no color and no width cut, never escape
+#     bytes in a file.
+# This is the inline gate ADR 0004 allows only where no wrapper answers
+# the question; when darshana's AGNOS `tty_isatty(fd)` asks fd_kind,
+# route through it instead.
+fn _winsize_describes_stdout(): i64 {
+    #ifdef CYRIUS_TARGET_AGNOS
+    if (sys_fd_kind(1) == FDK_CONSOLE) { return 1; }
+    return 0;
+    #endif
+    #ifndef CYRIUS_TARGET_AGNOS
+    return 1;
+    #endif
+}
+
 # Terminal width of stdout, or 0 if stdout is not a terminal, the query
 # fails, or the terminal reports 0 columns. Routed through darshana's
 # `tty_winsize(1, ...)` (issue 0019), which bridges both targets:
 # TIOCGWINSZ on Linux, and on AGNOS the live framebuffer console grid
-# (winsize syscall #60). Through 1.1.5 the AGNOS arm hard-returned 0 on
-# the premise that the console size "isn't queryable from userland yet",
-# so every AGNOS banner fell back to $COLUMNS / 80 columns (issue 0018).
-#
-# ⚠ AGNOS: the answer is about the CONSOLE, not about fd 1 — agnos has
-# no per-fd terminal query, and darshana's AGNOS peer ignores the fd.
-# So on AGNOS a redirected or piped stdout is truncated and aligned to
-# the console width too, where Linux leaves piped output untruncated.
-# That is deliberate (1.2.0) and bounded: it changes only plain-text
-# geometry, never adds escape bytes — the color decision below does not
-# follow this probe on AGNOS.
+# (winsize syscall #60), asked only when fd 1 is the console (above).
+# Through 1.1.5 the AGNOS arm hard-returned 0 on the premise that the
+# console size "isn't queryable from userland yet", so every AGNOS
+# banner fell back to $COLUMNS / 80 columns (issue 0018).
 #
 # The name predates the darshana route; on Linux it is still the
 # TIOCGWINSZ ioctl, inside darshana.
 fn term_width_ioctl(): i64 {
+    if (_winsize_describes_stdout() == 0) { return 0; }
     var rows = 0;
     var cols = 0;
     var rc = tty_winsize(1, &rows, &cols);
@@ -134,29 +162,18 @@ fn term_width_ioctl(): i64 {
 # Is stdout attached to a usable TTY? Returns 1 if yes, 0 if piped /
 # redirected / closed, and 0 for a terminal reporting 0 columns.
 #
-# Linux: derived from the width probe, so the two cannot disagree
-# (F-020) — a 0-column pty (before TIOCSWINSZ; some serial consoles)
-# is "not a TTY" here, where darshana's `tty_isatty(1)` would answer 1
-# and turn color back on for exactly the wrapping-colored-banner case
-# issue 0004 exists to prevent. That 0-column rule is why this is not
-# a bare `tty_isatty(1)`.
+# Derived from the width probe on both targets, so the two cannot
+# disagree (F-020) — a 0-column pty (before TIOCSWINSZ; some serial
+# consoles) is "not a TTY" here, where darshana's `tty_isatty(1)` would
+# answer 1 and turn color back on for exactly the wrapping-colored-
+# banner case issue 0004 exists to prevent. That 0-column rule is why
+# this is not a bare `tty_isatty(1)`.
 #
-# AGNOS: 0, so auto-color stays off. NOT because the console cannot
-# render SGR — agnos 1.43.1 parses it — but because agnos cannot say
-# whether fd 1 IS the console: darshana's AGNOS `tty_isatty` answers 1
-# whenever the console is up, a redirected or piped fd 1 included
-# (darshana docs; the per-fd query is filed with agnos). Following it
-# would write escape bytes into `bnrmr --color red X > /etc/motd`, which
-# the Linux contract — plain bytes on a non-TTY — forbids. Revisit when
-# agnos exposes an fd-kind query.
+# Through 1.6.0 the AGNOS arm returned 0, so --color never colored on
+# AGNOS; since 1.7.0 the console gets color and nothing else does.
 fn stdout_is_tty(): i64 {
-    #ifdef CYRIUS_TARGET_AGNOS
-    return 0;
-    #endif
-    #ifndef CYRIUS_TARGET_AGNOS
     if (term_width_ioctl() > 0) { return 1; }
     return 0;
-    #endif
 }
 
 # Read the COLUMNS env var; return parsed value or 0 on miss/error.
@@ -169,9 +186,9 @@ fn term_width_env(): i64 {
     # terminal-width leg. COLUMNS was the only frame source without a
     # ceiling — `--width` is rejected above WIDTH_CAP in main.cyr and
     # the terminal leg is clamped above, so an env var could drive the
-    # frame 256x past both. On AGNOS this is the frame source only when
-    # the framebuffer console is down (term_width_ioctl answers 0);
-    # through 1.1.5 it was the only AGNOS source at all.
+    # frame 256x past both. On AGNOS this is the frame source when fd 1
+    # is not the console (since 1.7.0, as on Linux) or the framebuffer
+    # console is down; through 1.1.5 it was the only AGNOS source at all.
     if (n > WS_COL_CAP) { return WS_COL_CAP; }
     return n;
 }
@@ -519,9 +536,9 @@ fn render_layout(font, text, len, width, align, pad, color): i64 {
     #                             unchanged — preserves the M1
     #                             byte-identity contract for
     #                             `bnrmr ... | cat` and the test suite.
-    #                             (Linux. On AGNOS the probe answers
-    #                             the console width for a pipe too —
-    #                             see term_width_ioctl.)
+    #                             (On AGNOS too since 1.7.0; through
+    #                             1.6.0 a pipe there was cut to the
+    #                             console's width.)
     var clamp_w = width;
     if (clamp_w == 0) { clamp_w = term_width_ioctl(); }
     var draw_len = fit_chars(clamp_w, w, g, len);

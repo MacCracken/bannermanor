@@ -1389,6 +1389,13 @@ fn t_usable_cols() {
     assert_eq(_usable_cols(0, 4096),   4096,       "at WS_COL_CAP -> 4096");
     assert_eq(_usable_cols(0, 4097),   WS_COL_CAP, "past WS_COL_CAP -> clamped (F-008)");
     assert_eq(_usable_cols(0, 65535),  WS_COL_CAP, "u16 max -> clamped (F-008)");
+    # 1.7.0 (ADR 0004): the AGNOS fd_kind gate is compiled out here.
+    # Linux's answer is TIOCGWINSZ on fd 1 itself, so the gate must stay
+    # open, or every Linux terminal would lose its width and its color.
+    # The AGNOS arm runs only under scripts/agnos-smoke.py.
+    #ifndef CYRIUS_TARGET_AGNOS
+    assert_eq(_winsize_describes_stdout(), 1, "Linux: the per-fd ioctl decides, not the gate");
+    #endif
 }
 
 # bannermanor keeps its own control-byte scrub (space, length-preserving)
@@ -1688,6 +1695,28 @@ fn t_reader_fifo() {
         assert_eq(font_load_file(&p), 0, "font_load_file(FIFO) -> 0, no block");
         assert_eq(font_header_load(&p), 0, "font_header_load(FIFO) -> 0, no block");
         assert_eq(flf_load_file(&p), 0, "flf_load_file(FIFO) -> 0, no block");
+        xunlink(&p);
+    }
+    #endif
+}
+
+# A FIFO where --list-fonts expects a directory (`mkfifo fonts`). Through
+# 1.6.0 dir_list_checked opened it O_RDONLY and blocked until a writer
+# came, so the listing hung; cyrius 6.7.11 opens with O_DIRECTORY and gets
+# ENOTDIR at once (1.7.0). A regression hangs here, and the 300 s test
+# deadline turns that into a failure.
+fn t_list_dir_fifo() {
+    test_group("cli / --list-fonts on a FIFO named like a directory");
+    #ifdef CYRIUS_TARGET_LINUX
+    var p[96];
+    _tmp_path(&p, "fontsfifo");
+    xunlink(&p);
+    var rc = sys_mknodat(0 - 100, &p, 4096 | 384, 0);       # S_IFIFO | 0600
+    assert_eq(rc, 0, "mkfifo");
+    if (rc == 0) {
+        var rows = vec_new();
+        assert_eq(_lr_scan_dir(rows, &p), 0 - 1, "_lr_scan_dir(FIFO) -> -1, no block");
+        assert_eq(vec_len(rows), 0, "no rows from a FIFO");
         xunlink(&p);
     }
     #endif
@@ -2146,6 +2175,7 @@ fn main() {
     t_reader_dir_path();
     t_reader_empty_file();
     t_reader_fifo();
+    t_list_dir_fifo();
     t_reader_size_gate_file();
     t_cyml_geometry_bounds();
     t_cyml_entry_rules();

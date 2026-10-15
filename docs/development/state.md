@@ -5,6 +5,8 @@
 
 ## Version
 
+**1.7.0** — 2026-10-15. **AGNOS parity.** `--color` works on the AGNOS console, and a redirected or piped banner on AGNOS has the bytes it has on Linux: plain and uncut. bnrmr asks the kernel what fd 1 is (`sys_fd_kind(1) == FDK_CONSOLE`, agnos 1.57.13's `fd_kind#111`) before trusting darshana's console-wide `tty_winsize`, and derives color from that probe on both targets ([ADR 0004](../adr/0004-terminal-probes-ask-about-fd-1.md)). That needed cyrius 6.7.9 → 6.7.11 (bayan sublib 1.5.13 → 1.5.14, byte-identical), which also fixed `--list-fonts` hanging on a FIFO named like a font directory. Linux bytes did not move: golden 339/339 on x86_64 and aarch64. Checked on AGNOS before release: `scripts/agnos-smoke.py` boots agnos 1.57.14 in QEMU, 9/9; the 1.6.0 binary and a forced-open mutant fail the checks they should. CI now runs the suite and the golden matrix on aarch64 under qemu-user. Suite 3146 → 3150. See `CHANGELOG.md` [1.7.0].
+
 **1.6.0** — 2026-10-15. **Fonts findable, listing honest.** `--font NAME` now searches a path ([ADR 0003](../adr/0003-font-search-path.md), [issue 0015](issues/archive/0015-fonts-not-findable-when-installed.md)): `$BNRMR_FONTS`, then `./fonts`, then `<prefix>/share/bannermanor/fonts` when the executable is `<prefix>/bin/bnrmr`, then the built-in block for `--font block`. With `BNRMR_FONTS` unset, every lookup that worked before resolves to the same file. An installed `bnrmr`, or one from an unpacked release tarball, finds its fonts from any directory. `scripts/install.sh` and a release tarball carry the fonts and a new `bnrmr.1` man page. `--list-fonts` lists exactly what `--font` finds: file stems, one level deep, validated by the full loader, the built-in block included, and the directories searched on the last line. That resolved accepted risks A-11 and A-12. A missing font and a malformed one now get separate diagnostics that name the directories or the file. The golden frozen tier did not move; it gained 12 search-path cases, run against a staged install. Suite 3082 → 3146. See `CHANGELOG.md` [1.6.0].
 
 **1.5.0** — 2026-10-15. **Diagnostics on stderr, honest exit codes, one write per row, the malformed-input rulings.** Everything ADR 0002 unblocked. Every diagnostic goes to stderr and exit codes are unchanged ([issue 0016](issues/archive/0016-diagnostics-go-to-stdout.md)), so `bnrmr --font typo X > /etc/motd` leaves the file empty. Parse errors name what was typed (`bnrmr: unknown flag: --bogus`), and the `-HI` message points at `--`. Every stdout write is checked ([issue 0009](issues/archive/0009-write-return-never-checked.md)): `bnrmr hi > /dev/full` now exits 1 with `bnrmr: write error: no space left on device`. Each banner row is composed in one buffer, color included through darshana's `_buf` composers, and written once ([issue 0005](issues/archive/0005-write-per-cell-syscall-cost.md) Option 2): `bnrmr AGNOS` makes 5 writes, down from 50, and a natural-width render is about 5× faster in process. A CYML body with more rows than `height` is rejected ([issue 0008](issues/archive/0008-cyml-body-not-fully-consumed.md)). The `.flf` envelope grew from 64×32 to 128×64: over the 1,052-font reference corpus, 73 more fonts load (1,046 in all) and the 973 that loaded before render byte-identically. The golden frozen and snapshot tiers did not move. The error tier was re-baselined once, every record checked by script. Suite 3061 → 3082. See `CHANGELOG.md` [1.5.0].
@@ -141,7 +143,7 @@ M1 (first render path, hardcoded block font, 1 KB input cap, flags
 
 ## Toolchain
 
-- **Cyrius pin**: `6.7.9` (in `cyrius.cyml [package].cyrius`)
+- **Cyrius pin**: `6.7.11` (in `cyrius.cyml [package].cyrius`)
 
 ## Shape
 
@@ -186,13 +188,17 @@ Single-shot CLI: text in, banner bytes out, exit.
 - `src/layout.cyr` — layout and the write path.
   - **Frame**: `--width`, else the terminal width of fd 1 from
     darshana's `tty_winsize` (TIOCGWINSZ on Linux, the framebuffer
-    console grid on AGNOS), else `$COLUMNS`, else 80. Every source caps
-    at 4096 (`WIDTH_CAP` rejects, `WS_COL_CAP` clamps).
+    console grid on AGNOS, asked only when fd 1 is the console:
+    `_winsize_describes_stdout`, ADR 0004), else `$COLUMNS`, else 80.
+    Every source caps at 4096 (`WIDTH_CAP` rejects, `WS_COL_CAP`
+    clamps).
   - **Pure helpers**: `banner_width`, `fit_chars`, `align_pad`,
     `parse_uint` (F-002 cap), `_usable_cols`.
-  - **`stdout_is_tty`**: `term_width_ioctl() > 0` on Linux, so a
-    0-column terminal is not a TTY (F-020). Always 0 on AGNOS, because
-    agnos cannot say whether fd 1 is the console; color stays off there.
+  - **`stdout_is_tty`**: `term_width_ioctl() > 0` on both targets, so
+    a 0-column terminal is not a TTY (F-020) and color cannot disagree
+    with width. On AGNOS only the console qualifies (not a file, a pipe
+    or a terminal emulator's channel). Through 1.6.0 it was always 0 on
+    AGNOS.
   - **Writes**: every stdout byte goes through `_emit` → `lib/io.cyr`'s
     `file_write`. The banner rows, `--help`, `--version` and
     `--list-fonts` all take that route. `_emit` checks every write
@@ -254,8 +260,8 @@ with lowercase, is on the roadmap.
 
 ## Tests
 
-- `tests/bannermanor.tcyr` — **3146 assertions**, run on x86_64 and on
-  aarch64 under qemu. In outline:
+- `tests/bannermanor.tcyr` — **3150 assertions**, run on x86_64 and on
+  aarch64 under qemu (both in CI since 1.7.0). In outline:
   - **Fonts**: embedded-font geometry, glyph lookup and the lowercase
     fold, and row shape. The three CYML fonts load, and `block.cyml`
     equals the embedded font byte for byte.
@@ -267,7 +273,8 @@ with lowercase, is on the roadmap.
     hardblank rules, the envelope (64 / 65 columns, 32 / 33 rows,
     1024 / 1025 comments) and the 1 MB gate.
   - **Readers**: a directory, an empty file and a FIFO, each rejected
-    without blocking.
+    without blocking; and a FIFO where `--list-fonts` expects a
+    directory (1.7.0).
   - **Layout math and color parsing.**
   - **The CLI** (`src/cli.cyr`): the cmdit flag table on synthetic argv
     (values, repeats, `--`, help over version, no `-V`, no prefix
@@ -294,7 +301,14 @@ with lowercase, is on the roadmap.
   pin the flag grammar the cmdit swap had to keep; the `path-*` and
   `list-fonts-install*` cases (1.6.0) run a staged
   `<prefix>/bin/bnrmr` install. Since 1.4.1 this is a CI
-  step; before that it existed only as shell history.
+  step; before that it existed only as shell history. Since 1.7.0 CI
+  also runs it on the aarch64 binary under qemu-user.
+- `scripts/agnos-smoke.py` — bnrmr on a real agnos kernel in QEMU
+  (1.7.0, manual): console color, plain and uncut bytes in a file and
+  a pipe (measured with agnos's `wc -c` against the host binary), the
+  installed fonts through `argv[0]`, a `.flf` font, `--list-fonts`, and
+  a diagnostic. Needs the agnos tree's kernel and rootfs, gnoboot and
+  OVMF.
 - `tests/bannermanor.fcyr` — the fuzz gate: 26 seeds × 1,000 mutants
   through all three parsers (78,003 parses), with scrub, geometry and
   charmap oracles and a guard page after every input. A no-op stub until
@@ -326,19 +340,21 @@ Direct (declared in `cyrius.cyml`):
   https://github.com/MacCracken/darshana.git. Every symbol bnrmr
   consumes is in darshana's frozen v1.0 surface and cannot move without
   a major bump. 1.3.0 needs cyrius ≥ 6.7.2.
-- `[deps.bayan]`, tag 1.5.13, module `dist/bayan-cyml.cyr` — the
-  CYML-only sublib: nine `bayan_cyml_*` functions. 1.5.13 is the bayan
-  the cyrius 6.7.9 stdlib bundles, so the parser is byte-identical to
-  what 1.2.0 linked.
+- `[deps.bayan]`, tag 1.5.14, module `dist/bayan-cyml.cyr` — the
+  CYML-only sublib: nine `bayan_cyml_*` functions. 1.5.14 is the bayan
+  the cyrius 6.7.11 stdlib bundles (1.5.13 with 6.7.9; the sublib
+  differs only in its version comment), so the parser is byte-identical
+  to what 1.2.0 linked.
 - `[deps.cmdit]`, tag 1.4.0, module `dist/cmdit.cyr` — the CLI parser
   since 1.4.2, replacing the stdlib's `flags`. Same getopt-long core
   (error codes 0..4 are `flags.cyr`'s) plus the `cmdit_argv` bridge.
   bnrmr gives it no validation and uses neither its help nor its error
-  printer. 1.4.0 pins cyrius 6.7.9, as bnrmr does. The whole bundle links
+  printer. 1.4.0 pins cyrius 6.7.9; bnrmr moved to 6.7.11 at 1.7.0 and
+  cmdit has no later tag. The whole bundle links
   (shell-completion generators included): the binary grew about 48 KB
   net when it replaced `flags`.
 - `lib/` is the output of `cyrius deps` over the above: 34 files,
-  regenerated from scratch at 1.4.1 and 1.4.2. `cyrius deps --locked` checks it in
+  regenerated from scratch at 1.4.1, 1.4.2 and 1.7.0. `cyrius deps --locked` checks it in
   CI. Never edit `lib/` by hand: the toolchain restores it from the lock
   anyway (architecture note 002).
 
@@ -354,14 +370,17 @@ bnrmr is end-user-facing; nothing links it. Known uses of its output:
 - **agnos** stages `bnrmr` into the AGNOS rootfs at `/bin/bnrmr`
   (`scripts/burn/stage-tools.sh`), and **agnoshi** uses `bnrmr AGNOS` as
   its bareword-launch example. Since 1.6.0 that binary has the built-in
-  block font anywhere, and would find the others in
-  `/share/bannermanor/fonts` if agnos staged them there (roadmap 1.7.0).
+  block font anywhere, and finds the others in
+  `/share/bannermanor/fonts` when they are staged there: agnsh passes
+  `/bin/bnrmr` as `argv[0]` (verified in QEMU at 1.7.0). agnos's
+  `stage-tools.sh` stages them there after its 1.57.14 (through 1.57.14
+  it staged the binary only).
 - Intended, not yet wired: [`iam`](https://github.com/MacCracken/iam)
   logo rendering, and user script intros.
 
 ## Next
 
 [`roadmap.md`](roadmap.md) is the forward plan, and its issue register is
-current. Next is 1.7.0, *AGNOS parity*: color there is blocked on agnos,
-and the rest is runtime verification and staging fonts in the rootfs. Shipped milestones are in the roadmap's closed-record table and
+current. Next is 1.8.0, *the fourth font*, the first with lowercase.
+Shipped milestones are in the roadmap's closed-record table and
 in [`CHANGELOG.md`](../../CHANGELOG.md).

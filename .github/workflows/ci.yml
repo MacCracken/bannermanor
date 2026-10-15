@@ -93,9 +93,11 @@ jobs:
 
       - name: Cross-build (AGNOS, aarch64)
         # The pinned toolchain cross-compiles both targets in-process from
-        # this x86_64 runner. This gates COMPILE breakage only: neither
-        # binary runs here (an AGNOS binary cannot run on Linux at all, and
-        # the aarch64 runtime check under qemu is roadmap work).
+        # this x86_64 runner. This step gates COMPILE breakage only. The
+        # aarch64 binary runs under qemu-user below ("aarch64 at runtime").
+        # The AGNOS binary cannot run on Linux at all; scripts/agnos-smoke.py
+        # boots it on a real agnos kernel in QEMU, by hand (it needs the
+        # agnos tree's kernel and rootfs).
         run: |
           cyrius build --agnos src/main.cyr build/bnrmr-agnos
           cyrius build --aarch64 src/main.cyr build/bnrmr-aarch64
@@ -133,12 +135,25 @@ jobs:
 
       - name: Golden suite
         # The v1.0 frozen-output contract, byte for byte: every invocation in
-        # tests/golden/cases.sh (339 at 1.6.0) in three tiers (frozen
-        # renders, error paths, snapshot help/version/listing), 112 of them
+        # tests/golden/cases.sh (339 at 1.7.0) in three tiers (frozen
+        # renders, error paths, snapshot help/version/listing), 113 of them
         # on a pty through script(1), which ubuntu-latest ships in
         # util-linux. A missing script(1) FAILS the suite; it never skips
         # the pty leg. See scripts/golden.sh.
         run: sh scripts/golden.sh
+
+      - name: aarch64 at runtime (qemu-user)
+        # Runs what the cross-build step only compiled (since 1.7.0; before
+        # that both passed locally but nothing gated them). `cyrius test
+        # --aarch64` cross-compiles the suite and runs it through
+        # /usr/bin/qemu-aarch64, which the qemu-user package installs; the
+        # golden matrix runs the cross-built bnrmr through the same
+        # emulator, pty leg included, against the same records as x86_64.
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq qemu-user
+          cyrius test --aarch64 tests/bannermanor.tcyr
+          BNRMR=build/bnrmr-aarch64 BNRMR_RUNNER=qemu-aarch64 sh scripts/golden.sh
 
       - name: Fuzz
         # A regression gate over the three font parsers (issue 0010): seeded

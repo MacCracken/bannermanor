@@ -12,8 +12,8 @@ CLI flag surface, the CYML font format (schema 1), the default font set
 (block / slim / big), and the `.flf` adapter contract. Everything below
 is post-freeze work, and the freeze is what shapes it.
 
-**Next**: 1.7.0 — *AGNOS parity*. `--color` is still a no-op there,
-blocked on agnos; the rest is verification.
+**Next**: 1.8.0 — *the fourth font*, the first with lowercase. The
+lowest-priority scheduled release; nothing else is queued ahead of it.
 
 ## What the freeze permits
 
@@ -53,46 +53,6 @@ subtractive)."*
 
 Versions are targets, not commitments — ship-when-ready. Sequencing is
 by dependency, then by value.
-
-### 1.7.0 — AGNOS parity
-
-CLAUDE.md's Goal is *"Own ASCII-banner rendering for AGNOS userland."*
-`--color` is a silent no-op there. The console-geometry half closed in
-1.2.0 ([issue 0018](issues/archive/0018-agnos-console-width-never-queried.md)).
-
-- **Color on AGNOS — blocked on agnos.** The console renders SGR (agnos
-  1.43.1), but `stdout_is_tty` still returns 0 there, because nothing on
-  AGNOS can say whether fd 1 *is* the console. darshana's AGNOS
-  `tty_isatty` answers 1 whenever the console is up, a redirected fd 1
-  included, and darshana has filed the per-fd query with agnos. When
-  agnos ships it and darshana's peer becomes per-fd, delete the stub and
-  derive the verdict from the probe, as on Linux.
-- **The ADR for the probe rule**: route through a target-bridged wrapper
-  where one exists and answers the question asked; gate inline where it
-  does not. The width probe is the first case, the color stub the second.
-- **aarch64 at runtime in CI.** The cross-build step catches compile
-  breakage only. The suite and the golden matrix both pass under qemu
-  locally (`cyrius test --aarch64`, and `BNRMR_RUNNER=qemu-aarch64
-  sh scripts/golden.sh`), but nothing gates them. Two steps once a runner
-  has qemu-user.
-- **Fonts on AGNOS** (agnos's change, not this repository's). Since 1.6.0
-  an executable at `/bin/bnrmr` looks in `/share/bannermanor/fonts` (ADR
-  0003), provided `argv[0]` is absolute. agnos's
-  `scripts/burn/stage-tools.sh` stages the binary only. Staging `fonts/*.cyml`
-  there too would give AGNOS `slim` and `big`; until then it has the
-  built-in block. Confirm what `argv[0]` agnoshi passes.
-- **AGNOS runtime verification** of what 1.4.1 and 1.5.0 compiled but
-  could not run: the `file_write` route and its error handling (a failed
-  AGNOS write returns -1, not an errno), freelist's 2 MB-granular
-  `mmap`, the bayan sublib, cmdit's AGNOS argv path, and 1.6.0's
-  `argv[0]`-based install directory.
-
-**Gate**: the color probe must return 0 when stdout is not the console,
-or `bnrmr --color red X > file` writes escape bytes into the file. Ruled
-out: letting `$COLUMNS` or the console-global `tty_isatty` drive the TTY
-decision, which would emit SGR into a pipe. The width probe is the
-deliberate exception: on AGNOS a redirected stdout gets the console
-geometry (plain text, no escapes), as recorded in issue 0018.
 
 ### 1.8.0 — The fourth font
 
@@ -142,8 +102,10 @@ Contract-breaking or unrequested. Each entry states why it cannot be 1.x.
   gate is an unmade decision about what encoding argv text is in.
 - **Reading stdin.** `echo hi | bnrmr` prints help where `echo hi |
   figlet` renders. *Cannot be 1.x*: that is a valid invocation exiting 0
-  today. Also blocked on AGNOS, where there is no isatty, so an unguarded
-  fd-0 read would hang bare `bnrmr` on the keyboard forever.
+  today. AGNOS was a second blocker until agnos 1.57.13: with no isatty,
+  an unguarded fd-0 read would hang bare `bnrmr` on the keyboard.
+  `fd_kind` (used since 1.7.0, ADR 0004) now tells a pipe from the
+  console, so only the contract question remains.
 - **A force-color override / `--color-when`.** A new flag is a major.
   The env-var half moves TTY bytes and does not deliver the use case on
   its own.
@@ -192,9 +154,10 @@ Archived — all closed: [0001](issues/archive/0001-keystroke-interleave-during-
 [0016](issues/archive/0016-diagnostics-go-to-stdout.md),
 [0017](issues/archive/0017-docs-precision-pass.md),
 [0018](issues/archive/0018-agnos-console-width-never-queried.md),
-[0019](issues/archive/0019-darshana-probes-hand-rolled.md).
+[0019](issues/archive/0019-darshana-probes-hand-rolled.md),
+[0020](issues/archive/0020-list-fonts-hangs-when-fonts-is-a-fifo.md).
 The numbering rule is in [`issues/README.md`](issues/README.md); the next
-issue is 0020.
+issue is 0021.
 
 ## Out of scope
 
@@ -262,6 +225,17 @@ Post-freeze releases carry no milestone:
   `--list-fonts` shows stems one level deep, validated by the full
   loader, which resolved accepted risks A-11 and A-12. The frozen tier
   did not move.
+- **1.7.0**: AGNOS parity (ADR 0004). `--color` works on the AGNOS
+  console, and a redirected or piped banner there is plain and uncut, as
+  on Linux: bnrmr asks agnos's `fd_kind` whether fd 1 is the console
+  before trusting the console-wide width probe. That moved the toolchain
+  to cyrius 6.7.11, which also fixed issue 0020. Checked on AGNOS
+  before release (`scripts/agnos-smoke.py`, agnos 1.57.14 in QEMU), which
+  also confirmed the 1.4.1–1.6.0 paths that had only been compiled for
+  it, and that agnsh's absolute `argv[0]` finds the installed fonts. CI runs the suite and the golden matrix on aarch64 under
+  qemu-user. agnos's `stage-tools.sh` stages the fonts at
+  `/share/bannermanor/fonts` after its 1.57.14, closing the last AGNOS gap
+  (the change is agnos's).
 
 Two entries in the pre-1.0 criteria list have since moved. They are
 corrected here rather than left to imply otherwise:

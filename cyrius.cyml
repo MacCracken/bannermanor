@@ -4,7 +4,7 @@ version = "${file:VERSION}"
 description = "BannerManor — figlet-equivalent ASCII-art banner generator for MOTDs, script intros, splash text. Heraldic welcome ceremony at the gate of your digital manor. Binary: bnrmr."
 license = "GPL-3.0-only"
 language = "cyrius"
-cyrius = "6.7.9"
+cyrius = "6.7.11"
 
 [build]
 entry = "src/main.cyr"
@@ -32,7 +32,7 @@ stdlib = ["string", "fmt", "alloc", "atomic", "io", "vec", "str", "syscalls", "a
 # The test suite also uses tty_has_ctl + TTY_SANITIZE_LATIN1 and tty_raw /
 # tty_cooked.
 # 1.3.0 (bumped from 1.0.0 at 1.2.0) declares private constants with
-# `const`, so it needs cyrius >= 6.7.2; [package].cyrius is 6.7.9.
+# `const`, so it needs cyrius >= 6.7.2; [package].cyrius is 6.7.11.
 # Not adopted, deliberately: tty_sanitize_buf (replaces with '?';
 # bnrmr's frozen rule replaces with a space) and tty_winsize_or (treats
 # 0 rows as unknown; bnrmr reads columns only).
@@ -44,13 +44,15 @@ modules = ["dist/darshana.cyr"]
 # The CYML-only sublib, not the stdlib's full bayan bundle (issue 0013).
 # What bnrmr consumes: bayan_cyml_parse, bayan_cyml_doc_header{,_len},
 # bayan_cyml_doc_entry{,_count}, bayan_cyml_entry_header{,_len} and
-# bayan_cyml_entry_body{,_len} (src/font.cyr). 1.5.13 is the bayan the
-# cyrius 6.7.9 stdlib bundles, so the parser is byte-for-byte what 1.2.0
-# ran; its cyml.cyr section is identical to the bundle's.
+# bayan_cyml_entry_body{,_len} (src/font.cyr). 1.5.14 is the bayan the
+# cyrius 6.7.11 stdlib bundles (1.5.13 with 6.7.9, through 1.6.0; the
+# sublib's only difference is its version comment), so the parser is
+# byte-for-byte what 1.2.0 ran; its cyml.cyr section is identical to the
+# bundle's.
 # The sublib's own stdlib needs (dist/bayan-cyml.deps: alloc, io, str,
 # string, result, syscalls) are all in [deps].stdlib above.
 git = "https://github.com/MacCracken/bayan.git"
-tag = "1.5.13"
+tag = "1.5.14"
 modules = ["dist/bayan-cyml.cyr"]
 
 [deps.cmdit]
@@ -62,7 +64,8 @@ modules = ["dist/bayan-cyml.cyr"]
 # cmdit_argv, cmdit_parse, cmdit_parse_argv (tests), cmdit_error,
 # cmdit_get_bool, cmdit_get_str, cmdit_positional{,_count}. Help text, the
 # --version literal and every value check stay bnrmr's own (src/cli.cyr).
-# 1.4.0 pins cyrius 6.7.9, as bnrmr does. Its stdlib needs (dist/cmdit.deps:
+# 1.4.0 pins cyrius 6.7.9 (bnrmr is on 6.7.11 since 1.7.0; cmdit has no
+# later tag). Its stdlib needs (dist/cmdit.deps:
 # args, alloc, string, io) are all in [deps].stdlib above.
 git = "https://github.com/MacCracken/cmdit.git"
 tag = "1.4.0"

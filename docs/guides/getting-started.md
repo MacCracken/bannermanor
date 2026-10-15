@@ -11,7 +11,7 @@ orientation for someone who's about to read or change the source.
 cyrius deps                              # resolve stdlib + darshana + bayan-cyml + cmdit
 cyrius build src/main.cyr build/bnrmr    # compile (binary: bnrmr)
 ./build/bnrmr "AGNOS"                    # smoke render
-cyrius test                              # 3146 assertions
+cyrius test                              # 3150 assertions
 sh scripts/golden.sh                     # 339 invocations, byte for byte
 cyrius fuzz tests/bannermanor.fcyr       # font-parser regression gate
 cyrius bench tests/bannermanor.bcyr      # render path, CPU and write side
@@ -25,7 +25,7 @@ rendered byte fails the golden suite's `frozen` tier. If the move is
 intended (it should not be in 1.x, see ADR 0002), re-baseline with
 `sh scripts/golden.sh --update` and review the diff.
 
-Toolchain pin: `cyrius = "6.7.9"` in `cyrius.cyml`.
+Toolchain pin: `cyrius = "6.7.11"` in `cyrius.cyml`.
 
 ## Source layout
 
