@@ -69,7 +69,11 @@ the ruling that permits it; quote that ruling in its CHANGELOG entry.
   after an error follows the error to stderr. `cmd_list_fonts`'
   informational lines are exit-0 and stay on stdout. In the same change,
   add the `bright-<name>` alias to the `--color` error text so it agrees
-  with `--help`. Then the `error` tier moves once.
+  with `--help`. Then the `error` tier moves once. Since 1.4.2 the parser
+  is cmdit, whose `cmdit_print_error` already writes stderr and names the
+  offending token (`unknown flag: --bogus`). Adopting it changes the
+  wording as well as the stream, which ruling 1 permits; decide it here,
+  in the same re-baseline, rather than in a later one.
 - **Check write returns** ([issue 0009](issues/0009-write-return-never-checked.md),
   ruling 2). A retry-on-partial loop and errno classification, not a bare
   nonzero check. Exit nonzero when the banner did not reach fd 1:
@@ -182,58 +186,6 @@ renderer change: `font_glyph_index` already prefers a registered glyph
 over the fold. That takes the set to four and uses up the discretionary
 half of CLAUDE.md's 3–5 budget. More fonts after this would be the
 menagerie.
-
-## Adopting cmdit (CLI parsing)
-
-**Status: unblocked, demand-gated, not scheduled.** bnrmr does not
-hand-roll its parser. It drives the stdlib table parser (`"flags"` in
-`[deps].stdlib`), which since the cyrius 6.7 re-vendor has been *ahead*
-of cmdit on two freeze-visible points. cmdit 1.3.1 closed both: it keeps
-positionals past the 128th, and it rejects `--bool=value` as
-`CMDIT_ERR_UNEXPECTED_VALUE`. The swap was also waiting for a golden
-suite to prove it byte-identical, and 1.4.1 delivered one, including
-both of those cases (`positionals-200-past-128`,
-`parse-bool-with-value`). The payoff is small, about fifteen lines.
-
-Site map (by function, since line numbers move):
-
-- `build_argv_array` (`src/cli.cyr`) and `argv_arr` in `main()` →
-  `cmdit_argv(fs)`. It returns argc, so the bare-`bnrmr` usage exit 0 and
-  the `> 256` exit 1 stay as guards on its return value.
-- `flags_new` and the hand-registered `version` / `help` bools (`main()`)
-  → `cmdit_new("bnrmr")` **plus `cmdit_version_short(fs, 0)`**. cmdit
-  auto-binds `-V`; bnrmr has no `-V`, and the freeze adds no flags.
-- `list-fonts` and the five string flags → `cmdit_bool` / `cmdit_str`,
-  one for one. Validation deliberately stays with the caller:
-  - `--width` / `--pad` keep `_parse_count_flag` (`src/cli.cyr`).
-    `cmdit_int` rejects overflow but reports `bad integer value` where
-    audit B-001 pinned the `max` message.
-  - `--align` keeps `parse_align`. `cmdit_enum` would validate during
-    the parse, ahead of `--help` / `--version` / `--list-fonts`, so
-    `--list-fonts --align x` would flip from exit 0 to exit 1 (golden:
-    `list-fonts-beats-bad-align`).
-  - `--color` keeps `parse_color`.
-- `flags_parse` and the `FLAG_ERR_*` switch → `cmdit_parse` with the same
-  switch on `cmdit_error`, mapping `CMDIT_ERR_UNEXPECTED_VALUE` to
-  today's `argument parse error`. Keep the stdout `println`s until issue
-  0016 moves them: `cmdit_print_error` writes stderr with different
-  wording.
-- Help → on `CMDIT_HELP`, call the hand-written `print_usage()`.
-  `cmdit_help_flags` writes fd 2, not the stdout the snapshot tier
-  records.
-- Version → keep the `println("bnrmr X.Y.Z")` literal in `main()`;
-  `scripts/doc-pin-check.sh` rule (e) reads it.
-- `flags_positional*` (`join_positionals`, `main()`) →
-  `cmdit_positional*`.
-
-Work: drop `"flags"` from `[deps].stdlib` (keep `"args"` and `"io"`) and
-the `include "lib/flags.cyr"` in `src/cli.cyr`. Add a `[deps.cmdit]`
-pin to the newest tag the golden suite passes against: 1.3.1 closed the
-blockers, and 1.4.0 is current. Build the flag table in `src/cli.cyr` so
-it can be tested with `cmdit_parse_argv` on synthetic argv, as
-`t_cli_join_positionals` does today. **Bar**: golden byte-identical on
-all three tiers, pty leg included. kii (`src/cli.cyr`) and anuenue
-(`src/main.cyr`) are the worked migrations.
 
 ## Beyond 1.x
 
@@ -359,10 +311,15 @@ Post-freeze releases carry no milestone:
   [`../audit/2026-08-25-audit.md`](../audit/2026-08-25-audit.md).
 - **1.4.1**: the whole post-1.2.0 plan in one release. That covered
   proving the contract (the golden suite committed and gated, the CI
-  gates, the issue register reconciled, ADR 0002 drafted) and the
-  documentation precision pass. It also shipped chunked writes, the
-  CYML-only bayan and freed read buffers, plus tests, fixtures, a real
-  fuzz harness and the dead constants wired in.
+  gates, the issue register reconciled, ADR 0002 proposed and accepted)
+  and the documentation precision pass. It also shipped chunked writes,
+  the CYML-only bayan and freed read buffers, plus tests, fixtures, a
+  real fuzz harness and the dead constants wired in.
+- **1.4.2**: CLI parsing moved from the stdlib's `flags` to cmdit 1.4.0.
+  The roadmap had carried this as demand-gated; it was waiting on cmdit
+  1.3.1 (positionals past 128, `--bool=value`) and on a golden suite to
+  prove it. The suite gained 33 grammar cases first, and all 318 records
+  are byte-identical across the swap.
 
 Two entries in the pre-1.0 criteria list have since moved. They are
 corrected here rather than left to imply otherwise:

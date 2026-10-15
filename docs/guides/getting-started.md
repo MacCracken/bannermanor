@@ -8,11 +8,11 @@ orientation for someone who's about to read or change the source.
 ## Build
 
 ```sh
-cyrius deps                              # resolve stdlib + darshana + bayan-cyml
+cyrius deps                              # resolve stdlib + darshana + bayan-cyml + cmdit
 cyrius build src/main.cyr build/bnrmr    # compile (binary: bnrmr)
 ./build/bnrmr "AGNOS"                    # smoke render
-cyrius test                              # 3006 assertions
-sh scripts/golden.sh                     # 285 invocations, byte for byte
+cyrius test                              # 3061 assertions
+sh scripts/golden.sh                     # 318 invocations, byte for byte
 cyrius fuzz tests/bannermanor.fcyr       # font-parser regression gate
 cyrius bench tests/bannermanor.bcyr      # render path, CPU and write side
 ```
@@ -28,12 +28,14 @@ Toolchain pin: `cyrius = "6.7.9"` in `cyrius.cyml`.
 
 ## Source layout
 
-- `src/main.cyr` — `main()` only: flag table, validation, font
-  resolution, the call to the renderer. Nothing can include it (its
+- `src/main.cyr` — `main()` only: read argv (`cmdit_argv`), parse,
+  validate, resolve the font, call the renderer. Nothing can include it (its
   entry statement runs at include time), so logic goes in `src/cli.cyr`.
-- `src/cli.cyr` — the testable rest of the CLI: `--font` name
-  containment, the `--width` / `--pad` / `--align` parsers, joining the
-  text under the 1 KB cap, `--help`, `--list-fonts`.
+- `src/cli.cyr` — the testable rest of the CLI: the flag table
+  (`cli_flags`, on [cmdit](https://github.com/MacCracken/cmdit) since
+  1.4.2) and its error lines, `--font` name containment, the `--width` /
+  `--pad` / `--align` parsers, joining the text under the 1 KB cap,
+  `--help`, `--list-fonts`.
 - `src/render.cyr` — `render(font, text, len)` shim that preserves the
   M1 byte-identity contract; delegates to `render_layout` with
   neutral options.

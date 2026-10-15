@@ -1230,6 +1230,87 @@ stdout: 60 bytes, cksum 576433294
 | #   # #   #$
 stderr: 0 bytes, cksum 4294967295
 
+### parse-repeat-width-last-wins
+args: [--width] [5] [--width] [23] [AGNOSTIC]
+exit: 0
+stdout: 120 bytes, cksum 36840655
+|  ###   #### #   #  ### $
+| #   # #     ##  # #   #$
+| ##### #  ## # # # #   #$
+| #   # #   # #  ## #   #$
+| #   #  #### #   #  ### $
+stderr: 0 bytes, cksum 4294967295
+
+### parse-repeat-align-last-wins
+args: [--align] [right] [--align] [left] [HI]
+exit: 0
+stdout: 60 bytes, cksum 2359129690
+| #   # #####$
+| #   #   #  $
+| #####   #  $
+| #   #   #  $
+| #   # #####$
+stderr: 0 bytes, cksum 4294967295
+
+### parse-repeat-pad-mixed-forms
+args: [--pad=1] [--pad] [2] [HI]
+exit: 0
+stdout: 64 bytes, cksum 2729890105
+| $
+| $
+| #   # #####$
+| #   #   #  $
+| #####   #  $
+| #   #   #  $
+| #   # #####$
+| $
+| $
+stderr: 0 bytes, cksum 4294967295
+
+### parse-dashdash-then-dashdash
+args: [--] [--] [HI]
+exit: 0
+stdout: 150 bytes, cksum 203140678
+|                   #   # #####$
+|                   #   #   #  $
+|  ###   ###        #####   #  $
+|                   #   #   #  $
+|                   #   # #####$
+stderr: 0 bytes, cksum 4294967295
+
+### parse-dashdash-alone-then-dashdash
+args: [--] [--]
+exit: 0
+stdout: 60 bytes, cksum 1494954410
+|            $
+|            $
+|  ###   ### $
+|            $
+|            $
+stderr: 0 bytes, cksum 4294967295
+
+### parse-flag-after-dashdash-is-text
+args: [--color] [red] [--] [--color] [HI]
+exit: 0
+stdout: 300 bytes, cksum 4065189236
+|              ####  ###  #      ###  ####        #   # #####$
+|             #     #   # #     #   # #   #       #   #   #  $
+|  ###   ###  #     #   # #     #   # ####        #####   #  $
+|             #     #   # #     #   # #  #        #   #   #  $
+|              ####  ###  #####  ###  #   #       #   # #####$
+stderr: 0 bytes, cksum 4294967295
+
+### parse-text-then-dashdash
+args: [HI] [--] [--pad] [3]
+exit: 0
+stdout: 300 bytes, cksum 1048488728
+| #   # #####                   ####   ###  ####         ### $
+| #   #   #                     #   # #   # #   #       #   #$
+| #####   #          ###   ###  ####  ##### #   #         ## $
+| #   #   #                     #     #   # #   #       #   #$
+| #   # #####                   #     #   # ####         ### $
+stderr: 0 bytes, cksum 4294967295
+
 ### pty-24x80-agnos
 args: [AGNOS]
 pty: 24x80

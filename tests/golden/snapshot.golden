@@ -406,3 +406,193 @@ stdout: 521 bytes, cksum 4051001957
 |   zero_entries  3x3 gap=1  header only$
 stderr: 0 bytes, cksum 4294967295
 
+### help-repeated-short
+args: [-h] [-h]
+exit: 0
+stdout: 1331 bytes, cksum 131168091
+| bnrmr \342\200\224 figlet-equivalent ASCII-art banner generator$
+| $
+| Usage:$
+|   bnrmr [FLAGS] TEXT...$
+| $
+| Flags:$
+|   -f, --font NAME       load fonts/NAME.cyml (default: embedded block)$
+|                         or a path ending in .flf for a legacy figlet font$
+|       --align V         left | center | right (default: left)$
+|   -w, --width N         truncate at glyph boundary at N columns$
+|                         (default: 0 = unlimited; if N is smaller$
+|                         than one glyph, no glyphs render \342\200\224 the$
+|                         banner comes out as blank rows)$
+|       --pad N           N blank lines above and below banner (default: 0)$
+|       --color NAME      colorize: black, red, green, yellow, blue,$
+|                         magenta, cyan, white (or bright_<name> /$
+|                         bright-<name>), or 'rainbow'$
+|                         for per-row cycling. Suppressed on non-TTY stdout.$
+|       --list-fonts      list available fonts and exit$
+|       --version         print version and exit$
+|   -h, --help            print this help and exit$
+|       --                end of flags: everything after it is TEXT,$
+|                         even a word starting with '-' (bnrmr -- -HI)$
+| $
+| Coverage: A-Z, 0-9, space, printable punctuation. Lowercase folds$
+| to uppercase when the font has no lowercase glyphs. Unsupported$
+| characters render as blank.$
+stderr: 0 bytes, cksum 4294967295
+
+### help-repeated-long
+args: [--help] [--help]
+exit: 0
+stdout: 1331 bytes, cksum 131168091
+| bnrmr \342\200\224 figlet-equivalent ASCII-art banner generator$
+| $
+| Usage:$
+|   bnrmr [FLAGS] TEXT...$
+| $
+| Flags:$
+|   -f, --font NAME       load fonts/NAME.cyml (default: embedded block)$
+|                         or a path ending in .flf for a legacy figlet font$
+|       --align V         left | center | right (default: left)$
+|   -w, --width N         truncate at glyph boundary at N columns$
+|                         (default: 0 = unlimited; if N is smaller$
+|                         than one glyph, no glyphs render \342\200\224 the$
+|                         banner comes out as blank rows)$
+|       --pad N           N blank lines above and below banner (default: 0)$
+|       --color NAME      colorize: black, red, green, yellow, blue,$
+|                         magenta, cyan, white (or bright_<name> /$
+|                         bright-<name>), or 'rainbow'$
+|                         for per-row cycling. Suppressed on non-TTY stdout.$
+|       --list-fonts      list available fonts and exit$
+|       --version         print version and exit$
+|   -h, --help            print this help and exit$
+|       --                end of flags: everything after it is TEXT,$
+|                         even a word starting with '-' (bnrmr -- -HI)$
+| $
+| Coverage: A-Z, 0-9, space, printable punctuation. Lowercase folds$
+| to uppercase when the font has no lowercase glyphs. Unsupported$
+| characters render as blank.$
+stderr: 0 bytes, cksum 4294967295
+
+### list-fonts-repeated
+args: [--list-fonts] [--list-fonts]
+exit: 0
+stdout: 304 bytes, cksum 3036194356
+| Available fonts (fonts/):$
+| $
+|   big        7x7 gap=1  BannerManor big font: 7 rows tall, 7 cols wide. Chunky banner.$
+|   block      5x5 gap=1  BannerManor block font: 5 rows tall, 5 cols wide. Default font.$
+|   slim       4x5 gap=1  BannerManor slim font: 5 rows tall, 4 cols wide. Narrower companion to block.$
+stderr: 0 bytes, cksum 4294967295
+
+### version-repeated
+args: [--version] [--version]
+exit: 0
+stdout: 16 bytes, cksum 1466555733
+| bnrmr @VERSION@$
+stderr: 0 bytes, cksum 4294967295
+
+### dashdash-alone
+args: [--]
+exit: 0
+stdout: 1331 bytes, cksum 131168091
+| bnrmr \342\200\224 figlet-equivalent ASCII-art banner generator$
+| $
+| Usage:$
+|   bnrmr [FLAGS] TEXT...$
+| $
+| Flags:$
+|   -f, --font NAME       load fonts/NAME.cyml (default: embedded block)$
+|                         or a path ending in .flf for a legacy figlet font$
+|       --align V         left | center | right (default: left)$
+|   -w, --width N         truncate at glyph boundary at N columns$
+|                         (default: 0 = unlimited; if N is smaller$
+|                         than one glyph, no glyphs render \342\200\224 the$
+|                         banner comes out as blank rows)$
+|       --pad N           N blank lines above and below banner (default: 0)$
+|       --color NAME      colorize: black, red, green, yellow, blue,$
+|                         magenta, cyan, white (or bright_<name> /$
+|                         bright-<name>), or 'rainbow'$
+|                         for per-row cycling. Suppressed on non-TTY stdout.$
+|       --list-fonts      list available fonts and exit$
+|       --version         print version and exit$
+|   -h, --help            print this help and exit$
+|       --                end of flags: everything after it is TEXT,$
+|                         even a word starting with '-' (bnrmr -- -HI)$
+| $
+| Coverage: A-Z, 0-9, space, printable punctuation. Lowercase folds$
+| to uppercase when the font has no lowercase glyphs. Unsupported$
+| characters render as blank.$
+stderr: 0 bytes, cksum 4294967295
+
+### help-beats-list-fonts
+args: [--list-fonts] [--help]
+exit: 0
+stdout: 1331 bytes, cksum 131168091
+| bnrmr \342\200\224 figlet-equivalent ASCII-art banner generator$
+| $
+| Usage:$
+|   bnrmr [FLAGS] TEXT...$
+| $
+| Flags:$
+|   -f, --font NAME       load fonts/NAME.cyml (default: embedded block)$
+|                         or a path ending in .flf for a legacy figlet font$
+|       --align V         left | center | right (default: left)$
+|   -w, --width N         truncate at glyph boundary at N columns$
+|                         (default: 0 = unlimited; if N is smaller$
+|                         than one glyph, no glyphs render \342\200\224 the$
+|                         banner comes out as blank rows)$
+|       --pad N           N blank lines above and below banner (default: 0)$
+|       --color NAME      colorize: black, red, green, yellow, blue,$
+|                         magenta, cyan, white (or bright_<name> /$
+|                         bright-<name>), or 'rainbow'$
+|                         for per-row cycling. Suppressed on non-TTY stdout.$
+|       --list-fonts      list available fonts and exit$
+|       --version         print version and exit$
+|   -h, --help            print this help and exit$
+|       --                end of flags: everything after it is TEXT,$
+|                         even a word starting with '-' (bnrmr -- -HI)$
+| $
+| Coverage: A-Z, 0-9, space, printable punctuation. Lowercase folds$
+| to uppercase when the font has no lowercase glyphs. Unsupported$
+| characters render as blank.$
+stderr: 0 bytes, cksum 4294967295
+
+### help-beats-list-fonts-before
+args: [--help] [--list-fonts]
+exit: 0
+stdout: 1331 bytes, cksum 131168091
+| bnrmr \342\200\224 figlet-equivalent ASCII-art banner generator$
+| $
+| Usage:$
+|   bnrmr [FLAGS] TEXT...$
+| $
+| Flags:$
+|   -f, --font NAME       load fonts/NAME.cyml (default: embedded block)$
+|                         or a path ending in .flf for a legacy figlet font$
+|       --align V         left | center | right (default: left)$
+|   -w, --width N         truncate at glyph boundary at N columns$
+|                         (default: 0 = unlimited; if N is smaller$
+|                         than one glyph, no glyphs render \342\200\224 the$
+|                         banner comes out as blank rows)$
+|       --pad N           N blank lines above and below banner (default: 0)$
+|       --color NAME      colorize: black, red, green, yellow, blue,$
+|                         magenta, cyan, white (or bright_<name> /$
+|                         bright-<name>), or 'rainbow'$
+|                         for per-row cycling. Suppressed on non-TTY stdout.$
+|       --list-fonts      list available fonts and exit$
+|       --version         print version and exit$
+|   -h, --help            print this help and exit$
+|       --                end of flags: everything after it is TEXT,$
+|                         even a word starting with '-' (bnrmr -- -HI)$
+| $
+| Coverage: A-Z, 0-9, space, printable punctuation. Lowercase folds$
+| to uppercase when the font has no lowercase glyphs. Unsupported$
+| characters render as blank.$
+stderr: 0 bytes, cksum 4294967295
+
+### version-beats-list-fonts
+args: [--version] [--list-fonts]
+exit: 0
+stdout: 16 bytes, cksum 1466555733
+| bnrmr @VERSION@$
+stderr: 0 bytes, cksum 4294967295
+

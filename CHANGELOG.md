@@ -4,6 +4,39 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.4.2] — 2026-10-15 (CLI parsing on cmdit)
+
+The command-line parser moves from the stdlib's table parser
+(`lib/flags.cyr`) to [cmdit](https://github.com/MacCracken/cmdit), the
+same getopt-long core productized as a distlib. **No output byte
+changes on any path the golden suite covers.** Before the swap, the
+suite gained 33 parser-grammar cases recorded against the 1.4.1 parser,
+and all 318 records are byte-identical across it, on x86_64 and on
+aarch64 under qemu.
+
+### Changed
+
+- **CLI parsing on cmdit 1.4.0.** New `[deps.cmdit]` (tag 1.4.0, `dist/cmdit.cyr`); `flags` leaves `[deps].stdlib`; `lib/` is regenerated from the manifest (`flags.cyr` out, `cmdit.cyr` in) and `cyrius deps --locked` passes. The roadmap had carried this as demand-gated, waiting on cmdit 1.3.1 to stop dropping positionals past the 128th and to reject `--bool=value`, and on a golden suite to prove the swap byte-identical. 1.4.1 provided the suite.
+  - The flag table moved from `main()` into `src/cli.cyr` as `cli_flags()`, so tests parse synthetic argv with it (`cmdit_parse_argv`).
+  - `cmdit_argv` replaced bnrmr's own `build_argv_array` and its fixed 256-slot stack array; the `> 256` argument guard stays.
+  - cmdit's auto `-V` is dropped (`cmdit_version_short(fs, 0)`): bnrmr never had `-V`, and the freeze adds no flags. A mutant that keeps it fails the golden error tier.
+  - Deliberately **not** handed to cmdit: help (`print_usage` stays; `cmdit_help` writes stderr), the `--version` literal (`scripts/doc-pin-check.sh` reads it), and every value check. `--width` / `--pad` stay strings for `_parse_count_flag`, `--align` stays `parse_align` (`cmdit_enum` would reject during the parse, ahead of `--help` and `--list-fonts`), and `--color` stays `parse_color`.
+  - The parse-error lines are the stdlib parser's wording, byte for byte, now in `report_parse_error()` (`src/cli.cyr`). Codes 0..4 are the same in both parsers; everything past them is `argument parse error`, as before.
+- **One error path changes its message**, permitted by ADR 0002 ruling 1 and with the same exit code: a command line too long for the stdlib's 2 MiB `/proc/self/cmdline` read. cmdit refuses it (`CMDIT_ERR_ARGV`), so bnrmr now prints `argument parse error` and the usage block, exit 1. Before, it parsed whatever survived the truncation and failed on that, typically `input too long (max 1024 bytes)`, also exit 1. Reaching it takes a raised `ulimit -s`; checked by hand with 17 arguments of 131,000 bytes.
+- **Binary size** 244,184 → 292,008 bytes (x86_64), 260,352 → 304,088 (AGNOS), 338,296 → 341,064 (aarch64). The whole cmdit bundle links, shell-completion generators included; cyrius's DCE does not strip unreachable code.
+- **`src/main.cyr`** — `--version` literal bumped to `bnrmr 1.4.2`.
+
+### Added
+
+- **33 golden cases pinning the flag grammar** (`parse-*`, `help-*`, `version-*`, `list-fonts-*`, `dashdash-alone`), recorded against the 1.4.1 parser before the swap: `-V` is not version; errors beat `--help` in either order; no prefix matching (`--col`, `--he`, `--list`); bundled and attached short forms (`-hh`, `-w5`, `-f=slim`); flag-shaped values taken as values (`--font --list-fonts`); repeats (last wins); `--` in every position; and help / version / `--list-fonts` precedence. Golden: 285 → 318 cases (217 frozen, 76 error, 25 snapshot).
+- **Tests** (suite 3006 → 3061): `t_cli_flags` drives the table on synthetic argv (values, absent flags, repeats, `--`, help over version, `-V`, the error codes, flag-shaped values); `t_cli_report_parse_error` captures every message through a pipe; `t_cli_argv` reads the real process argv. Reference coverage stays 100% (37/37).
+
+### Notes
+
+- **Verification**: build clean for x86_64, `--agnos` and `--aarch64`; `cyrius lint --strict --strict-deferrals` clean; `cyrius test` 3061 passed on x86_64 and on aarch64 under qemu; golden 318/318 on both; `cyrius fuzz` 0 violations; `cyrius coverage --min 100`; `cyrius deps --locked`; `scripts/doc-pin-check.sh` green.
+- **Not measured**: speed. The host load average was 12–15 throughout, and a 500-run wall-clock comparison against 1.4.1 swung from 648 to 1,069 µs between consecutive runs. The parse is a negligible share of an invocation either way.
+- **Not runtime-verified on AGNOS**: cmdit's AGNOS argv path (`argv(i)` over the pointer table). It compiles, and it is the same `lib/args` call 1.4.1 made directly.
+
 ## [1.4.1] — 2026-10-15 (the contract checked in CI, one write per run, CYML-only bayan, a real fuzz gate)
 
 This release lands the roadmap's planned 1.3.0 (*prove the contract*),

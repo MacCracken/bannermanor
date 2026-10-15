@@ -1,4 +1,5 @@
-# cli.cyr — bnrmr's command line, apart from main() itself: font-name
+# cli.cyr — bnrmr's command line, apart from main() itself: the flag
+# table (cmdit, since 1.4.2), the parse-error diagnostics, font-name
 # resolution, the --width / --pad / --align parsers, joining positionals
 # under the 1 KB cap, --help, and --list-fonts.
 #
@@ -14,9 +15,72 @@
 # `syscall(1, 1, ...)`.
 
 include "src/render.cyr"
-include "lib/flags.cyr"
+include "lib/cmdit.cyr"
 include "lib/fs.cyr"
 include "lib/fmt.cyr"
+
+# ---- the flag table ----
+#
+# Through 1.4.1 this was the stdlib table parser (lib/flags.cyr), built in
+# main(). Since 1.4.2 it is cmdit, the same getopt-long core as a distlib
+# (error codes 0..4 are flags.cyr's), built here so the suite can parse
+# synthetic argv with it. What a valid or invalid command line does is
+# pinned by the golden suite, which is byte-identical across the swap,
+# including the grammar cases added for it (`parse-*`).
+#
+# What cmdit is NOT given, on purpose: validation. --width / --pad stay
+# strings parsed by _parse_count_flag (cmdit_int would print `bad integer
+# value` where audit B-001 pinned the `max` message), --align stays
+# parse_align (cmdit_enum would reject it during the parse, ahead of
+# --help / --list-fonts), and --color stays parse_color. Help is
+# print_usage, never cmdit_help: that writes stderr, and --help is stdout.
+
+# Indices of the registered flags, set by cli_flags(). cmdit registers
+# --help / -h and --version itself; cmdit_parse reports those as
+# CMDIT_HELP / CMDIT_VERSION, help first.
+var CF_LIST = 0;
+var CF_FONT = 0;
+var CF_ALIGN = 0;
+var CF_WIDTH = 0;
+var CF_PAD = 0;
+var CF_COLOR = 0;
+
+# A fresh cmdit handle with bnrmr's flags registered, or 0 if allocation
+# was refused (every cmdit call accepts 0 and reports CMDIT_ERR_NOMEM).
+# One handle per parse: cmdit handles are single-parse.
+fn cli_flags(): i64 {
+    var fs = cmdit_new("bnrmr");
+    if (fs == 0) { return 0; }
+    # cmdit binds -V to --version by default. bnrmr never had -V, and the
+    # freeze adds no flags (golden: parse-capital-v-is-not-version).
+    cmdit_version_short(fs, 0);
+    CF_LIST  = cmdit_bool(fs, 0,   "list-fonts", "list available fonts and exit");
+    CF_FONT  = cmdit_str (fs, 102, "font",  0, "font name (default: embedded block)");  # 'f'
+    CF_ALIGN = cmdit_str (fs, 0,   "align", 0, "left | center | right");
+    CF_WIDTH = cmdit_str (fs, 119, "width", 0, "truncate at N columns (0 = unlimited)"); # 'w'
+    CF_PAD   = cmdit_str (fs, 0,   "pad",   0, "N blank lines above and below");
+    CF_COLOR = cmdit_str (fs, 0,   "color", 0, "name (red/cyan/...) or 'rainbow'");
+    return fs;
+}
+
+# The diagnostic for a failed parse: one line naming the CmditErr `code`,
+# a blank line, the usage block. Returns 1, the exit code. The wording is
+# the stdlib parser's, kept byte for byte: cmdit_print_error writes stderr
+# and names the token, which is issue 0016's change (roadmap 1.5.0), not
+# this one. Every code past BUNDLED, including UNEXPECTED_VALUE
+# (`--list-fonts=0`) and an argv cmdit could not read whole, is the
+# generic line, as every code past 4 was under the stdlib parser.
+fn report_parse_error(code): i64 {
+    var msg = "bnrmr: argument parse error";
+    if (code == CMDIT_ERR_UNKNOWN) { msg = "bnrmr: unknown flag"; }
+    if (code == CMDIT_ERR_MISSING_VALUE) { msg = "bnrmr: flag missing value"; }
+    if (code == CMDIT_ERR_BAD_INT) { msg = "bnrmr: bad integer value"; }
+    if (code == CMDIT_ERR_BUNDLED) { msg = "bnrmr: bundled short flags not supported"; }
+    println(msg);
+    println("");
+    print_usage();
+    return 1;
+}
 
 enum CliLimits {
     FONT_NAME_CAP = 64;       # longest --font NAME build_font_path accepts
@@ -235,14 +299,14 @@ fn parse_align(s): i64 {
     return 0 - 1;
 }
 
-# Concatenate flags_positional(fs, 0..n-1) into out separated by spaces.
-# Returns bytes written, or -1 on overflow.
+# Concatenate the parsed positionals (cmdit_positional(fs, 0..n-1)) into
+# out, separated by spaces. Returns bytes written, or -1 on overflow.
 fn join_positionals(out, out_cap, fs): i64 {
-    var pc = flags_positional_count(fs);
+    var pc = cmdit_positional_count(fs);
     var n: i64 = 0;
     var i = 0;
     while (i < pc) {
-        var arg = flags_positional(fs, i);
+        var arg = cmdit_positional(fs, i);
         var alen = strlen(arg);
         if (n > 0) {
             if (n + 1 > out_cap) { return 0 - 1; }
@@ -257,19 +321,6 @@ fn join_positionals(out, out_cap, fs): i64 {
     return n;
 }
 
-# Pack argc()/argv(i) into a contiguous cstr* array on the stack.
-# Required because flags_parse takes a raw pointer-array, not the
-# `argv(n)` function.
-fn build_argv_array(arr): i64 {
-    var ac = argc();
-    var i = 0;
-    while (i < ac) {
-        store64(arr + i * 8, argv(i));
-        i = i + 1;
-    }
-    return ac;
-}
-
 # _parse_count_flag sentinels (negative, so they cannot collide with a
 # parsed count). Written inline as `0 - N` per this file's existing
 # convention — cyrius enum members take literals only.
@@ -281,7 +332,8 @@ fn build_argv_array(arr): i64 {
 # Parse a --width/--pad token. Returns the value, or a COUNT_* sentinel.
 #
 # Absent flag -> 0 (the pre-1.1.4 default from flags_get_int).
-# "-0"/"-00"  -> 0, which _flags_parse_int accepted before, so keep it.
+# "-0"/"-00"  -> 0, which the stdlib's _flags_parse_int accepted before
+#                1.1.4, so keep it.
 # "007"       -> 7; leading zeros worked before and must keep working.
 # huge digits -> COUNT_OVER so the caller still prints its `max` message
 #                rather than a generic parse error (matches the

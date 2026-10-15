@@ -132,11 +132,12 @@ jobs:
         run: cyrius test tests/bannermanor.tcyr
 
       - name: Golden suite
-        # The v1.0 frozen-output contract, byte for byte: 285 invocations in
-        # three tiers (frozen renders, error paths, snapshot help/version/
-        # listing), 112 of them on a pty through script(1), which
-        # ubuntu-latest ships in util-linux. A missing script(1) FAILS the
-        # suite; it never skips the pty leg. See scripts/golden.sh.
+        # The v1.0 frozen-output contract, byte for byte: every invocation in
+        # tests/golden/cases.sh (318 at 1.4.2) in three tiers (frozen
+        # renders, error paths, snapshot help/version/listing), 112 of them
+        # on a pty through script(1), which ubuntu-latest ships in
+        # util-linux. A missing script(1) FAILS the suite; it never skips
+        # the pty leg. See scripts/golden.sh.
         run: sh scripts/golden.sh
 
       - name: Fuzz

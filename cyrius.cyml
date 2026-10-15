@@ -12,7 +12,7 @@ test = "tests/bannermanor.tcyr"
 output = "bnrmr"
 
 [deps]
-stdlib = ["string", "fmt", "alloc", "atomic", "io", "vec", "str", "syscalls", "assert", "bench", "args", "result", "flags", "fs", "fnptr", "freelist", "mmap"]
+stdlib = ["string", "fmt", "alloc", "atomic", "io", "vec", "str", "syscalls", "assert", "bench", "args", "result", "fs", "fnptr", "freelist", "mmap"]
 
 [deps.darshana]
 # What bnrmr consumes, all inside darshana's frozen v1.0 surface
@@ -47,3 +47,18 @@ modules = ["dist/darshana.cyr"]
 git = "https://github.com/MacCracken/bayan.git"
 tag = "1.5.13"
 modules = ["dist/bayan-cyml.cyr"]
+
+[deps.cmdit]
+# The CLI parser (1.4.2), replacing the stdlib's `flags` module. cmdit is
+# lib/flags.cyr productized as a distlib: same getopt-long core and error
+# codes 0..4, plus the argv bridge (cmdit_argv) that replaced bnrmr's own
+# build_argv_array. What bnrmr uses: cmdit_new, cmdit_version_short (to
+# drop the auto -V: the freeze adds no flags), cmdit_bool, cmdit_str,
+# cmdit_argv, cmdit_parse, cmdit_parse_argv (tests), cmdit_error,
+# cmdit_get_bool, cmdit_get_str, cmdit_positional{,_count}. Help text, the
+# --version literal and every value check stay bnrmr's own (src/cli.cyr).
+# 1.4.0 pins cyrius 6.7.9, as bnrmr does. Its stdlib needs (dist/cmdit.deps:
+# args, alloc, string, io) are all in [deps].stdlib above.
+git = "https://github.com/MacCracken/cmdit.git"
+tag = "1.4.0"
+modules = ["dist/cmdit.cyr"]

@@ -5,6 +5,8 @@
 
 ## Version
 
+**1.4.2** — 2026-10-15. **CLI parsing on cmdit.** The stdlib table parser (`lib/flags.cyr`) is replaced by [cmdit](https://github.com/MacCracken/cmdit) 1.4.0, pinned as a `[deps.cmdit]` git dependency. cmdit is the same getopt-long core as a distlib. The flag table moved into `src/cli.cyr` (`cli_flags`), so the suite parses synthetic argv with it, and the parse-error lines into `report_parse_error`. `cmdit_argv` replaced bnrmr's own `build_argv_array`. Before the swap the golden suite gained 33 parser-grammar cases (318 in all), and every record is byte-identical across it, on x86_64 and on aarch64 under qemu. cmdit's auto `-V` is dropped (the freeze adds no flags), and help, the `--version` literal and every value check stay bnrmr's. One diagnostic changed, under ADR 0002 ruling 1: a command line too long for the stdlib's 2 MiB `/proc` read now reports `argument parse error` (exit 1, as before) instead of whatever the truncated argv produced. Binary 244,184 → 292,008 bytes: the whole cmdit bundle links. Suite 3006 → 3061. See `CHANGELOG.md` [1.4.2].
+
 **1.4.1** — 2026-10-15. **The contract checked in CI; one write per run; CYML-only bayan; a real fuzz gate.** The roadmap's planned 1.3.0, 1.3.1, 1.4.0 and 1.4.1 landed as one release (no 1.3.x or 1.4.0 was tagged). The golden matrix is committed and gated (`scripts/golden.sh`: 285 invocations in three tiers — frozen renders, error paths, snapshot help/version/listing — 112 of them on a pty), and its frozen tier is byte-identical to 1.2.0 on x86_64 and on aarch64 under qemu. CI gained `deps --locked`, strict lint, both cross-builds, a smoke step, the golden suite, the fuzz harness and a 100% reference-coverage floor. Pads, gaps and `--pad` lines are written in runs ([issue 0005](issues/archive/0005-write-per-cell-syscall-cost.md)): `--width 4096 --align right A` went from 20,465 `write(2)` calls to 15, and wide renders now cost the same as natural ones. Every stdout write goes through `lib/io.cyr`'s `file_write`. bayan's CYML-only sublib replaced the full bundle ([issue 0013](issues/archive/0013-full-bayan-bundle-linked.md)): 597,040 → 244,184 bytes. The three font readers share one `_slurp` and free their buffers ([issue 0014](issues/archive/0014-transient-read-buffers-never-freed.md)); dead named limits are wired in ([0012](issues/archive/0012-dead-geometry-constants.md)); `src/cli.cyr` made the CLI testable; the fuzz harness drives the real parsers ([0010](issues/archive/0010-fuzz-harness-is-a-no-op.md)). The only stdout change: `--help` lists `--`. ADR 0002 (what the freeze covers) was proposed and accepted, which unblocks roadmap 1.5.0. Suite 2828 → 3006. See `CHANGELOG.md` [1.4.1].
 
 **1.2.0** — 2026-10-12. **Toolchain, darshana, and the stdout probes.** cyrius pin `6.6.2 → 6.7.9` (the 6.7 language minor) with `lib/` re-vendored from `[deps].stdlib` (`rm -rf lib/ && cyrius deps`: 109 files → 32 — the old tree was a full-snapshot `lib sync --full`; 79 modules nothing includes are gone, `alloc_cx` and `poison` are new) and `cyrius.lock` regenerated. No source change was needed for the language bump: no compile error and no warning on any target. darshana pin `1.0.0 → 1.3.0` (1.3.0 needs cyrius ≥ 6.7.2, which is why the toolchain moved first). `src/layout.cyr`'s two hand-rolled `TIOCGWINSZ` probes now ride darshana's `tty_winsize` ([issue 0019](issues/archive/0019-darshana-probes-hand-rolled.md)); the local `TIOCGWINSZ` re-declaration is gone. **AGNOS behavior change, deliberate**: the width probe now returns the framebuffer console grid instead of a hard 0 ([issue 0018](issues/archive/0018-agnos-console-width-never-queried.md)), so AGNOS banners truncate and align to the console — redirected stdout included, because agnos has no per-fd terminal query; `--color` stays off on AGNOS for that same reason. Linux output is byte-identical — a 224-invocation golden matrix (112 piped, 112 on a pty) on x86_64 and aarch64 — except the `--version` literal. Suite 2775 → 2828, the first tests of either probe. See `CHANGELOG.md` [1.2.0].
@@ -145,15 +147,19 @@ Single-shot CLI: text in, banner bytes out, exit.
 ## Source
 
 - `src/main.cyr` — `main()` and the AGNOS-safe entry, nothing else.
-  Builds the flag table (`lib/flags.cyr`), validates `--align` /
-  `--width` / `--pad` / `--color`, resolves the font (embedded block;
-  `fonts/NAME.cyml`; or a `.flf` path) and calls `render_layout`. The
+  Reads argv (`cmdit_argv`), parses it with the table from
+  `cli_flags()`, validates `--align` / `--width` / `--pad` / `--color`,
+  resolves the font (embedded block; `fonts/NAME.cyml`; or a `.flf`
+  path) and calls `render_layout`. The
   `--version` literal lives here (`scripts/doc-pin-check.sh` reads it).
   Entry is a bare top-level `_agnos_entry();`, not `var r = main();`
   (the 1.1.1 AGNOS argv fix), which is why no harness can include this
   file.
 - `src/cli.cyr` — the rest of the command line, split out at 1.4.1 so
-  the suite can test it: `build_font_path` (the `--font NAME` →
+  the suite can test it: `cli_flags` (the cmdit flag table, 1.4.2: no
+  `-V`, no value validation, which stays below), `report_parse_error`
+  (the stdlib parser's error wording, kept byte for byte),
+  `build_font_path` (the `--font NAME` →
   `fonts/NAME.cyml` containment: no `/`, `\`, `.` or control byte, 64
   bytes max), `_is_flf_path`, `parse_align`, `_parse_count_flag` (the
   `--width` / `--pad` parser and its exit-code sentinels),
@@ -227,7 +233,7 @@ with lowercase, is on the roadmap.
 
 ## Tests
 
-- `tests/bannermanor.tcyr` — **3006 assertions**, run on x86_64 and on
+- `tests/bannermanor.tcyr` — **3061 assertions**, run on x86_64 and on
   aarch64 under qemu. In outline:
   - **Fonts**: embedded-font geometry, glyph lookup and the lowercase
     fold, and row shape. The three CYML fonts load, and `block.cyml`
@@ -242,18 +248,21 @@ with lowercase, is on the roadmap.
   - **Readers**: a directory, an empty file and a FIFO, each rejected
     without blocking.
   - **Layout math and color parsing.**
-  - **The CLI** (`src/cli.cyr`): font paths, the count parser's
-    sentinels, the 1 KB join, the F-012 scrub, `--help` naming every
-    flag, `--list-fonts`.
+  - **The CLI** (`src/cli.cyr`): the cmdit flag table on synthetic argv
+    (values, repeats, `--`, help over version, no `-V`, no prefix
+    matching, bundling, the error codes), the parse-error wording, font
+    paths, the count parser's sentinels, the 1 KB join, the F-012 scrub,
+    `--help` naming every flag, `--list-fonts`.
   - **The probes and the TTY path**: fd 1 pointed at `/dev/null`, a pipe
     and a pty at seven window sizes, and a byte-exact render on a pty
     against a pipe, for color, rainbow, 0 columns and narrow-terminal
     truncation.
-  - **Reference coverage**: 36/36 public functions
+  - **Reference coverage**: 37/37 public functions
     (`cyrius coverage --min 100` in CI).
 - `tests/golden/` + `scripts/golden.sh` — the frozen-output contract,
-  byte for byte: 285 invocations (210 frozen renders, 58 error paths, 17
-  snapshot), 112 on a pty through script(1). Since 1.4.1 this is a CI
+  byte for byte: 318 invocations (217 frozen renders, 76 error paths, 25
+  snapshot), 112 on a pty through script(1). The `parse-*` cases (1.4.2)
+  pin the flag grammar the cmdit swap had to keep. Since 1.4.1 this is a CI
   step; before that it existed only as shell history.
 - `tests/bannermanor.fcyr` — the fuzz gate: 26 seeds × 1,000 mutants
   through all three parsers (78,003 parses), with scrub, geometry and
@@ -274,9 +283,10 @@ with lowercase, is on the roadmap.
 Direct (declared in `cyrius.cyml`):
 
 - stdlib — string, fmt, alloc, atomic, io, vec, str, syscalls, assert,
-  bench, args, result, flags, fs, fnptr, freelist, mmap. `freelist` and
-  `mmap` arrived at 1.4.1 (`fl_alloc` / `fl_free` for the read buffers).
-  `bayan` left the list at 1.4.1, replaced by the git dependency below.
+  bench, args, result, fs, fnptr, freelist, mmap. `freelist` and `mmap`
+  arrived at 1.4.1 (`fl_alloc` / `fl_free` for the read buffers).
+  `bayan` left the list at 1.4.1 and `flags` at 1.4.2, each replaced by a
+  git dependency below.
 - `darshana = 1.3.0` (pinned at 1.2.0) — SGR primitives (`tty_sgr`,
   `tty_sgr_reset`, `TTY_FG_*`) and `tty_winsize`, all inside darshana's
   frozen v1.0 surface. Requires cyrius ≥ 6.7.2.
@@ -284,8 +294,15 @@ Direct (declared in `cyrius.cyml`):
   CYML-only sublib: nine `bayan_cyml_*` functions. 1.5.13 is the bayan
   the cyrius 6.7.9 stdlib bundles, so the parser is byte-identical to
   what 1.2.0 linked.
+- `[deps.cmdit]`, tag 1.4.0, module `dist/cmdit.cyr` — the CLI parser
+  since 1.4.2, replacing the stdlib's `flags`. Same getopt-long core
+  (error codes 0..4 are `flags.cyr`'s) plus the `cmdit_argv` bridge.
+  bnrmr gives it no validation and uses neither its help nor its error
+  printer. 1.4.0 pins cyrius 6.7.9, as bnrmr does. The whole bundle links
+  (shell-completion generators included): the binary grew about 48 KB
+  net when it replaced `flags`.
 - `lib/` is the output of `cyrius deps` over the above: 34 files,
-  regenerated from scratch at 1.4.1. `cyrius deps --locked` checks it in
+  regenerated from scratch at 1.4.1 and 1.4.2. `cyrius deps --locked` checks it in
   CI. Never edit `lib/` by hand: the toolchain restores it from the lock
   anyway (architecture note 002).
 

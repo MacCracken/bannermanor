@@ -152,6 +152,16 @@ g frozen positionals-255-at-argc-cap -- $W255
 g frozen input-1024-one-arg -- --width 11 "$A1024"
 g frozen input-1024-joined -- --width 11 "$A512" "$A511"
 
+# ── frozen: parser grammar, pinned before the cmdit swap (1.4.2) ─────────────
+# Recorded against the stdlib flags parser; the cmdit build must match.
+g frozen parse-repeat-width-last-wins -- --width 5 --width 23 AGNOSTIC
+g frozen parse-repeat-align-last-wins -- --align right --align left HI
+g frozen parse-repeat-pad-mixed-forms -- --pad=1 --pad 2 HI
+g frozen parse-dashdash-then-dashdash -- -- -- HI
+g frozen parse-dashdash-alone-then-dashdash -- -- --
+g frozen parse-flag-after-dashdash-is-text -- --color red -- --color HI
+g frozen parse-text-then-dashdash -- HI -- --pad 3
+
 # ── frozen: pty leg ──────────────────────────────────────────────────────────
 # Twelve renders at each of seven window sizes. 0 columns is "not a terminal"
 # (F-020): no SGR, no truncation. Columns clamp at 4096 (F-008).
@@ -236,6 +246,24 @@ g error parse-bundled -- -hf HI
 g error parse-short-equals -- -w=11 AG
 g error parse-bool-with-value -- --list-fonts=0
 g error parse-help-with-value -- --help=1
+g error parse-capital-v-is-not-version -- -V
+g error parse-capital-v-with-text -- -V HI
+g error parse-version-with-value -- --version=1
+g error parse-error-beats-help -- --help --bogus
+g error parse-error-beats-help-after -- --bogus --help
+g error parse-error-beats-version -- --version --bogus
+g error parse-bundled-same-letter -- -hh
+g error parse-attached-short-value -- -w5 AGNOS
+g error parse-short-equals-font -- -f=slim HI
+g error parse-no-british-spelling -- --colour red HI
+g error parse-no-prefix-match-value -- --col red HI
+g error parse-no-prefix-match-help -- --he
+g error parse-no-prefix-match-bool -- --list
+g error parse-empty-long-name -- --=x HI
+g error parse-short-missing-value -- -w
+g error parse-uppercase-long -- --WIDTH 5 HI
+g error parse-value-is-flag-shaped -- --font --list-fonts HI
+g error parse-short-value-is-flag-shaped -- -f -h HI
 g error order-align-before-width -- --align x --width abc HI
 g error order-width-before-font -- --font typo --width abc HI
 # shellcheck disable=SC2086
@@ -261,3 +289,11 @@ g snapshot list-fonts-with-text -- --list-fonts HI
 g snapshot list-fonts-beats-bad-align -- --list-fonts --align x
 g snapshot list-fonts-empty-cwd cwd=$EMPTY -- --list-fonts
 g snapshot list-fonts-mixed-cwd cwd=$MIXED -- --list-fonts
+g snapshot help-repeated-short -- -h -h
+g snapshot help-repeated-long -- --help --help
+g snapshot list-fonts-repeated -- --list-fonts --list-fonts
+g snapshot version-repeated norm=version -- --version --version
+g snapshot dashdash-alone -- --
+g snapshot help-beats-list-fonts -- --list-fonts --help
+g snapshot help-beats-list-fonts-before -- --help --list-fonts
+g snapshot version-beats-list-fonts norm=version -- --version --list-fonts

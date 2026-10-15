@@ -1078,9 +1078,131 @@ fn _jp(words, n, out, cap): i64 {
     store64(&argv_arr, "bnrmr");
     var i = 0;
     while (i < n) { store64(&argv_arr + (i + 1) * 8, load64(words + i * 8)); i = i + 1; }
-    var fs = flags_new();
-    if (flags_parse(fs, n + 1, &argv_arr) != 0) { return 0 - 99; }
+    var fs = cli_flags();
+    if (cmdit_parse_argv(fs, n + 1, &argv_arr) != CMDIT_OK) { return 0 - 99; }
     return join_positionals(out, cap, fs);
+}
+
+# Parse a synthetic command line with bnrmr's flag table. `line` is a
+# cstring of words separated by single spaces (no word contains one).
+# Returns the fresh handle; the cmdit_parse_argv result is stored at
+# *out_r. argv[0] is "bnrmr".
+fn _cf(line, out_r): i64 {
+    var argv_arr[512];
+    store64(&argv_arr, "bnrmr");
+    var n = 1;
+    var len = strlen(line);
+    var buf = alloc(len + 1);
+    memcpy(buf, line, len);
+    store8(buf + len, 0);
+    var start = 0;
+    var i = 0;
+    while (i <= len && len > 0) {
+        if (i == len || load8(buf + i) == 32) {
+            store8(buf + i, 0);
+            store64(&argv_arr + n * 8, buf + start);
+            n = n + 1;
+            start = i + 1;
+        }
+        i = i + 1;
+    }
+    var fs = cli_flags();
+    store64(out_r, cmdit_parse_argv(fs, n, &argv_arr));
+    return fs;
+}
+
+# The flag table on synthetic argv (1.4.2, cmdit). The golden suite pins
+# what the binary prints; this pins what the parser hands main().
+fn t_cli_flags() {
+    test_group("cli / cli_flags + cmdit_parse_argv");
+    var r = 0;
+    var fs = _cf("-f slim --align=center -w 40 --pad 2 --color red HELLO WORLD", &r);
+    assert_eq(r, CMDIT_OK, "a full command line parses");
+    assert_eq(streq(cmdit_get_str(fs, CF_FONT), "slim"), 1, "-f slim");
+    assert_eq(streq(cmdit_get_str(fs, CF_ALIGN), "center"), 1, "--align=center");
+    assert_eq(streq(cmdit_get_str(fs, CF_WIDTH), "40"), 1, "-w 40 (a string: _parse_count_flag parses it)");
+    assert_eq(streq(cmdit_get_str(fs, CF_PAD), "2"), 1, "--pad 2");
+    assert_eq(streq(cmdit_get_str(fs, CF_COLOR), "red"), 1, "--color red");
+    assert_eq(cmdit_positional_count(fs), 2, "two words");
+    fs = _cf("HI", &r);
+    assert_eq(cmdit_get_str(fs, CF_FONT), 0, "absent --font -> 0 (the embedded font)");
+    assert_eq(cmdit_get_str(fs, CF_WIDTH), 0, "absent --width -> 0");
+    assert_eq(cmdit_get_bool(fs, CF_LIST), 0, "absent --list-fonts -> 0");
+    fs = _cf("HI --font slim --font big", &r);
+    assert_eq(r, CMDIT_OK, "flags after text, repeated");
+    assert_eq(streq(cmdit_get_str(fs, CF_FONT), "big"), 1, "the last --font wins");
+    assert_eq(cmdit_positional_count(fs), 1, "HI is the only word");
+    fs = _cf("--color= HI", &r);
+    assert_eq(streq(cmdit_get_str(fs, CF_COLOR), ""), 1, "--color= is the empty string (no color, exit 0)");
+    fs = _cf("-- --version -HI", &r);
+    assert_eq(r, CMDIT_OK, "-- ends the flags");
+    assert_eq(cmdit_positional_count(fs), 2, "both words after -- are text");
+    _cf("--help", &r);
+    assert_eq(r, CMDIT_HELP, "--help -> CMDIT_HELP");
+    _cf("-h HI", &r);
+    assert_eq(r, CMDIT_HELP, "-h -> CMDIT_HELP");
+    _cf("--version", &r);
+    assert_eq(r, CMDIT_VERSION, "--version -> CMDIT_VERSION");
+    _cf("--version --help", &r);
+    assert_eq(r, CMDIT_HELP, "help wins over version");
+    fs = _cf("-V", &r);
+    assert_eq(r, CMDIT_RESULT_ERR, "-V is not version: dropped, the freeze adds no flags");
+    assert_eq(cmdit_error(fs), CMDIT_ERR_UNKNOWN, "-V -> UNKNOWN");
+    fs = _cf("--help --bogus", &r);
+    assert_eq(cmdit_error(fs), CMDIT_ERR_UNKNOWN, "an error anywhere beats --help");
+    fs = _cf("--col red HI", &r);
+    assert_eq(cmdit_error(fs), CMDIT_ERR_UNKNOWN, "no prefix matching");
+    fs = _cf("-hf HI", &r);
+    assert_eq(cmdit_error(fs), CMDIT_ERR_BUNDLED, "-hf -> BUNDLED");
+    fs = _cf("-w=11 AG", &r);
+    assert_eq(cmdit_error(fs), CMDIT_ERR_BUNDLED, "-w=11 -> BUNDLED");
+    fs = _cf("HI --width", &r);
+    assert_eq(cmdit_error(fs), CMDIT_ERR_MISSING_VALUE, "--width at the end -> MISSING_VALUE");
+    fs = _cf("--list-fonts=0", &r);
+    assert_eq(cmdit_error(fs), CMDIT_ERR_UNEXPECTED_VALUE, "a bool given =0 -> UNEXPECTED_VALUE, not set");
+    fs = _cf("--font --list-fonts HI", &r);
+    assert_eq(r, CMDIT_OK, "a value flag takes the next token even if it looks like a flag");
+    assert_eq(streq(cmdit_get_str(fs, CF_FONT), "--list-fonts"), 1, "--font's value is --list-fonts");
+    assert_eq(cmdit_get_bool(fs, CF_LIST), 0, "--list-fonts was consumed as a value, not set");
+}
+
+# The parse-error diagnostics: the stdlib parser's wording, byte for byte.
+fn t_cli_report_parse_error() {
+    test_group("cli / report_parse_error");
+    #ifdef CYRIUS_TARGET_LINUX
+    var rd = 0;
+    var wr = 0;
+    var buf = alloc(8192);
+    var codes[48];
+    store64(&codes, CMDIT_ERR_UNKNOWN);
+    store64(&codes + 8, CMDIT_ERR_MISSING_VALUE);
+    store64(&codes + 16, CMDIT_ERR_BAD_INT);
+    store64(&codes + 24, CMDIT_ERR_BUNDLED);
+    store64(&codes + 32, CMDIT_ERR_UNEXPECTED_VALUE);
+    store64(&codes + 40, CMDIT_ERR_ARGV);
+    var want[48];
+    store64(&want, "bnrmr: unknown flag\n\n");
+    store64(&want + 8, "bnrmr: flag missing value\n\n");
+    store64(&want + 16, "bnrmr: bad integer value\n\n");
+    store64(&want + 24, "bnrmr: bundled short flags not supported\n\n");
+    store64(&want + 32, "bnrmr: argument parse error\n\n");
+    store64(&want + 40, "bnrmr: argument parse error\n\n");
+    var k = 0;
+    while (k < 6) {
+        var saved = _cap_begin(&rd, &wr);
+        if (saved >= 0) {
+            var rc = report_parse_error(load64(&codes + k * 8));
+            var n = _cap_end(saved, rd, wr, buf, 8192);
+            var w = load64(&want + k * 8);
+            var wl = strlen(w);
+            assert_eq(rc, 1, "returns exit code 1");
+            assert(n > wl, "the line, a blank line, then the usage block");
+            assert_eq(memeq(buf, w, wl), 1, "the stdlib parser's wording");
+            assert_eq(_has(buf, n, "Usage:"), 1, "usage follows");
+        }
+        k = k + 1;
+    }
+    #endif
 }
 
 fn t_cli_join_positionals() {
@@ -1512,14 +1634,15 @@ fn t_cli_list_fonts() {
     #endif
 }
 
-fn t_cli_build_argv_array() {
-    test_group("cli / build_argv_array");
-    args_init();                        # main() does this before anything reads argv
-    var arr = alloc(256 * 8);
-    var ac = build_argv_array(arr);
-    assert_eq(ac, argc(), "returns argc()");
+# cmdit_argv on the real process: what main() does first. It replaced
+# bnrmr's own build_argv_array at 1.4.2.
+fn t_cli_argv() {
+    test_group("cli / cmdit_argv reads the process argv");
+    var fs = cli_flags();
+    var ac = cmdit_argv(fs);
+    assert_eq(cmdit_error(fs), CMDIT_ERR_NONE, "read whole, no error");
     assert(ac >= 1, "argv[0] at least");
-    assert_eq(load64(arr), argv(0), "slot 0 is argv(0)");
+    assert_eq(ac, argc(), "the same count lib/args reports");
 }
 
 # resolve_frame: an explicit width wins; otherwise the terminal, then
@@ -1753,7 +1876,9 @@ fn main() {
     t_cli_print_padded();
     t_cli_usage_names_every_flag();
     t_cli_list_fonts();
-    t_cli_build_argv_array();
+    t_cli_argv();
+    t_cli_flags();
+    t_cli_report_parse_error();
     t_layout_resolve_frame();
     t_font_construction();
     t_load_tiny_flf();

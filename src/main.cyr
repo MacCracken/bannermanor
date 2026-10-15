@@ -15,9 +15,10 @@
 #   --color NAME           colorize (16 ANSI names or rainbow); M5
 #   --                     end of flags; everything after is TEXT
 #
-# Long flags accept both `--name value` and `--name=value` (handled by
-# lib/flags.cyr). Positional args are concatenated with spaces into the
-# render text, subject to a 1 KB cap.
+# Long flags accept both `--name value` and `--name=value` (parsed by
+# cmdit since 1.4.2; the flag table is cli_flags() in src/cli.cyr).
+# Positional args are concatenated with spaces into the render text,
+# subject to a 1 KB cap.
 #
 # This file holds main() and the entry statement only. Everything else
 # the CLI does is in src/cli.cyr, which the test suite can include; this
@@ -30,9 +31,17 @@ include "src/cli.cyr"
 
 fn main(): i64 {
     alloc_init();
-    args_init();
 
-    var ac = argc();
+    # cmdit_argv reads the process argv into one array (it runs
+    # args_init). A command line it cannot read whole (the stdlib's 2 MiB
+    # /proc read cut it short) or cannot allocate for comes back as count
+    # 0 with an error set. Check the error first: a bare `ac <= 1` test
+    # would read that as "no arguments" and print usage with exit 0.
+    var fs = cli_flags();
+    var ac = cmdit_argv(fs);
+    if (cmdit_error(fs) != CMDIT_ERR_NONE) {
+        return report_parse_error(cmdit_error(fs));
+    }
     if (ac <= 1) {
         print_usage();
         return 0;
@@ -42,58 +51,34 @@ fn main(): i64 {
         return 1;
     }
 
-    var argv_arr[2048];                  # 256 slots × 8 bytes
-    build_argv_array(&argv_arr);
-
-    var fs = flags_new();
-    var f_version    = flags_add_bool(fs, 0,   "version",    0, "print version and exit");
-    var f_help       = flags_add_bool(fs, 104, "help",       0, "print help and exit");          # 'h'
-    var f_list       = flags_add_bool(fs, 0,   "list-fonts", 0, "list available fonts and exit");
-    var f_font       = flags_add_str (fs, 102, "font",       0, "font name (default: embedded block)");  # 'f'
-    var f_align      = flags_add_str (fs, 0,   "align",      0, "left | center | right");
-    # --width/--pad are taken as STRINGS and parsed here via parse_uint.
-    # lib/flags.cyr's _flags_parse_int accumulates n*10+d with no
-    # overflow guard, so `--pad 18446744073709551617` wrapped to 1 and
-    # rendered instead of erroring, silently defeating the caps issue
-    # 0002 froze at v1.0. parse_uint carries the F-002 PARSER_INT_CAP
-    # guard; the cap messages below are unchanged.
-    var f_width      = flags_add_str (fs, 119, "width",      0, "truncate at N columns (0 = unlimited)"); # 'w'
-    var f_pad        = flags_add_str (fs, 0,   "pad",        0, "N blank lines above and below");
-    var f_color      = flags_add_str (fs, 0,   "color",      0, "name (red/cyan/...) or 'rainbow'");
-
-    if (flags_parse(fs, ac, &argv_arr) != 0) {
-        var err = flags_error(fs);
-        if (err == FLAG_ERR_UNKNOWN) { println("bnrmr: unknown flag"); }
-        else { if (err == FLAG_ERR_MISSING_VALUE) { println("bnrmr: flag missing value"); }
-            else { if (err == FLAG_ERR_BAD_INT) { println("bnrmr: bad integer value"); }
-                else { if (err == FLAG_ERR_BUNDLED) { println("bnrmr: bundled short flags not supported"); }
-                    else { println("bnrmr: argument parse error"); } } } }
-        println("");
-        print_usage();
-        return 1;
+    # --width / --pad are registered as strings, not ints: parse_uint
+    # (via _parse_count_flag) carries the F-002 overflow guard and the cap
+    # messages issue 0002 froze. See cli_flags().
+    var pr = cmdit_parse(fs);
+    if (pr == CMDIT_RESULT_ERR) {
+        return report_parse_error(cmdit_error(fs));
     }
-
-    if (flags_get_bool(fs, f_help) == 1) {
+    if (pr == CMDIT_HELP) {
         print_usage();
         return 0;
     }
-    if (flags_get_bool(fs, f_version) == 1) {
-        println("bnrmr 1.4.1");
+    if (pr == CMDIT_VERSION) {
+        println("bnrmr 1.4.2");
         return 0;
     }
-    if (flags_get_bool(fs, f_list) == 1) {
+    if (cmdit_get_bool(fs, CF_LIST) == 1) {
         return cmd_list_fonts();
     }
 
     # Resolve --align (validate before doing real work)
-    var align_str = flags_get_str(fs, f_align);
+    var align_str = cmdit_get_str(fs, CF_ALIGN);
     var align = parse_align(align_str);
     if (align < 0) {
         println("bnrmr: --align must be left, center, or right");
         return 1;
     }
 
-    var width = _parse_count_flag(flags_get_str(fs, f_width));
+    var width = _parse_count_flag(cmdit_get_str(fs, CF_WIDTH));
     if (width == 0 - 2) {
         println("bnrmr: bad integer value");
         return 1;
@@ -106,7 +91,7 @@ fn main(): i64 {
         println("bnrmr: --width max 4096");
         return 1;
     }
-    var pad = _parse_count_flag(flags_get_str(fs, f_pad));
+    var pad = _parse_count_flag(cmdit_get_str(fs, CF_PAD));
     if (pad == 0 - 2) {
         println("bnrmr: bad integer value");
         return 1;
@@ -120,7 +105,7 @@ fn main(): i64 {
         return 1;
     }
 
-    var color_str = flags_get_str(fs, f_color);
+    var color_str = cmdit_get_str(fs, CF_COLOR);
     var color = parse_color(color_str);
     if (color == 0 - 3) {
         println("bnrmr: --color must be a known name or 'rainbow'");
@@ -131,7 +116,7 @@ fn main(): i64 {
 
     # Resolve font: default to embedded, or load via --font NAME.
     var font = 0;
-    var font_name = flags_get_str(fs, f_font);
+    var font_name = cmdit_get_str(fs, CF_FONT);
     if (font_name != 0) {
         if (_is_flf_path(font_name) == 1) {
             font = flf_load_file(font_name);
@@ -160,7 +145,7 @@ fn main(): i64 {
         }
     }
 
-    var pc = flags_positional_count(fs);
+    var pc = cmdit_positional_count(fs);
     if (pc == 0) {
         print_usage();
         return 0;

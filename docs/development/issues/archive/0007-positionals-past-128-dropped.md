@@ -46,5 +46,6 @@ defect.
 `tests/golden/cases.sh`: `positionals-200-past-128` renders all 200
 words; `positionals-255-at-argc-cap` sits at the argc limit;
 `positionals-256-too-many` is rejected. These records are what the cmdit
-migration (roadmap) must reproduce, since cmdit capped positionals at
-128 until its 1.3.1.
+migration had to reproduce, since cmdit capped positionals at 128 until
+its 1.3.1. It did: 1.4.2 moved to cmdit 1.4.0 with all three
+byte-identical.
