@@ -215,7 +215,10 @@ fn _fz_check_font(f, kind): i64 {
                     if (_fz_ctl(b) == 1) { _fz_why = ".flf row carries a control byte (F-001)"; return 1; }
                     if (hb != 0 && hb != 1) { _fz_why = "hardblank mark is not 0 or 1"; return 1; }
                     if (hb == 1 && b != 32) { _fz_why = "hardblank cell does not hold a space"; return 1; }
-                    if (col >= gw && (b != 32 || hb != 0)) { _fz_why = "a cell past the glyph's width is not plain space"; return 1; }
+                    if (col >= gw && (b != 32 || hb != 0)) {
+                        _fz_why = "a cell past the glyph's width is not plain space";
+                        return 1;
+                    }
                 }
                 col = col + 1;
             }
