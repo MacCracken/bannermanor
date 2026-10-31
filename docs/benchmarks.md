@@ -208,7 +208,7 @@ which retires the other half of the original story: there was no
 gradual drift across 6.0.1 → 6.2.24. B2 was flat for three toolchain
 generations and then stepped once, here.
 
-Root cause (diagnosed at 1.8.1, [issue 0006](development/issues/0006-bayan-cyml-parse-regression.md)):
+Root cause (diagnosed at 1.8.1, [issue 0006](development/issues/archive/0006-bayan-cyml-parse-regression.md)):
 the two-pass entry count that replaced the fixed 256-slot scan, in bayan
 1.5.1. It calls `_cyml_is_entries` once per byte in each pass, so the
 parse makes twice the calls 1.4.0 did. A parser-only A/B shows that
@@ -216,7 +216,8 @@ restoring one pass gives back 1.0.1's time, and that looking for markers
 only at line starts takes the parse to 0.33–0.43× of today's. Neither PDF,
 YAML nor `dtoa` is involved, and module size is not the cause. Filed with
 bayan (`docs/development/issues/2026-10-15-cyml-parse-scans-every-byte-twice.md`
-there), with a repro and the proposed fix.
+there), with a repro and the proposed fix. bayan 1.6.0 shipped it, and
+bnrmr adopted it at 1.8.2: B2 is back to ~60 µs (Point 9).
 
 #### Reading the deltas
 
@@ -431,6 +432,47 @@ filed with bayan. B2 should fall below its pre-regression 59 µs when
 
 Verdict: **no regression worth acting on.** B4's natural and centered
 renders are several times cheaper than at 1.4.1. B2 waits on bayan.
+
+### Point 9 — 1.8.2
+
+**Captured**: 2026-10-30, three runs recorded in
+`docs/benchmarks/history.csv`
+**Toolchain**: cyrius 6.7.18 (A/B against the 1.8.1 tree at 6.7.11)
+**Host**: archaemenid (AMD Ryzen 7 5800H, Linux 7.2.11), timer floor
+1.34–1.37 µs per clock read. The 1-minute load average was 0.26 before
+the runs and 1.5–1.7 during them.
+**Code delta vs 1.8.1**: cyrius 6.7.11 → 6.7.18 with `lib/` re-vendored,
+`[deps.bayan]` 1.5.14 → 1.11.1 (which carries issue 0006's fix),
+darshana 1.3.0 → 1.7.0 and cmdit 1.4.0 → 1.5.0. No bnrmr code change on
+any benched path.
+
+A/B, built the Point 6 way: the 1.8.1 tree (`git archive HEAD`, with its
+own pin, `lib/` and lock) and the 1.8.2 tree, each run by `cyrius bench`
+under its own pin, interleaved three and three. The toolchain and the
+libraries move together, so these rows do not separate bayan from the
+rest.
+
+| ID | Subject | 1.8.2 (three runs) | 1.8.1 (three runs) | Δ |
+|----|---------|--------------------|--------------------|---|
+| B0 | `_calibration` | **3 / 2 / 2 ns** | 2 / 2 / 2 ns | flat |
+| B1 | `block_font_embed` | **12 / 6 / 6 ns** | 13 / 6 / 7 ns | noise |
+| B2 | `font_load_file(block.cyml)` | **65.9 / 59.9 / 60.2 µs** | 96.4 / 94.6 / 92.3 µs | **0.64×** |
+| B3 | `fit_chars ×100` | **656 / 633 / 612 ns** | 644 / 635 / 618 ns | flat |
+| B4 | `render_layout` natural (`AGNOS`) | **3.46 / 3.34 / 3.24 µs** | 3.59 / 3.35 / 3.22 µs | flat |
+| B4 | `--width 4096 --align center` (`AGNOS`) | **5.55 / 5.47 / 5.19 µs** | 5.33 / 5.52 / 5.30 µs | flat |
+| B4 | `--width 4096 --align right` (`A`) | **6.84 / 7.13 / 7.01 µs** | 6.94 / 7.20 / 7.18 µs | flat |
+
+**B2 is issue 0006's fix.** bayan 1.6.0 looks for an `[[entries]]`
+marker only at line starts, so `bayan_cyml_parse` no longer makes a
+function call per input byte in each of its two passes. B2 is back to
+the 58.8–61.6 µs that bayan 1.0.1 gave before the regression (Point 4's
+A/B). Point 8 predicted it would fall *below* 59 µs. It is at that
+figure, not clearly under it. Every 1.8.2 run is below every 1.8.1 run
+by more than 26 µs, so the move is real, whatever share the toolchain
+has in it. Every other row overlaps its 1.8.1 range.
+
+Verdict: **issue 0006 closed.** The ~45% B2 regression that arrived at
+1.1.3 is gone. Nothing else moved.
 
 ## Re-running
 

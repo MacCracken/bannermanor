@@ -4,6 +4,125 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.8.2] — 2026-10-30 (toolchain and dependency refresh)
+
+cyrius 6.7.11 → 6.7.18, and each git dependency moves to its latest tag.
+bayan's tag carries the CYML scan fix 1.8.1 filed, so **issue 0006 is
+closed**: `font_load_file` takes 0.64× of 1.8.1's time, about what it did
+before the regression. **No valid render moved**: the golden suite is
+byte-identical, 346/346, on x86_64 and on aarch64 under qemu. A/B against
+the 1.8.1 binary found three changes outside it, each on input the
+freeze does not protect or that 1.8.1 refused (ADR 0002). They are
+listed below.
+
+### Changed
+
+- **cyrius 6.7.11 → 6.7.18**, a tagged release (`SOURCE_COMMIT`:
+  `tree-matches-tag: yes`; its release tarball is what CI installs).
+  `lib/` re-vendored with `rm -rf lib/ && cyrius deps`: still 34 files,
+  and the 31 stdlib files are byte-identical to the 6.7.18 snapshot (24
+  changed upstream; `io` most, which carries every stdout write and font
+  read). `cyrius.lock` was
+  regenerated from empty. A plain `cyrius deps --lock` kept the
+  superseded commit rows, fail-closed. It now holds one commit row per
+  git dependency, each matching its tag. `cyrius deps --locked` and
+  `--verify` pass (34 verified). `[deps].stdlib` needed no change. No
+  build warning on any target.
+- **`[deps.bayan]` 1.5.14 → 1.11.1**, the bayan the 6.7.18 stdlib
+  bundles. The sublib's `cyml.cyr` section is the bundle's code for code,
+  and its stdlib needs are unchanged. What it brings to bnrmr:
+  - **bayan 1.6.0: issue 0006's fix.** `bayan_cyml_parse` looks for an
+    `[[entries]]` marker only at line starts, in both passes, instead of
+    calling `_cyml_is_entries` at every byte. bayan proved it returns
+    what 1.5.14 returned for every input: a differential over 4.6 million
+    parses found 0 differences. bayan 1.6.1 does the same for the `---`
+    searches.
+  - **bayan 1.7.0: markers and `---` are whole lines wherever they
+    fall.** For bnrmr this changes one font shape: **a CYML font with two
+    adjacent `[[entries]]` lines no longer loads** (exit 1, "font ... is
+    malformed"; `--list-fonts` no longer lists it). bayan reads an empty
+    entry between the two markers, and an entry with no `char` is
+    malformed. Through 1.8.1 the second marker became the first line of
+    the next entry's header, and the font loaded. That is a structural
+    violation of ADR 0001's entry shape, which [ADR 0002](docs/adr/0002-freeze-scope-error-paths-and-malformed-input.md)
+    ruling 3 does not protect. Its two conditions hold: the frozen tier is
+    byte-identical, and every in-tree font loads. The other 1.7.0 shapes
+    (`---` flush against a marker, before the next marker, or as the last
+    line; a marker as the last line; a blank first line before `---`)
+    were each built and give 1.8.1's exit code and bytes.
+  - **bayan 1.8.0: a CR LF ends a marker or `---` line.** Through 1.8.1
+    a CR LF CYML font had no entries and was rejected. bayan now finds the
+    entries and trims the CR after a body's last row. bnrmr's body
+    decoder still rejects a CR between rows. So **a one-row CR LF font now
+    loads**, rendering byte for byte what its LF twin renders, and any
+    taller one is rejected as before (the four shipped fonts saved with
+    CR LF each still fail). Admitting a font is additive (ADR 0002
+    ruling 2).
+- **darshana 1.3.0 → 1.7.0.** 1.3.1 is the toolchain move (code
+  byte-identical); 1.4.0, 1.6.0 and 1.7.0 each add functions bnrmr does
+  not call (`tty_sgr_len` / `tty_sgr_strip_buf`, `tty_isatty_is_per_fd`,
+  `tty_winsize_px`); 1.5.0 changes three AGNOS peers bnrmr does not call
+  (`tty_isatty`, `tty_echo_off`, `tty_flush_input`). The 19 digests
+  darshana froze through 1.3.0 are unchanged (1.4.0 added a 20th). Every
+  function bnrmr calls has a body identical to 1.3.0's, checked function
+  by function; `tty_cooked`, which only the suite calls, changed in its
+  AGNOS arm alone. The `TTY_FG_*` and `TTY_SANITIZE_LATIN1` values are
+  identical.
+- **cmdit 1.4.0 → 1.5.0.** **A command line over 2 MiB is read whole.**
+  Through 1.8.1, `cmdit_argv` refused any command line of 2 MiB or more
+  (exit 1, `bnrmr: could not read the whole command line`), because the
+  stdlib's `args_init` cut it at 2 MiB without saying so. Since cyrius
+  6.7.12, `args_init` reads to EOF, and cmdit 1.4.2 refuses only a read of
+  exactly 2 MiB, the one length an older stdlib could have cut. Checked
+  under `ulimit -s 65536`: 20 × `--pad=<120,000 zeros>1` then `hi` (2.4
+  MB) rendered with pad 1, exit 0, where 1.8.1 exited 1. This needs a
+  raised stack limit, since Linux caps argv at 2 MiB by default. Admitting
+  input refused only by a limit is additive (ADR 0002 rulings 2 and 3).
+  cmdit 1.5.0's other change is shell-completion text bnrmr never emits.
+- **Binary sizes**: x86_64 309,488 → 313,728 bytes, aarch64 407,696 →
+  407,848, AGNOS 325,768 → 325,952. All of it is in the vendored libraries.
+
+### Fixed
+
+- **[Issue 0006](docs/development/issues/archive/0006-bayan-cyml-parse-regression.md):
+  bayan 1.5.2 made `font_load_file` ~45% slower.** Fixed by the bayan
+  move above. B2 went from 92.3–96.4 µs (the 1.8.1 tree) to 59.9–65.9 µs,
+  interleaved on one host. bayan 1.0.1 gave 58.8–61.6 µs before the
+  regression. 1.8.1 predicted B2 would fall *below* 59 µs. It is at that
+  figure, not clearly under it. The two trees differ in toolchain too, so
+  the rows do not isolate bayan. `docs/benchmarks.md` Point 9.
+
+### Tests
+
+- **`tests/bannermanor.tcyr` 3268 → 3273**, in "CYML / entry rules":
+  adjacent `[[entries]]` lines are rejected; a two-row CR LF font is
+  rejected; a one-row CR LF font loads, and its row is `# ` with no CR.
+  Run against the 1.8.1 tree (`git archive HEAD`, its own pin and lock),
+  the adjacent-marker and one-row CR LF assertions each fail, so they
+  pin the bayan move and not something that already held.
+- Gates, all green on 6.7.18: `cyrius lint --strict --strict-deferrals`
+  (0 warnings), `cyrius test` on x86_64 and aarch64 under qemu, golden
+  346/346 on both, fuzz (81,003 parses, 0 violations), coverage 50/50.
+  Golden was first made to fail once with an output-mutating
+  `BNRMR_RUNNER`, so a pass means something.
+
+### Documentation
+
+- **Roadmap.** 1.8.2 is shipped and the issue register is empty. 1.9.0's
+  first item, routing the AGNOS probe through darshana, assumed
+  darshana's per-fd `tty_isatty` would draw bnrmr's line, the console
+  alone. darshana 1.5.0 counts a terminal emulator's channel too, and
+  answers about the console on a pre-1.57.13 kernel, so routing through it
+  would move AGNOS bytes. The item now waits on a decision, not a
+  release. `src/layout.cyr`'s comment and the [1.7.0] entry above say
+  the same.
+- `cyrius.cyml`'s dependency comments, `state.md`, the README and the
+  getting-started guide (pins and assertion counts), the man page
+  header, the `--version` literal, and `src/main.cyr`'s comment on
+  `cmdit_argv` (it named the old 2 MiB cut).
+- `docs/benchmarks.md` Point 9, and three runs in
+  `docs/benchmarks/history.csv`.
+
 ## [1.8.1] — 2026-10-15 (measurement debts)
 
 No code change: every target builds to the bytes 1.8.0 did, apart from the
@@ -199,6 +318,9 @@ It was also checked on AGNOS before release, with a new QEMU harness,
     is not the console's), and fd 1 on a kernel older than 1.57.13, where
     the syscall does not exist. darshana's planned per-fd `tty_isatty`
     draws the same line, so routing through it later changes no byte.
+    (Corrected at 1.8.2: it does not. darshana 1.5.0 shipped it counting
+    `FDK_CHAN` as a terminal, and answering about the console on a kernel
+    older than 1.57.13.)
 - **cyrius 6.7.9 → 6.7.11.** `lib/` re-vendored from the manifest (34
   files). Four stdlib files changed: `alloc` (comments only), `str`
   (additions bnrmr does not call), `fs` (the FIFO fix below) and the
@@ -598,7 +720,7 @@ exactly those two lines.
 - **Also fixed by 1.2.0's toolchain, unnoticed**: `--list-fonts` no longer hangs on a FIFO under `fonts/` ([issue 0011](docs/development/issues/archive/0011-list-fonts-hangs-on-fifo.md); accepted risk A-08). cyrius 6.6.10's `is_dir` asks `stat(2)` instead of `open(2)`.
 - **Unblocked by ADR 0002, not in this release**: diagnostics to stderr, plus the `--color` error text's missing `bright-<name>` (issue 0016); checked writes (issue 0009); rejecting surplus CYML body rows (issue 0008); raising the `.flf` geometry ceilings. The ADR was accepted after this release's code was done, so these wait for roadmap 1.5.0. Each changes behavior on purpose and gets its own entry.
 - **Natural-width renders cost ~0.9 µs more in process** (B4: 18.0 against 17.1 µs). That is the price of the extra call layers through the `file_write` wrapper on each of its 50 writes. It does not show at the process level, where the smaller binary more than pays for it (562 against ~570 µs per invocation).
-- **B2 (`font_load_file`) did not move.** The sublib is the same parser code; [issue 0006](docs/development/issues/0006-bayan-cyml-parse-regression.md)'s ~45% bayan regression remains, as expected.
+- **B2 (`font_load_file`) did not move.** The sublib is the same parser code; [issue 0006](docs/development/issues/archive/0006-bayan-cyml-parse-regression.md)'s ~45% bayan regression remains, as expected.
 - **Not runtime-verified on AGNOS** (no AGNOS target here): the `file_write` route, freelist's AGNOS `mmap` (2 MB-granular there) and the sublib. All three compile through their AGNOS branches, which the stdlib's other AGNOS consumers already use.
 - **Toolchain unchanged at 6.7.9**, darshana at 1.3.0. Moving to a newer cyrius is a separate change, with the bump checklist. (Corrected at 1.7.0: this line said "cyrius 6.7.12 is out", which was false. 6.7.12 was in progress, and a locally installed build of it was mistaken for a release.)
 
@@ -749,7 +871,7 @@ the `--version` literal. Full report:
 ### Notes
 
 - **No API or behavior changes.** Build clean, `cyrius lint` clean (0 warnings, 0 untracked deferrals), full suite green (2762 tests). Cross-builds clean for both `--agnos` and `--aarch64`. Rendered output across all three fonts, both alignments, the `.flf` path, the `--color` path and every error path is **byte-identical to 1.1.2** except the `--version` literal.
-- **Superseded at 1.1.4: this claim is wrong.** The A/B below swapped files in `lib/`, which `cyrius bench` silently restores from `cyrius.lock`, so both arms measured the same bayan. Re-measured correctly, bayan 1.5.2 made `font_load_file` ~45% slower. See [1.1.4] Documentation, `docs/benchmarks.md` Point 4, and [issue 0006](docs/development/issues/0006-bayan-cyml-parse-regression.md). The original text follows, unedited.
+- **Superseded at 1.1.4: this claim is wrong.** The A/B below swapped files in `lib/`, which `cyrius bench` silently restores from `cyrius.lock`, so both arms measured the same bayan. Re-measured correctly, bayan 1.5.2 made `font_load_file` ~45% slower. See [1.1.4] Documentation, `docs/benchmarks.md` Point 4, and [issue 0006](docs/development/issues/archive/0006-bayan-cyml-parse-regression.md). The original text follows, unedited.
   **Benchmarks are flat for this release.** Holding the 6.5.35 compiler fixed and swapping only the vendored `lib/`, `font_load_file(block.cyml)` measures 87.4 / 86.6 / 87.6 µs pre-upgrade against 88.3 / 86.3 / 86.8 µs post-upgrade — bayan 1.5.2 parses no slower than 1.0.1 despite quadrupling in size. The suite *is* ~29 µs slower than the 0.9.0 baseline in `docs/benchmarks.md`, but that drift predates this bump and entered across 6.0.1 → 6.2.24, three toolchain generations that shipped without a bench point. Captured as Point 4 with the A/B table; bisecting it is filed as follow-up.
 - **The binary roughly doubled: 237 192 → 516 528 bytes.** This is `bayan` 1.5.2 arriving with PDF, YAML and Grisu2 `dtoa` attached — `src/font.cyr` includes the whole bundle to reach `cyml_parse`. The added code is unreachable (`1122 unreachable fns, 336 820 bytes`) and `CYRIUS_DCE=1` NOPs rather than strips it, so the size is carried, not executed. Trimming it would need a narrower CYML-only entry point from bayan; filed as follow-up, not blocking.
 - **Two `lib/bayan.cyr` compiler warnings are gone** — the `assigning non-pointer to typed pointer` pair at the old bundle's TOML paths was fixed upstream. The build is now warning-free.

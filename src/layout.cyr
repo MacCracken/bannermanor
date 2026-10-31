@@ -122,14 +122,15 @@ fn _usable_cols(rc, cols): i64 {
 #     terminals, as on Linux.
 #   - FDK_CHAN, the channel a terminal emulator hands its child, is not
 #     counted either: winsize#60 would report the console's size, not
-#     that window's, and darshana's planned per-fd `tty_isatty` draws
-#     the same line (agnos's ABI doc: `fd_kind(fd) == 1`).
+#     that window's.
 #   - -1, a kernel older than 1.57.13 (an unknown syscall) or a closed
 #     fd 1, is not a terminal: no color and no width cut, never escape
 #     bytes in a file.
 # This is the inline gate ADR 0004 allows only where no wrapper answers
-# the question; when darshana's AGNOS `tty_isatty(fd)` asks fd_kind,
-# route through it instead.
+# the question. darshana's AGNOS `tty_isatty(fd)` asks fd_kind since
+# darshana 1.5.0, but draws a different line: it counts FDK_CHAN, and on
+# a kernel older than 1.57.13 it answers about the console. Routing
+# through it would change AGNOS bytes (roadmap 1.9.0).
 fn _winsize_describes_stdout(): i64 {
     #ifdef CYRIUS_TARGET_AGNOS
     if (sys_fd_kind(1) == FDK_CONSOLE) { return 1; }

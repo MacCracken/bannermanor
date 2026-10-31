@@ -6,3 +6,24 @@ date,version,cyrius,host,timer_floor_ns,name,avg_ns,iters
 2026-10-15,1.8.1,6.7.11,archaemenid,1347,render_layout natural (AGNOS),3269,2000
 2026-10-15,1.8.1,6.7.11,archaemenid,1347,render_layout width 4096 center (AGNOS),5498,2000
 2026-10-15,1.8.1,6.7.11,archaemenid,1347,render_layout width 4096 right (A),7086,2000
+2026-10-30,1.8.2,6.7.18,archaemenid,1341,_calibration,3,1000000
+2026-10-30,1.8.2,6.7.18,archaemenid,1341,block_font_embed,12,10000
+2026-10-30,1.8.2,6.7.18,archaemenid,1341,font_load_file(block.cyml),65864,1000
+2026-10-30,1.8.2,6.7.18,archaemenid,1341,fit_chars x100 (banner-worth),656,100000
+2026-10-30,1.8.2,6.7.18,archaemenid,1341,render_layout natural (AGNOS),3461,2000
+2026-10-30,1.8.2,6.7.18,archaemenid,1341,render_layout width 4096 center (AGNOS),5554,2000
+2026-10-30,1.8.2,6.7.18,archaemenid,1341,render_layout width 4096 right (A),6840,2000
+2026-10-30,1.8.2,6.7.18,archaemenid,1371,_calibration,2,1000000
+2026-10-30,1.8.2,6.7.18,archaemenid,1371,block_font_embed,6,10000
+2026-10-30,1.8.2,6.7.18,archaemenid,1371,font_load_file(block.cyml),59902,1000
+2026-10-30,1.8.2,6.7.18,archaemenid,1371,fit_chars x100 (banner-worth),633,100000
+2026-10-30,1.8.2,6.7.18,archaemenid,1371,render_layout natural (AGNOS),3343,2000
+2026-10-30,1.8.2,6.7.18,archaemenid,1371,render_layout width 4096 center (AGNOS),5466,2000
+2026-10-30,1.8.2,6.7.18,archaemenid,1371,render_layout width 4096 right (A),7127,2000
+2026-10-30,1.8.2,6.7.18,archaemenid,1373,_calibration,2,1000000
+2026-10-30,1.8.2,6.7.18,archaemenid,1373,block_font_embed,6,10000
+2026-10-30,1.8.2,6.7.18,archaemenid,1373,font_load_file(block.cyml),60197,1000
+2026-10-30,1.8.2,6.7.18,archaemenid,1373,fit_chars x100 (banner-worth),612,100000
+2026-10-30,1.8.2,6.7.18,archaemenid,1373,render_layout natural (AGNOS),3236,2000
+2026-10-30,1.8.2,6.7.18,archaemenid,1373,render_layout width 4096 center (AGNOS),5193,2000
+2026-10-30,1.8.2,6.7.18,archaemenid,1373,render_layout width 4096 right (A),7007,2000

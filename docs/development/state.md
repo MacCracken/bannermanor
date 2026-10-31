@@ -5,6 +5,8 @@
 
 ## Version
 
+**1.8.2** — 2026-10-30. **Toolchain and dependency refresh; issue 0006 closed.** cyrius pin `6.7.11 → 6.7.18`, with `lib/` re-vendored (`rm -rf lib/ && cyrius deps`: still 34 files, the 31 stdlib ones byte-identical to the 6.7.18 snapshot) and `cyrius.lock` regenerated from empty. darshana `1.3.0 → 1.7.0`, bayan sublib `1.5.14 → 1.11.1` (the bayan 6.7.18 bundles), cmdit `1.4.0 → 1.5.0`; each pins 6.7.18 or bundles with it. bayan 1.6.0 carries the CYML scan fix 1.8.1 filed: B2 `font_load_file` 92–96 → 60–66 µs (0.64×), back to its pre-regression time. Golden 346/346 byte-identical on x86_64 and on aarch64 under qemu, frozen tier included. Three behavior changes outside it, each found by A/B against the 1.8.1 binary and each within ADR 0002: a CYML font with two adjacent `[[entries]]` lines no longer loads (bayan 1.7.0: an empty entry, ruling 3); a one-row CR LF font now loads and renders what its LF twin does (bayan 1.8.0, additive); a command line over 2 MiB is read whole instead of refused (stdlib 6.7.12 + cmdit 1.4.2, additive). darshana's AGNOS `tty_isatty` turned out to count a terminal emulator's channel, so roadmap 1.9.0's "route the probe through darshana" is not byte-identical as planned. Suite 3268 → 3273. See `CHANGELOG.md` [1.8.2].
+
 **1.8.1** — 2026-10-15. **Measurement debts.** No code change. Issue 0006 is diagnosed: bayan 1.5.1's two-pass `[[entries]]` scan calls `_cyml_is_entries` once per byte in each pass, which is the whole ~45% B2 regression. A parser-only A/B shows a newline-driven scan, with the two-pass design kept, at 0.33–0.43× of today's parse with identical results. It is filed with bayan with a repro and the fix; 0006 closes when `[deps.bayan]` moves to that release (roadmap 1.8.2). Architecture note 003 explains the aarch64 binary's 1.5.0 jump: 64 KiB alignment padding, not code. See `CHANGELOG.md` [1.8.1].
 
 **1.8.0** — 2026-10-15. **The fourth font.** `fonts/clean.cyml`, 7×8, the first in-tree font with lowercase: Dale Schumacher's X11 bitmap font Clean (`clR7x8`), transcribed cell for cell from the figlet collection's `clr7x8.flf`, license HPND with its notice in the file. All 95 printable ASCII characters render exactly as the source does through the `.flf` adapter. `--font clean "Welcome home"` no longer shouts. The golden frozen and error tiers did not move; frozen gained 7 `clean` cases (346 in all), and the 7 listing snapshots gained one row each. The roadmap was rewritten to look forward only, pinned 1.8.0 through 1.11.0 with a Deferred to 2.0 section. Suite 3150 → 3268. See `CHANGELOG.md` [1.8.0].
@@ -147,7 +149,7 @@ M1 (first render path, hardcoded block font, 1 KB input cap, flags
 
 ## Toolchain
 
-- **Cyrius pin**: `6.7.11` (in `cyrius.cyml [package].cyrius`)
+- **Cyrius pin**: `6.7.18` (in `cyrius.cyml [package].cyrius`)
 
 ## Shape
 
@@ -273,7 +275,7 @@ font is imported. A fifth font is not planned.
 
 ## Tests
 
-- `tests/bannermanor.tcyr` — **3268 assertions**, run on x86_64 and on
+- `tests/bannermanor.tcyr` — **3273 assertions**, run on x86_64 and on
   aarch64 under qemu (both in CI since 1.7.0). In outline:
   - **Fonts**: embedded-font geometry, glyph lookup and the lowercase
     fold, and row shape. The four CYML fonts load, and `block.cyml`
@@ -284,6 +286,8 @@ font is imported. A fifth font is not planned.
     gate (in memory and through a real file), the 128-entry ceiling, and
     zero / duplicate / non-ASCII entries. Both loaders' disagreements are
     pinned, and so is today's behavior on surplus rows (issue 0008).
+    Since 1.8.2, the two bayan reading changes: adjacent `[[entries]]`
+    lines are rejected, and CR LF lines load only in a one-row font.
   - **`.flf` adapter**: happy path, CRLF, the control-byte scrub, the
     hardblank rules, the envelope (64 / 65 columns, 32 / 33 rows,
     1024 / 1025 comments) and the 1 MB gate.
@@ -333,10 +337,12 @@ font is imported. A fifth font is not planned.
   B2 `font_load_file`, B3 `fit_chars`, and the B4 write path (three
   `render_layout` rows, fd 1 on `/dev/null`). The trend is in
   [`docs/benchmarks.md`](../benchmarks.md), seven points from 0.7.0 to
-  1.4.1, and Point 8 at 1.8.1. Point 4 records bayan 1.5.2's ~45% B2
-  regression (issue 0006, diagnosed at 1.8.1 and filed with bayan; open
-  until the fix is adopted). Runs are recorded with `scripts/bench-history.sh` into
-  `docs/benchmarks/history.csv`, first at 1.8.1 (a quiet host: load 1.12).
+  1.4.1, Point 8 at 1.8.1 and Point 9 at 1.8.2. Point 4 records bayan
+  1.5.2's ~45% B2 regression (issue 0006); Point 9 records its fix,
+  adopted with bayan 1.11.1 at 1.8.2 (B2 back to ~60 µs). Runs are
+  recorded with `scripts/bench-history.sh` into
+  `docs/benchmarks/history.csv`: one at 1.8.1 (a quiet host: load 1.12),
+  three at 1.8.2.
 - `tests/fixtures/` — 24 fixtures, the malformed and boundary fonts the
   tests and the fuzz seeds share.
 
@@ -349,29 +355,36 @@ Direct (declared in `cyrius.cyml`):
   arrived at 1.4.1 (`fl_alloc` / `fl_free` for the read buffers).
   `bayan` left the list at 1.4.1 and `flags` at 1.4.2, each replaced by a
   git dependency below.
-- `darshana = 1.3.0` (pinned at 1.2.0) — the SGR composers
+- `darshana = 1.7.0` (pinned at 1.8.2; 1.3.0 from 1.2.0) — the SGR composers
   (`tty_sgr_buf`, `tty_sgr_reset_buf`, `TTY_FG_*`; since 1.5.0, before
   that the writing forms `tty_sgr` / `tty_sgr_reset`) for `--color`,
   `tty_dec_buf` for the `--list-fonts` digits, and `tty_winsize` for the
   stdout width / TTY probes. Resolved via `git` + `tag` against
   https://github.com/MacCracken/darshana.git. Every symbol bnrmr
   consumes is in darshana's frozen v1.0 surface and cannot move without
-  a major bump. 1.3.0 needs cyrius ≥ 6.7.2.
-- `[deps.bayan]`, tag 1.5.14, module `dist/bayan-cyml.cyr` — the
-  CYML-only sublib: nine `bayan_cyml_*` functions. 1.5.14 is the bayan
-  the cyrius 6.7.11 stdlib bundles (1.5.13 with 6.7.9; the sublib
-  differs only in its version comment), so the parser is byte-identical
-  to what 1.2.0 linked.
-- `[deps.cmdit]`, tag 1.4.0, module `dist/cmdit.cyr` — the CLI parser
+  a major bump. 1.7.0 pins cyrius 6.7.18. 1.3.1–1.7.0 added functions
+  and changed three AGNOS peers bnrmr does not call; every function bnrmr
+  calls has 1.3.0's body, and the 19 digests darshana froze through
+  1.3.0 are unchanged (1.4.0 added a 20th). Its
+  AGNOS `tty_isatty(fd)` asks fd_kind since 1.5.0 but counts a terminal
+  emulator's channel, so bnrmr keeps its own console-only gate (ADR 0004,
+  roadmap 1.9.0).
+- `[deps.bayan]`, tag 1.11.1, module `dist/bayan-cyml.cyr` — the
+  CYML-only sublib: nine `bayan_cyml_*` functions. 1.11.1 is the bayan
+  the cyrius 6.7.18 stdlib bundles (1.5.14 with 6.7.11, through 1.8.1),
+  and its `cyml.cyr` section is the bundle's code for code. It carries
+  bayan 1.6.0's fix for issue 0006, and 1.7.0's and 1.8.0's reading
+  changes (whole-line markers; CR LF ends a line).
+- `[deps.cmdit]`, tag 1.5.0, module `dist/cmdit.cyr` — the CLI parser
   since 1.4.2, replacing the stdlib's `flags`. Same getopt-long core
   (error codes 0..4 are `flags.cyr`'s) plus the `cmdit_argv` bridge.
   bnrmr gives it no validation and uses neither its help nor its error
-  printer. 1.4.0 pins cyrius 6.7.9; bnrmr moved to 6.7.11 at 1.7.0 and
-  cmdit has no later tag. The whole bundle links
+  printer. 1.5.0 pins cyrius 6.7.18, as bnrmr does (bnrmr ran 1.4.0,
+  pinned to 6.7.9, from 1.4.2 through 1.8.1). The whole bundle links
   (shell-completion generators included): the binary grew about 48 KB
   net when it replaced `flags`.
 - `lib/` is the output of `cyrius deps` over the above: 34 files,
-  regenerated from scratch at 1.4.1, 1.4.2 and 1.7.0. `cyrius deps --locked` checks it in
+  regenerated from scratch at 1.4.1, 1.4.2, 1.7.0 and 1.8.2. `cyrius deps --locked` checks it in
   CI. Never edit `lib/` by hand: the toolchain restores it from the lock
   anyway (architecture note 002).
 
@@ -399,6 +412,7 @@ bnrmr is end-user-facing; nothing links it. Known uses of its output:
 
 [`roadmap.md`](roadmap.md) is the forward plan, pinned through 1.11.0,
 with what cannot be 1.x deferred to 2.0, and its issue register is
-current. Next is 1.8.2, adopting bayan's CYML scan fix once bayan
-releases it (gated), else 1.9.0, AGNOS follow-through. Shipped milestones
-are in [`CHANGELOG.md`](../../CHANGELOG.md).
+current (no open issues). Next is 1.9.0, AGNOS follow-through, item by
+item as each gate is met. Its first item, routing the probe through
+darshana, now waits on a decision rather than a darshana release.
+Shipped milestones are in [`CHANGELOG.md`](../../CHANGELOG.md).

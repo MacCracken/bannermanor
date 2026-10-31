@@ -50,10 +50,12 @@ fn main(): i64 {
 fn _run(): i64 {
 
     # cmdit_argv reads the process argv into one array (it runs
-    # args_init). A command line it cannot read whole (the stdlib's 2 MiB
-    # /proc read cut it short) or cannot allocate for comes back as count
-    # 0 with an error set. Check the error first: a bare `ac <= 1` test
-    # would read that as "no arguments" and print usage with exit 0.
+    # args_init). A command line it cannot read whole (no /proc, or a
+    # read of exactly 2 MiB, which a pre-6.7.12 stdlib would have cut; a
+    # longer one is read whole since cmdit 1.4.2 on cyrius 6.7.12) or
+    # cannot allocate for comes back as count 0 with an error set. Check
+    # the error first: a bare `ac <= 1` test would read that as "no
+    # arguments" and print usage with exit 0.
     var fs = cli_flags();
     var ac = cmdit_argv(fs);
     if (cmdit_error(fs) != CMDIT_ERR_NONE) {
@@ -80,7 +82,7 @@ fn _run(): i64 {
         return 0;
     }
     if (pr == CMDIT_VERSION) {
-        _emit_line("bnrmr 1.8.1");
+        _emit_line("bnrmr 1.8.2");
         return 0;
     }
     if (cmdit_get_bool(fs, CF_LIST) == 1) {

@@ -3,7 +3,7 @@
 **Reported**: 2026-08-25
 **Version**: 1.1.4 (P(-1) audit addendum)
 **Reporter**: maintainer (P(-1) hardening pass)
-**Status**: **open** — diagnosed at 1.8.1 and filed with bayan as `docs/development/issues/2026-10-15-cyml-parse-scans-every-byte-twice.md`, with a repro and a proposed fix. Closes when bnrmr moves `[deps.bayan]` to the release that carries it.
+**Status**: **fixed in 1.8.2** (2026-10-30), by a dependency bump: `[deps.bayan]` 1.5.14 → 1.11.1. bayan 1.6.0 shipped the fix filed at 1.8.1 (`_cyml_next_entries`, a marker looked for only at line starts). No bnrmr change.
 **Severity**: performance
 
 ## Observation
@@ -112,3 +112,34 @@ patch wrong on one case was checked to make it report a difference.
 
 **What is left here**: move `[deps.bayan]` to the bayan release that
 carries the fix, record B2 before and after, and close this issue.
+
+## Update — 1.8.2 (2026-10-30): fixed
+
+bayan 1.6.0 shipped the proposed fix as `_cyml_next_entries`: both passes
+look for a marker only at line starts, and the two-pass design stays.
+bayan's differential against 1.5.14 found 0 differences over 4.6 million
+parses, and it credits this issue. bayan 1.6.1 gave the `---` searches
+the same treatment. bnrmr 1.8.2 moved `[deps.bayan]` to 1.11.1, the bayan
+the cyrius 6.7.18 stdlib bundles. Its `cyml.cyr` section is the bundle's,
+code for code.
+
+**B2 before and after**, on archaemenid (Linux 7.2.11). The 1.8.1 tree
+(`git archive HEAD`: cyrius 6.7.11, bayan 1.5.14) and the 1.8.2 tree were
+each run by `cyrius bench` under their own pins, interleaved three and
+three. The 1-minute load average was 0.26 before and 1.5–1.7 during the
+runs:
+
+| tree | `font_load_file(block.cyml)`, 3 runs |
+|------|---------------------------------------|
+| 1.8.1 | 96.4 / 94.6 / 92.3 µs |
+| 1.8.2 | 65.9 / 59.9 / 60.2 µs |
+
+That is **0.64×**, back to the 58.8–61.6 µs bayan 1.0.1 gave before the
+regression. The 1.8.1 point predicted B2 would fall *below* 59 µs. It is
+at that figure, not clearly under it. The two trees also differ in
+toolchain and stdlib (cyrius 6.7.11 → 6.7.18), so these rows do not
+isolate bayan. The other subjects did not move. The point is
+`docs/benchmarks.md` Point 9.
+
+The move also brought bayan 1.7.0's and 1.8.0's reading changes, which
+are not performance changes. They are in CHANGELOG [1.8.2].

@@ -928,6 +928,36 @@ fn t_cyml_entry_rules() {
     _tb_cyml_entry(65, 1, 1);
     assert_eq(_font_parse(_tb_buf, _tb_len), 0, "schema 2 -> 0");
     assert_eq(_font_header_parse(_tb_buf, _tb_len), 0, "schema 2 -> header 0");
+    # Two adjacent [[entries]] lines (1.8.2, bayan 1.7.0): two entries, the
+    # first one empty, so the font is malformed (ADR 0002 ruling 3).
+    # Through 1.8.1 (bayan 1.5.14) they read as one entry whose header
+    # began with the second marker, and the font loaded.
+    _tb_reset(256);
+    _tb_cyml_header(1, 1, 1, 0);
+    _tb_str("[[entries]]\n");
+    _tb_cyml_entry(65, 1, 1);
+    assert_eq(_font_parse(_tb_buf, _tb_len), 0, "adjacent [[entries]] lines -> 0 (an empty entry)");
+    # CR LF lines (1.8.2, bayan 1.8.0): bayan now finds the entries, where
+    # 1.5.14 found none and every CR LF font was rejected. bayan trims the
+    # CR after a body's last row, but _font_decode_body still rejects a CR
+    # between rows, so only a one-row font loads, rendering what its LF
+    # twin renders. Admitting a font is additive (ADR 0002 ruling 2).
+    _tb_reset(256);
+    _tb_str("[font]\r\nschema = 1\r\nname = \"t\"\r\nwidth = 1\r\nheight = 2\r\ngap = 0\r\n\r\n");
+    _tb_str("[[entries]]\r\nchar = \"A\"\r\n---\r\n#\r\n#\r\n");
+    assert_eq(_font_parse(_tb_buf, _tb_len), 0, "CR LF lines, 2 rows -> 0 (a CR between rows)");
+    _tb_reset(256);
+    _tb_str("[font]\r\nschema = 1\r\nname = \"t\"\r\nwidth = 2\r\nheight = 1\r\ngap = 0\r\n\r\n");
+    _tb_str("[[entries]]\r\nchar = \"A\"\r\n---\r\n#.\r\n");
+    var crf = _font_parse(_tb_buf, _tb_len);
+    assert(crf != 0, "CR LF lines, 1 row -> loads (1.8.2)");
+    if (crf != 0) {
+        var cri = font_glyph_index(crf, 65);
+        assert(cri >= 0, "CR LF, 1 row -> 'A' is in the charmap");
+        if (cri >= 0) {
+            assert_eq(memeq(font_row(crf, cri, 0), "# ", 2), 1, "CR LF, 1 row -> the row is '# ', no CR");
+        }
+    }
 }
 
 # MAX_GLYPHS is 256, but the binding limit is CHARMAP_SIZE: every entry

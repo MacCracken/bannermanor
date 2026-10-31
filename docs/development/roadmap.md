@@ -10,8 +10,8 @@ The v1.0.0 freeze locked the CLI flag surface, the CYML font format
 item below is placed by what the freeze allows: 1.x when it fits, 2.0
 when it cannot.
 
-**Next**: 1.8.2 — *adopt the bayan CYML fix*, once bayan releases it;
-1.9.0 if 1.8.2's gate is not met first.
+**Next**: 1.9.0 — *AGNOS follow-through*, item by item as each gate is
+met.
 
 ## The rules every item is checked against
 
@@ -48,37 +48,23 @@ dependency, then by value. A gated release whose gate is not met does not
 hold up the next one; the two swap numbers, so versions stay in shipping
 order.
 
-### 1.8.2 — Adopt the bayan CYML fix
-
-Gated on bayan. 1.8.1 found that bayan 1.5.1's two-pass `[[entries]]`
-scan, at one function call per byte, is the whole of issue 0006's ~45%
-B2 regression. It filed the cause, a repro and a proposed fix with bayan
-(`docs/development/issues/2026-10-15-cyml-parse-scans-every-byte-twice.md`
-there). The proposed parser runs at 0.33–0.43× of today's time with
-identical results.
-
-- Move `[deps.bayan]` to the bayan release that carries the fix, through
-  the same checks as any dependency move: `rm -rf lib/ && cyrius deps`,
-  the lock, and golden on both architectures. Confirm the sublib's diff
-  is the parser change and nothing else.
-- Record B2 with `scripts/bench-history.sh` on a quiet host, and add the
-  point to `docs/benchmarks.md`.
-- Close issue 0006.
-
-*Gate*: that bayan release.
-
 ### 1.9.0 — AGNOS follow-through
 
 Gated on agnos and darshana. Each item ships when its gate is met;
 whatever is not ready moves to a later 1.9.x.
 
 - **Route the AGNOS probe through darshana.** [ADR 0004](../adr/0004-terminal-probes-ask-about-fd-1.md)
-  gates inline (`sys_fd_kind(1) == FDK_CONSOLE`) only because darshana's
-  AGNOS `tty_isatty` does not ask about the fd yet. When a darshana
-  release does, delete `_winsize_describes_stdout`'s AGNOS arm and call
-  darshana. Byte-identical by construction, since both draw the line at
-  the console; prove it with `scripts/agnos-smoke.py`. *Gate*: that
-  darshana release.
+  gates inline (`sys_fd_kind(1) == FDK_CONSOLE`) because no darshana
+  call answered the question. darshana 1.5.0's AGNOS `tty_isatty(fd)`
+  now asks fd_kind (bnrmr pins 1.7.0 since 1.8.2), but it does not draw
+  the line where bnrmr does, so routing through it is **not**
+  byte-identical by construction, as this item assumed. It counts a
+  terminal emulator's channel (`FDK_CHAN`) as a terminal, where bnrmr
+  does not (the next item). And on a kernel older than agnos 1.57.13 it
+  answers about the console, where bnrmr answers "not a terminal".
+  `tty_isatty_is_per_fd()` (darshana 1.6.0) covers the second gap but
+  not the first. Decide whether to route through darshana once the
+  channel item lands, or close this item. *Gate*: that decision.
 - **Terminal-emulator windows on AGNOS.** A program in an AGNOS terminal
   emulator has an `FDK_CHAN` stdout, which bnrmr treats as not a
   terminal: no color, no width cut. That is right while the only size
@@ -184,11 +170,7 @@ ones that are only waiting on a major.
 
 ## Issue register
 
-Open, with a written-up reproducer and acceptance criteria:
-
-| # | Title | Target |
-|---|---|---|
-| [0006](issues/0006-bayan-cyml-parse-regression.md) | bayan 1.5.2 made `font_load_file` ~45% slower | 1.8.2: diagnosed and filed with bayan at 1.8.1; adopt the fixed release |
+None open. Issue 0006 (bayan 1.5.2's B2 regression) closed at 1.8.2.
 
 Closed issues are in [`issues/archive/`](issues/archive/). The numbering
 rule is in [`issues/README.md`](issues/README.md); the next issue is 0021.
