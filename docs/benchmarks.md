@@ -20,7 +20,7 @@ premise that it was "dominated by the terminal". It was not: through
 | B0 | `_calibration` (an empty call) | The harness floor. A row near it is "at the floor", not fast. |
 | B1 | `block_font_embed()` | Embedded-font construction — alloc + glyph data copy. Hit on every default-font invocation. |
 | B2 | `font_load_file("fonts/block.cyml")` | Full CYML file read + parse end to end. Hit on every `--font NAME` invocation. |
-| B3 | `fit_chars(80, 5, 1, 12)` ×100 | Layout-math hot loop (frame=80, 5×5 block font, 12-char banner). Per-render cost. |
+| B3 | `text_fit(block, "HELLO WORLD,", 12, 80)` ×100 | Layout-math hot loop (frame=80, 5×5 block font, 12-glyph banner). Per-render cost. Through 1.9.0 it was `fit_chars(80, 5, 1, 12)`, a closed form; the series restarts at 1.10.0 (Point 10). |
 | B4 | `render_layout` ×3: natural, `--width 4096` centered, `--width 4096` right-aligned | The write path. Must not scale with banner width. |
 
 Source: [`tests/bannermanor.bcyr`](../tests/bannermanor.bcyr). Run via
@@ -473,6 +473,49 @@ has in it. Every other row overlaps its 1.8.1 range.
 
 Verdict: **issue 0006 closed.** The ~45% B2 regression that arrived at
 1.1.3 is gone. Nothing else moved.
+
+### Point 10 — 1.10.0
+
+**Captured**: 2026-10-30, an interleaved A/B only. **No rows were added
+to `docs/benchmarks/history.csv`** (see below).
+**Toolchain**: cyrius 6.7.18 on both arms.
+**Host**: archaemenid (AMD Ryzen 7 5800H, Linux 7.2.11). The 1-minute
+load average was 8–11 throughout: another session was running
+qemu-aarch64 test processes on the 16 cores.
+**Code delta vs 1.9.0**: the layout adds a banner up glyph by glyph
+(`text_fit`, `text_width`, and a per-glyph copy in `render_layout`)
+instead of the closed form `n * width + (n - 1) * gap`. The Font gains a
+per-glyph width table (one `alloc` and `memset` per font), and `.flf`
+fonts a hardblank mask. No benched path renders differently.
+
+A/B, built the Point 6 way: the 1.9.0 tree (`git archive 1.9.0`) and the
+1.10.0 tree, interleaved three and three. Both arms ran under the same
+load, so only the ratios are claimed.
+
+| ID | Subject | 1.10.0 (three runs) | 1.9.0 (three runs) | Δ |
+|----|---------|---------------------|--------------------|---|
+| B2 | `font_load_file(block.cyml)` | **63.6 / 60.3 / 60.1 µs** | 61.4 / 61.7 / 57.9 µs | flat (overlaps) |
+| B3 | `text_fit ×100` (12 glyphs) | **19.6 / 18.6 / 18.6 µs** | `fit_chars ×100`: 660 / 641 / 610 ns | new subject |
+| B4 | `render_layout` natural (`AGNOS`) | **3.54 / 3.34 / 3.38 µs** | 3.35 / 3.34 / 3.24 µs | about +3% |
+| B4 | `--width 4096 --align center` (`AGNOS`) | **5.80 / 5.56 / 5.52 µs** | 5.54 / 5.43 / 5.25 µs | about +4% |
+| B4 | `--width 4096 --align right` (`A`) | **7.24 / 6.91 / 6.99 µs** | 7.19 / 6.91 / 6.87 µs | flat |
+
+**B3 is a different subject now.** `fit_chars` was arithmetic, about
+6 ns a call. `text_fit` looks up each glyph and adds its advance: about
+190 ns for 12 glyphs. The series restarts under the new name.
+
+**B4 pays for that once per render.** `text_fit` and `text_width` each
+walk the text, so a 5-glyph banner does ten more charmap lookups than it
+did. That is about 0.1 µs, which is the size of the natural row's move.
+Rows that are mostly padding or copying do not notice it.
+
+**Why no history rows.** Two attempts to record three runs each had one
+run in which every B4 row came out about 1.6× slow (natural 5.5 µs,
+4096 right 11.4 µs), which the interleaved rounds never showed. That is
+the other session's load, not bnrmr, and a trend line should not carry
+it. Record 1.10.0 on a quiet host with the command below.
+
+Verdict: the glyph-by-glyph layout costs a few percent of a 3 µs render.
 
 ## Re-running
 

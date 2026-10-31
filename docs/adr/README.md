@@ -25,6 +25,7 @@ Decisions about bannermanor — what we chose, the context, and the consequences
 | [0002](0002-freeze-scope-error-paths-and-malformed-input.md) | What the v1.0 freeze covers: diagnostics are not frozen, a failed write is a defect, malformed input is not protected | Accepted (2026-10-15) |
 | [0003](0003-font-search-path.md) | `--font NAME` searches `$BNRMR_FONTS`, `./fonts`, the install directory beside the executable, then the built-in block font; `--list-fonts` lists exactly what that finds | Accepted (2026-10-15) |
 | [0004](0004-terminal-probes-ask-about-fd-1.md) | The width and color probes ask whether fd 1 is a terminal, through darshana where it answers that and through an inline `sys_fd_kind` gate on AGNOS until it does; only the console counts there | Accepted (2026-10-15) |
+| [0005](0005-the-2-0-charter.md) | The 2.0 charter: variable-width glyphs, opt-in smushing, non-ASCII text, stdin and the A-05 / A-06 fixes go into 2.0; color forcing and the A-11 name check do not; argv text is UTF-8 | Proposed (2026-10-30) |
 
-Add the next as `0005-kebab-case-title.md`. Never renumber an
+Add the next as `0006-kebab-case-title.md`. Never renumber an
 existing ADR.

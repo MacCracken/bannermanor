@@ -206,33 +206,78 @@ fn resolve_frame(requested): i64 {
     return DEFAULT_FRAME;
 }
 
-# Columns consumed by `n` glyphs of width `gw` with `gap` between
-# adjacent pairs. For n=0 returns 0.
-fn banner_width(n, gw, gap): i64 {
-    if (n <= 0) { return 0; }
-    return n * gw + (n - 1) * gap;
+# ---- glyph advances (1.10.0) ----
+#
+# Layout adds up a banner glyph by glyph: each glyph's advance, plus the
+# font's gap between neighbours. Through 1.9.0 it used the closed form
+# `n * width + (n - 1) * gap`, which can only describe a font whose glyphs
+# are all one width. Every glyph still advances by the font's width
+# (glyph_advance), so the sums equal the closed form and no byte moves;
+# the golden suite and the figlet corpus check prove that. This is 2.0
+# groundwork: variable-width .flf glyphs become a change to glyph_advance
+# alone, with the truncation, alignment and row composition below
+# already following it.
+
+# The glyph drawn for byte `ch`: its own, or the font's space for a byte
+# it has no glyph for (glyph 0 in a font that has no space either).
+fn glyph_for(font, ch): i64 {
+    var gi = font_glyph_index(font, ch);
+    if (gi >= 0) { return gi; }
+    gi = font_glyph_index(font, 32);
+    if (gi < 0) { return 0; }
+    return gi;
 }
 
-# Maximum number of glyphs that fit within `frame` columns at glyph
-# width `gw` and inter-glyph gap `gap`. Frame=0 → unlimited (returns
-# len). Always rounds down at the glyph boundary — never partial.
+# Columns glyph `gi` advances. The font's width for every glyph in 1.x:
+# CHANGELOG 1.0.0 freezes the uniform-width fit, so a .flf glyph's own
+# width (font_glyph_width) does not render until 2.0.
+fn glyph_advance(font, gi): i64 {
+    return font_width(font);
+}
+
+# Columns taken by the first `n` glyphs of `text`: their advances plus a
+# gap between each adjacent pair. 0 for n <= 0.
+fn text_width(font, text, n): i64 {
+    if (n <= 0) { return 0; }
+    var g = font_gap(font);
+    var total = 0;
+    var i = 0;
+    while (i < n) {
+        total = total + glyph_advance(font, glyph_for(font, load8(text + i)));
+        if (i > 0) { total = total + g; }
+        i = i + 1;
+    }
+    return total;
+}
+
+# How many of the first `len` glyphs of `text` fit within `frame`
+# columns. frame <= 0 is unlimited (returns len). Glyphs are added in
+# order and the first one that does not fit ends the count, so the cut is
+# always at a glyph boundary, never partial, and never skips a glyph.
 #
-# If `frame` is smaller than a single glyph (`frame < gw`), returns 0.
+# If the first glyph does not fit (`frame` smaller than its advance), 0.
 # render_layout then draws no glyph, but it still writes `height` rows:
 # each is empty, SGR-wrapped on a TTY when --color is set, plus any
 # --pad lines. So the output is blank rows, not "no output". That is the
 # frozen behavior (accepted risk A-05), and --help says so under
 # --width. A blank row beats a half-rendered glyph or a row that
 # overflows the frame. (Until 1.4.1 this comment promised "no output".)
-fn fit_chars(frame, gw, gap, len): i64 {
+fn text_fit(font, text, len, frame): i64 {
     if (frame <= 0) { return len; }
     if (len <= 0) { return 0; }
-    # Solve banner_width(n) <= frame: n*gw + (n-1)*gap <= frame
-    #                                 n*(gw + gap) <= frame + gap
-    #                                 n <= (frame + gap) / (gw + gap)
-    var n = (frame + gap) / (gw + gap);
-    if (n > len) { return len; }
-    if (n < 0) { return 0; }
+    var g = font_gap(font);
+    var used = 0;
+    var n = 0;
+    var full = 0;
+    while (n < len && full == 0) {
+        var need = glyph_advance(font, glyph_for(font, load8(text + n)));
+        if (n > 0) { need = need + g; }
+        if (used + need > frame) { full = 1; }
+        else {
+            used = used + need;
+            n = n + 1;
+        }
+    }
     return n;
 }
 
@@ -523,7 +568,6 @@ fn render_layout(font, text, len, width, align, pad, color): i64 {
     if (len > MAX_INPUT) { return 0 - 1; }
     if (font == 0) { return 0 - 2; }
 
-    var w = font_width(font);
     var h = font_height(font);
     var g = font_gap(font);
 
@@ -533,7 +577,7 @@ fn render_layout(font, text, len, width, align, pad, color): i64 {
     #                             the banner doesn't wrap into itself
     #                             on narrow terminals (issue 0004).
     #   - No `--width`, pipe out → `term_width_ioctl` returns 0,
-    #                             `fit_chars(0, ...)` returns `len`
+    #                             `text_fit(..., 0)` returns `len`
     #                             unchanged — preserves the M1
     #                             byte-identity contract for
     #                             `bnrmr ... | cat` and the test suite.
@@ -542,7 +586,7 @@ fn render_layout(font, text, len, width, align, pad, color): i64 {
     #                             console's width.)
     var clamp_w = width;
     if (clamp_w == 0) { clamp_w = term_width_ioctl(); }
-    var draw_len = fit_chars(clamp_w, w, g, len);
+    var draw_len = text_fit(font, text, len, clamp_w);
 
     # Frame width for alignment. Left-align with width=0 means we
     # never resolve a frame at all (preserves M1 byte-identity).
@@ -553,11 +597,8 @@ fn render_layout(font, text, len, width, align, pad, color): i64 {
         if (width > 0) { frame = width; }
     }
 
-    var bw = banner_width(draw_len, w, g);
+    var bw = text_width(font, text, draw_len);
     var lpad = align_pad(bw, frame, align);
-
-    var space_idx = font_glyph_index(font, 32);
-    if (space_idx < 0) { space_idx = 0; }
 
     # Suppress color when stdout isn't a TTY — matches the M5
     # acceptance "renders colored on TTY, plain on pipe."
@@ -587,13 +628,15 @@ fn render_layout(font, text, len, width, align, pad, color): i64 {
             if (sp > 0) { pos = sp; }
         }
 
+        # Each glyph copies as many columns as it advances, the same
+        # glyph_for / glyph_advance text_width summed, so the row is
+        # exactly `bw` wide and the buffer sized from it holds it.
         var i = 0;
         while (i < draw_len) {
-            var ch = load8(text + i);
-            var gi = font_glyph_index(font, ch);
-            if (gi < 0) { gi = space_idx; }
-            _bulk_copy(row + pos, font_row(font, gi, r), w);
-            pos = pos + w;
+            var gi = glyph_for(font, load8(text + i));
+            var adv = glyph_advance(font, gi);
+            _bulk_copy(row + pos, font_row(font, gi, r), adv);
+            pos = pos + adv;
             if (i + 1 < draw_len && g > 0) {
                 _fill_spaces(row + pos, g);
                 pos = pos + g;

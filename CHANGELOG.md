@@ -4,6 +4,123 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.10.0] — 2026-10-30 (2.0 groundwork, byte-identical)
+
+The plumbing for 2.0's two largest items, variable-width `.flf` glyphs and
+smushing, done where the golden suite can prove it changed nothing. The
+`.flf` loader keeps each glyph's own width and which cells were
+hardblanks, and the layout adds a banner up glyph by glyph. **No rendered
+byte moved**: golden is byte-identical, 346/346, on x86_64 and on aarch64
+under qemu, and so are all 1,051 fonts of the figlet reference corpus
+against 1.9.0. Variable-width glyphs in 2.0 are now a change to one
+function. The 2.0 charter is drafted as ADR 0005, Proposed.
+
+### Changed
+
+- **The layout adds up glyph by glyph** (`src/layout.cyr`). `text_fit`
+  (how many glyphs fit a frame) and `text_width` (the columns they take)
+  add each glyph's `glyph_advance`, plus the gap between neighbours, for
+  the glyph `glyph_for` picks. They replace `fit_chars` and
+  `banner_width`, the closed form `n * width + (n - 1) * gap`, which can
+  only describe a font whose glyphs are all one width. `render_layout`
+  copies each glyph by the same advance, so a row is exactly as wide as
+  `text_width` says. `glyph_advance` is the font's width for every glyph
+  (CHANGELOG 1.0.0 freezes the uniform-width fit), so every sum equals the
+  closed form. The cut is still at a glyph boundary: glyphs are added in
+  order, and the first that does not fit ends the count.
+- **The Font keeps two facts the `.flf` loader used to discard**
+  (`src/font.cyr`, `src/flf.cyr`). The struct grows from 48 to 64 bytes:
+  - **Each glyph's own width** (`font_glyph_width`): for a `.flf` glyph,
+    its longest row once the endmarks are stripped, 0 to the font's width.
+    figlet takes the first row's length instead; the two agree on every
+    glyph whose rows are one length, and the 2.0 charter weighs the rest.
+    CYML and the embedded font are uniform: every glyph is the font's
+    width.
+  - **Which cells were hardblanks** (`font_is_hardblank`), a mask beside
+    the rows, for `.flf` fonts only. The rows still hold a space there, as
+    they always have. The loader holds a hardblank as NUL in its scratch
+    until assembly, which nothing else can produce, because every control
+    byte is scrubbed to a space first (F-001).
+
+  Nothing renders from either in 1.x. Variable-width glyphs need the
+  first, and smushing needs the second.
+- **B3 times `text_fit`** (12 glyphs, ×100), not `fit_chars`. The series
+  restarts under the new name (`docs/benchmarks.md` Point 10).
+- **Sizes**: x86_64 313,728 → 313,744 bytes, aarch64 407,848 → 407,864,
+  AGNOS 325,952 → 330,064.
+
+### Added
+
+- **`scripts/flf-corpus.sh`**: two bnrmr binaries over a figlet font
+  corpus, comparing stdout, stderr and exit status for three invocations
+  per font: all of printable ASCII, `--width 100 --align right`, and
+  `--width 500 --align center`. It is manual, since the corpus
+  (cmatsuoka/figlet-fonts and xero/figlet-fonts) is not in this repo.
+  1.5.0 ran the same check by hand; this keeps it.
+- **ADR 0005, Proposed: the 2.0 charter.** 2.0 takes variable-width
+  glyphs (the default; parity target `figlet -W`), CYML schema 2,
+  smushing behind one new flag, non-ASCII text, reading stdin, and the
+  A-05 and A-06 fixes. It does not take forcing color, and it closes the
+  A-11 `name` check. argv text is UTF-8 on both targets, whatever the
+  locale; a byte that does not begin a valid sequence renders as 1.x
+  renders it. The library surface stays a 1.x item. Measured for it:
+  advancing each glyph by its own width changes 681 of the 1,045 corpus
+  fonts that load and none of the in-tree fonts. In 1,920 of the corpus's
+  99,275 glyphs the rows differ in length.
+
+### Tests
+
+- Suite 3273 → **3341**:
+  - 1.9.0's `fit_chars` / `banner_width` cases, ported to `text_fit` /
+    `text_width` with the same expected values;
+  - `text_fit` and `text_width` against the closed form for six
+    geometries (1 to 128 wide, gap 0 to 16), over frames 0..300 and texts
+    of 0..12 bytes: no mismatch;
+  - `glyph_for`'s space and glyph-0 fallbacks; `glyph_advance` equal to
+    the font's width for every glyph of every in-tree font, `tiny.flf`,
+    and a `.flf` whose glyphs are 0 to 4 wide;
+  - each glyph's own width (a hardblank counts, a glyph of endmarks only
+    is 0, a short row is padded) and the hardblank cells, for `$`, C1
+    0x85 and DEL hardblanks; CYML fonts uniform with no hardblanks; the
+    new constructors' bounds.
+- **Four planted defects, each caught by the suite**: advancing by the
+  glyph's own width (2 failures), hardblanks not marked (7), a glyph's
+  width taken from its last row (2), and `text_fit` cutting one glyph
+  early (12).
+- **The fuzz oracles** check each glyph's own width (0 to the font's,
+  the font's for CYML, one `.flf` glyph as wide as the font) and the
+  hardblank mask (only on cells holding a space, inside the glyph's
+  width, none in CYML). The self-test proves four fonts that break those
+  rules are rejected. 81,003 parses, 0 violations.
+- **The corpus**: 1,051 fonts (one symlink skipped), 1,045 of which
+  load. 1.10.0 against 1.9.0: all 1,051 identical. The mutant that
+  advances each glyph by its own width: 681 differ, and golden's
+  `flf-modular-printable` fails (5,992 → 4,858 bytes), so both checks can
+  see the change 2.0 will make.
+- The other gates: golden and the suite on x86_64 and on aarch64,
+  `deps --locked`, strict lint, the doc-pin check, 100% reference
+  coverage (56/56), and the AGNOS smoke, 10/10 on agnos 1.57.14.
+- **Benchmarks** (Point 10, an interleaved A/B against 1.9.0 under
+  another session's load, so ratios only): a natural render about 3%
+  slower and the 4096-column centered row about 4%; the right-aligned row
+  flat. That is `text_fit` and `text_width` each walking the text once,
+  about 0.1 µs for 5 glyphs. No history rows were recorded: two attempts
+  each had a run 1.6× slow on every render row.
+
+### Documentation
+
+- **Filed with agnos**: `docs/development/issues/2026-10-30-a-terminal-channel-has-no-window-size.md`.
+  A program in puka holds a PTY channel, and the only size it can ask for
+  is the console's (`winsize`#60). puka's agnos `pty_set_winsize` is a
+  stub, and `fd_kind` cannot tell a PTY channel from a display one. The
+  issue proposes a size the emulator sets on its end of the channel and
+  the child reads from its own, with SIGWINCH on a change. It is the gate
+  for the roadmap's terminal-emulator windows item.
+- **Roadmap**: 1.10.0 is done and gone. No ungated 1.x release is left,
+  so Next names the 2.0 charter. "Deferred to 2.0" points at ADR 0005.
+- `state.md`, `docs/benchmarks.md` (Point 10), the getting-started guide
+  and the source comments name the new layout functions.
+
 ## [1.9.0] — 2026-10-30 (a failed write, checked on AGNOS)
 
 The one roadmap 1.9.0 item whose gate turned out to be met already.

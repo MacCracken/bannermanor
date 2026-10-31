@@ -400,40 +400,140 @@ fn t_load_clean_cyml() {
 
 # ---- M4 layout ----
 
-fn t_layout_banner_width() {
-    test_group("layout / banner_width");
+# The layout sums glyph by glyph since 1.10.0 (text_width, text_fit). The
+# two tests below are the 1.9.0 banner_width / fit_chars cases, ported to
+# the block font (5 wide, gap 1) with the same expected values.
+fn t_layout_text_width() {
+    test_group("layout / text_width");
+    var f = block_font_embed();
     # 1 glyph: just width
-    assert_eq(banner_width(1, 5, 1), 5,  "1 glyph @ 5w gap=1 -> 5");
+    assert_eq(text_width(f, "A", 1), 5,  "1 glyph @ 5w gap=1 -> 5");
     # 2 glyphs: w + gap + w
-    assert_eq(banner_width(2, 5, 1), 11, "2 glyphs @ 5w gap=1 -> 11");
+    assert_eq(text_width(f, "AG", 2), 11, "2 glyphs @ 5w gap=1 -> 11");
     # 5 glyphs at block: 5*5 + 4*1 = 29
-    assert_eq(banner_width(5, 5, 1), 29, "AGNOS-shape banner -> 29 cols");
+    assert_eq(text_width(f, "AGNOS", 5), 29, "AGNOS banner -> 29 cols");
     # n=0 -> 0 (no glyphs, no gaps)
-    assert_eq(banner_width(0, 5, 1), 0,  "0 glyphs -> 0");
-    # gap=0 means flush glyphs
-    assert_eq(banner_width(3, 4, 0), 12, "3 glyphs @ 4w gap=0 -> 12");
+    assert_eq(text_width(f, "AGNOS", 0), 0,  "0 glyphs -> 0");
+    # gap=0 means flush glyphs. A 4-wide font with one glyph: every
+    # byte it lacks draws glyph 0 (no space glyph either), 4 columns.
+    var f4 = font_new(4, 1, 0, 1);
+    font_set_char(f4, 0, 65);
+    assert_eq(text_width(f4, "xyz", 3), 12, "3 glyphs @ 4w gap=0 -> 12");
+    # A byte the font has no glyph for (TAB) advances like the space it
+    # draws.
+    var tab[8];
+    store8(&tab, 65); store8(&tab + 1, 9); store8(&tab + 2, 65);
+    assert_eq(text_width(f, &tab, 3), 17, "an unmapped byte takes the space's 5 columns");
 }
 
-fn t_layout_fit_chars() {
-    test_group("layout / fit_chars");
+fn t_layout_text_fit() {
+    test_group("layout / text_fit");
+    var f = block_font_embed();
+    var t = "AGNOSTICAG";
     # frame=0 (unlimited): pass through len untouched
-    assert_eq(fit_chars(0, 5, 1, 10), 10, "frame=0 unlimited");
-    assert_eq(fit_chars(0, 5, 1, 0),  0,  "frame=0 + len=0");
+    assert_eq(text_fit(f, t, 10, 0), 10, "frame=0 unlimited");
+    assert_eq(text_fit(f, t, 0, 0),  0,  "frame=0 + len=0");
     # exact fits at block geometry (w=5, gap=1)
-    assert_eq(fit_chars(5,  5, 1, 10), 1, "frame=5  -> 1 glyph fits");
-    assert_eq(fit_chars(11, 5, 1, 10), 2, "frame=11 -> 2 glyphs fit");
-    assert_eq(fit_chars(17, 5, 1, 10), 3, "frame=17 -> 3 glyphs fit");
+    assert_eq(text_fit(f, t, 10, 5),  1, "frame=5  -> 1 glyph fits");
+    assert_eq(text_fit(f, t, 10, 11), 2, "frame=11 -> 2 glyphs fit");
+    assert_eq(text_fit(f, t, 10, 17), 3, "frame=17 -> 3 glyphs fit");
     # one byte short of a 4th glyph — still 3
-    assert_eq(fit_chars(22, 5, 1, 10), 3, "frame=22 -> still 3 glyphs (4th needs 23)");
-    assert_eq(fit_chars(23, 5, 1, 10), 4, "frame=23 -> 4 glyphs fit");
+    assert_eq(text_fit(f, t, 10, 22), 3, "frame=22 -> still 3 glyphs (4th needs 23)");
+    assert_eq(text_fit(f, t, 10, 23), 4, "frame=23 -> 4 glyphs fit");
     # frame wider than text: capped by len
-    assert_eq(fit_chars(80, 5, 1, 5),  5, "frame=80 + 5-char text -> 5");
+    assert_eq(text_fit(f, t, 5, 80),  5, "frame=80 + 5-char text -> 5");
     # frame=20 + AGNOSTIC (8 chars): 3 glyphs fit (17 cols), 4th needs 23
-    assert_eq(fit_chars(20, 5, 1, 8),  3, "frame=20 AGNOSTIC -> AGN (3 glyphs)");
+    assert_eq(text_fit(f, t, 8, 20),  3, "frame=20 AGNOSTIC -> AGN (3 glyphs)");
     # roadmap acceptance: --width 80 + "hi"
-    assert_eq(fit_chars(80, 5, 1, 2),  2, "frame=80 'hi' -> both glyphs (no truncation)");
-    # frame too small for even one glyph (< gw): 0
-    assert_eq(fit_chars(3, 5, 1, 10), 0, "frame=3 < width=5 -> 0 glyphs");
+    assert_eq(text_fit(f, "hi", 2, 80),  2, "frame=80 'hi' -> both glyphs (no truncation)");
+    # frame too small for even one glyph (< its advance): 0
+    assert_eq(text_fit(f, t, 10, 3), 0, "frame=3 < width=5 -> 0 glyphs");
+}
+
+# 1.9.0's closed form, kept here as the reference the glyph-by-glyph sums
+# must equal while every glyph advances by the font's width.
+fn _closed_fit(frame, gw, gap, len): i64 {
+    if (frame <= 0) { return len; }
+    if (len <= 0) { return 0; }
+    var n = (frame + gap) / (gw + gap);
+    if (n > len) { return len; }
+    if (n < 0) { return 0; }
+    return n;
+}
+
+# Mismatches between text_fit / text_width and the closed form for a
+# one-glyph font of width gw and gap `gap`, over frames 0..300 and texts
+# of 0..12 bytes.
+fn _closed_form_mismatches(gw, gap): i64 {
+    var f = font_new(gw, 1, gap, 1);
+    font_set_char(f, 0, 65);
+    var text = "AAAAAAAAAAAA";
+    var bad = 0;
+    var len = 0;
+    while (len <= 12) {
+        var frame = 0;
+        while (frame <= 300) {
+            if (text_fit(f, text, len, frame) != _closed_fit(frame, gw, gap, len)) { bad = bad + 1; }
+            frame = frame + 1;
+        }
+        var want = 0;
+        if (len > 0) { want = len * gw + (len - 1) * gap; }
+        if (text_width(f, text, len) != want) { bad = bad + 1; }
+        len = len + 1;
+    }
+    return bad;
+}
+
+fn t_layout_sums_match_closed_form() {
+    test_group("layout / glyph-by-glyph sums equal the 1.9.0 closed form");
+    assert_eq(_closed_form_mismatches(5, 1), 0, "5 wide, gap 1 (block)");
+    assert_eq(_closed_form_mismatches(4, 0), 0, "4 wide, gap 0");
+    assert_eq(_closed_form_mismatches(1, 0), 0, "1 wide, gap 0");
+    assert_eq(_closed_form_mismatches(7, 3), 0, "7 wide, gap 3");
+    assert_eq(_closed_form_mismatches(64, 16), 0, "64 wide, gap 16 (the CYML maxima)");
+    assert_eq(_closed_form_mismatches(128, 0), 0, "128 wide, gap 0 (the .flf maximum)");
+}
+
+fn t_layout_glyph_for() {
+    test_group("layout / glyph_for");
+    var f = block_font_embed();
+    assert_eq(glyph_for(f, 65), font_glyph_index(f, 65), "a mapped byte draws its own glyph");
+    assert_eq(glyph_for(f, 97), font_glyph_index(f, 65), "a lowercase byte folds as font_glyph_index does");
+    assert(font_glyph_index(f, 9) < 0, "block has no glyph for TAB");
+    assert_eq(glyph_for(f, 9), font_glyph_index(f, 32), "an unmapped byte (TAB) draws the space");
+    assert_eq(glyph_for(f, 200), font_glyph_index(f, 32), "a byte past the charmap draws the space");
+    var ns = font_new(2, 1, 0, 2);
+    font_set_char(ns, 0, 66);
+    font_set_char(ns, 1, 65);
+    assert_eq(glyph_for(ns, 65), 1, "a font without a space: A is its own glyph");
+    assert_eq(glyph_for(ns, 90), 0, "a font without a space: an unmapped byte draws glyph 0");
+}
+
+# Every glyph advances by the font's width in 1.x (CHANGELOG 1.0.0's
+# uniform-width fit), whatever its own width: for each in-tree font and
+# tiny.flf, and a .flf whose glyphs differ in width.
+fn _advance_mismatches(f): i64 {
+    var bad = 0;
+    var i = 0;
+    while (i < font_count(f)) {
+        if (glyph_advance(f, i) != font_width(f)) { bad = bad + 1; }
+        i = i + 1;
+    }
+    return bad;
+}
+
+fn t_layout_glyph_advance() {
+    test_group("layout / glyph_advance is the font's width in 1.x");
+    assert_eq(_advance_mismatches(block_font_embed()), 0, "embedded block");
+    assert_eq(_advance_mismatches(font_load_file("fonts/slim.cyml")), 0, "slim");
+    assert_eq(_advance_mismatches(font_load_file("fonts/big.cyml")), 0, "big");
+    assert_eq(_advance_mismatches(font_load_file("fonts/clean.cyml")), 0, "clean");
+    assert_eq(_advance_mismatches(flf_load_file("tests/fixtures/tiny.flf")), 0, "tiny.flf");
+    var v = _tb_flf_varied();
+    assert(v != 0, "the varied-width .flf loads");
+    if (v != 0) {
+        assert_eq(_advance_mismatches(v), 0, "a .flf whose glyphs are 0..4 wide");
+    }
 }
 
 fn t_layout_align_pad() {
@@ -1057,6 +1157,154 @@ fn _tb_flf(height, w, comments): i64 {
     return 0;
 }
 
+# A height-2 .flf, hardblank '$', in memory (1.10.0). Every glyph is one
+# 'W' wide except:
+#   ' '  "$$" / "$$"      2 wide, all four cells hardblanks
+#   'A'  "AAA" / "A$A"    3 wide, one hardblank at (row 1, col 1)
+#   'B'  "" / ""          0 wide: both rows are only endmarks
+#   'C'  "CCCC" / "C"     4 wide, the widest; its second row is short
+# so the font is 4 wide. Returns the parsed Font, or 0.
+fn _tb_flf_varied(): i64 { return _tb_flf_varied_hb(36); }
+
+# The same font with hardblank byte `hb` in place of '$'.
+fn _tb_flf_varied_hb(hb): i64 {
+    _tb_reset(4096);
+    _tb_str("flf2a"); _tb_byte(hb); _tb_str(" 2 0 6 0 0\n");
+    var g = 0;
+    while (g < 95) {
+        var ch = 32 + g;
+        if (ch == 32) {
+            _tb_byte(hb); _tb_byte(hb); _tb_str("@\n");
+            _tb_byte(hb); _tb_byte(hb); _tb_str("@@\n");
+        } else {
+            if (ch == 65) { _tb_str("AAA@\nA"); _tb_byte(hb); _tb_str("A@@\n"); }
+            else {
+                if (ch == 66) { _tb_str("@\n@@\n"); }
+                else {
+                    if (ch == 67) { _tb_str("CCCC@\nC@@\n"); }
+                    else { _tb_str("W@\nW@@\n"); }
+                }
+            }
+        }
+        g = g + 1;
+    }
+    return _flf_parse(_tb_buf, _tb_len);
+}
+
+fn t_flf_glyph_widths() {
+    test_group("flf / each glyph's own width (1.10.0)");
+    var f = _tb_flf_varied();
+    assert(f != 0, "loads");
+    if (f == 0) { return 0; }
+    assert_eq(font_width(f), 4, "the font is as wide as its widest glyph");
+    assert_eq(font_glyph_width(f, font_glyph_index(f, 32)), 2, "' ' -> 2 (hardblanks are cells)");
+    assert_eq(font_glyph_width(f, font_glyph_index(f, 65)), 3, "'A' -> 3");
+    assert_eq(font_glyph_width(f, font_glyph_index(f, 66)), 0, "'B' -> 0 (endmarks only)");
+    assert_eq(font_glyph_width(f, font_glyph_index(f, 67)), 4, "'C' -> 4 (its longest row)");
+    assert_eq(font_glyph_width(f, font_glyph_index(f, 90)), 1, "'Z' -> 1");
+    # Rows are still padded to the font's width with spaces.
+    var c = font_glyph_index(f, 67);
+    assert_eq(memeq(font_row(f, c, 1), "C   ", 4), 1, "'C' row 1 is padded to 4 with spaces");
+    var b = font_glyph_index(f, 66);
+    assert_eq(memeq(font_row(f, b, 0), "    ", 4), 1, "'B' rows are 4 spaces");
+    # tiny.flf: one row, every glyph one column.
+    var t = flf_load_file("tests/fixtures/tiny.flf");
+    assert(t != 0, "tiny.flf loads");
+    if (t != 0) {
+        assert_eq(font_glyph_width(t, font_glyph_index(t, 65)), 1, "tiny.flf 'A' -> 1");
+    }
+    return 0;
+}
+
+fn t_flf_hardblank_cells() {
+    test_group("flf / hardblank cells (1.10.0)");
+    var f = _tb_flf_varied();
+    assert(f != 0, "loads");
+    if (f == 0) { return 0; }
+    var a = font_glyph_index(f, 65);
+    assert_eq(font_is_hardblank(f, a, 1, 1), 1, "'A' (1,1) is a hardblank");
+    assert_eq(load8(font_row(f, a, 1) + 1), 32, "... and holds a space, as through 1.9.0");
+    assert_eq(font_is_hardblank(f, a, 1, 0), 0, "'A' (1,0) is 'A'");
+    assert_eq(font_is_hardblank(f, a, 0, 1), 0, "'A' (0,1) is 'A'");
+    assert_eq(font_is_hardblank(f, a, 1, 3), 0, "'A' (1,3) is padding, not a hardblank");
+    var sp = font_glyph_index(f, 32);
+    var marks = 0;
+    var r = 0;
+    while (r < 2) {
+        var col = 0;
+        while (col < 4) {
+            marks = marks + font_is_hardblank(f, sp, r, col);
+            col = col + 1;
+        }
+        r = r + 1;
+    }
+    assert_eq(marks, 4, "' ' has exactly its four hardblank cells marked");
+    var c = font_glyph_index(f, 67);
+    assert_eq(font_is_hardblank(f, c, 1, 2), 0, "'C' row 1's padding is not a hardblank");
+    # tiny.flf's hardblank is '$', and its '$' glyph is one.
+    var t = flf_load_file("tests/fixtures/tiny.flf");
+    assert(t != 0, "tiny.flf loads");
+    if (t != 0) {
+        var d = font_glyph_index(t, 36);
+        assert_eq(font_is_hardblank(t, d, 0, 0), 1, "tiny.flf '$' glyph is a hardblank");
+        assert_eq(load8(font_row(t, d, 0)), 32, "... rendered as a space");
+        assert_eq(font_is_hardblank(t, font_glyph_index(t, 65), 0, 0), 0, "tiny.flf 'A' is not");
+    }
+    assert_eq(_hardblank_count(f), 5, "5 cells in all: ' ' has 4, 'A' 1");
+    # A control-byte hardblank (C1 0x85, DEL) is marked like any other,
+    # and its cells still hold spaces, not the control byte (F-001).
+    var cf = _tb_flf_varied_hb(133);
+    assert(cf != 0, "0x85 hardblank loads");
+    if (cf != 0) {
+        assert_eq(_hardblank_count(cf), 5, "0x85: the same 5 cells are marked");
+        assert_eq(load8(font_row(cf, font_glyph_index(cf, 65), 1) + 1), 32, "0x85: the cell holds a space");
+    }
+    var df = _tb_flf_varied_hb(127);
+    assert(df != 0, "DEL hardblank loads");
+    if (df != 0) {
+        assert_eq(_hardblank_count(df), 5, "DEL: the same 5 cells are marked");
+    }
+    return 0;
+}
+
+fn _hardblank_count(f): i64 {
+    var n = 0;
+    var gi = 0;
+    while (gi < font_count(f)) {
+        var r = 0;
+        while (r < font_height(f)) {
+            var col = 0;
+            while (col < font_width(f)) {
+                n = n + font_is_hardblank(f, gi, r, col);
+                col = col + 1;
+            }
+            r = r + 1;
+        }
+        gi = gi + 1;
+    }
+    return n;
+}
+
+# CYML and the embedded font are uniform and have no hardblanks.
+fn _uniform_mismatches(f): i64 {
+    var bad = 0;
+    var gi = 0;
+    while (gi < font_count(f)) {
+        if (font_glyph_width(f, gi) != font_width(f)) { bad = bad + 1; }
+        gi = gi + 1;
+    }
+    return bad + _hardblank_count(f);
+}
+
+fn t_cyml_uniform_widths() {
+    test_group("CYML / every glyph is the font's width, no hardblanks (1.10.0)");
+    assert_eq(_uniform_mismatches(block_font_embed()), 0, "embedded block");
+    assert_eq(_uniform_mismatches(font_load_file("fonts/block.cyml")), 0, "block.cyml");
+    assert_eq(_uniform_mismatches(font_load_file("fonts/slim.cyml")), 0, "slim");
+    assert_eq(_uniform_mismatches(font_load_file("fonts/big.cyml")), 0, "big");
+    assert_eq(_uniform_mismatches(font_load_file("fonts/clean.cyml")), 0, "clean");
+}
+
 fn t_flf_header_gates() {
     test_group(".flf / the adapter's envelope (128 x 64) and header gates");
     assert_eq(flf_load_file("tests/fixtures/flf_too_many_comments.flf"), 0, "1025 comment lines -> 0");
@@ -1119,6 +1367,22 @@ fn t_font_construction() {
     font_set_row(f, 1, 0, "#.#");
     assert_eq(memeq(font_row(f, 1, 0), "#.#", 3), 1, "font_set_row copies width bytes");
     assert_eq(load8(font_row(f, 0, 0)), 32, "glyph 0 untouched");
+    # 1.10.0: each glyph's own width starts at the font's, with no mask.
+    assert_eq(font_glyph_width(f, 0), 3, "glyph widths start at width");
+    assert_eq(font_glyph_width(f, 1), 3, "... every one");
+    assert_eq(font_is_hardblank(f, 1, 1, 2), 0, "no hardblank mask -> 0");
+    assert_eq(font_set_glyph_width(f, 1, 2), 0, "set glyph 1 to 2 wide");
+    assert_eq(font_glyph_width(f, 1), 2, "glyph 1 -> 2");
+    assert_eq(font_glyph_width(f, 0), 3, "glyph 0 untouched");
+    assert_eq(font_set_glyph_width(f, 1, 0), 0, "0 wide is allowed");
+    assert_eq(font_set_glyph_width(f, 1, 4), 0 - 1, "wider than the font -> -1");
+    assert_eq(font_set_glyph_width(f, 1, 0 - 1), 0 - 1, "-1 -> -1");
+    assert_eq(font_glyph_width(f, 1), 0, "a refused width writes nothing");
+    var m = font_new_hardmask(f);
+    assert(m != 0, "font_new_hardmask");
+    assert_eq(font_is_hardblank(f, 1, 1, 2), 0, "a new mask is all zero");
+    store8(m + (1 * 2 + 1) * 3 + 2, 1);
+    assert_eq(font_is_hardblank(f, 1, 1, 2), 1, "the mask is laid out like rows_ptr");
 }
 
 # ---- 1.4.1: src/cli.cyr, tested for the first time ----
@@ -2266,8 +2530,11 @@ fn main() {
     t_load_slim_cyml();
     t_load_big_cyml();
     t_load_clean_cyml();
-    t_layout_banner_width();
-    t_layout_fit_chars();
+    t_layout_text_width();
+    t_layout_text_fit();
+    t_layout_sums_match_closed_form();
+    t_layout_glyph_for();
+    t_layout_glyph_advance();
     t_layout_align_pad();
     t_layout_parse_uint();
     t_layout_render_layout_default_matches_render();
@@ -2290,6 +2557,9 @@ fn main() {
     t_cyml_size_gate();
     t_flf_header_gates();
     t_flf_size_gate();
+    t_flf_glyph_widths();
+    t_flf_hardblank_cells();
+    t_cyml_uniform_widths();
     t_cli_is_flf_path();
     t_fontpath_name_ok();
     t_fontpath_env_ok();

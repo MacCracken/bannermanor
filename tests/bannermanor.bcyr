@@ -8,7 +8,10 @@
 #                           so a row near it is read as "at the floor"
 #   B1 — block_font_embed   build the embedded font (alloc + glyph copy)
 #   B2 — font_load_file     read + parse fonts/block.cyml end to end
-#   B3 — fit_chars          layout math hot loop (batched for clock cost)
+#   B3 — text_fit           layout math hot loop (batched for clock cost).
+#                           fit_chars through 1.9.0, a closed form; since
+#                           1.10.0 a glyph-by-glyph sum, so the series
+#                           restarts under its new name
 #   B4 — render_layout      the write path, with fd 1 on /dev/null:
 #        natural            "AGNOS", block font, no layout flags
 #        width 4096 center  the same, --width 4096 --align center
@@ -46,14 +49,15 @@ fn bench_load_block_cyml(): i64 {
     return font_load_file("fonts/block.cyml");
 }
 
-# fit_chars is sub-ns CPU; batch 100 calls per iter so each timed unit is
-# a meaningful render's-worth of layout math (frame=80, 5×5 block font,
-# 12-char "HELLO WORLD," sized banner).
-fn bench_fit_chars_hot(): i64 {
+# Batch 100 calls per iter so each timed unit is a meaningful render's-
+# worth of layout math (frame=80, 5×5 block font, the 12-char
+# "HELLO WORLD,"). Through 1.9.0 this timed fit_chars, a sub-ns closed
+# form; text_fit (1.10.0) adds up the 12 glyphs one by one.
+fn bench_text_fit_hot(f): i64 {
     var i = 0;
     var acc = 0;
     while (i < 100) {
-        acc = acc + fit_chars(80, 5, 1, 12);
+        acc = acc + text_fit(f, "HELLO WORLD,", 12, 80);
         i = i + 1;
     }
     return acc;
@@ -121,14 +125,14 @@ fn main(): i64 {
     bench_batch_stop(b2, 1000);
     bench_report(b2);
 
-    var b3 = bench_new("fit_chars x100 (banner-worth)");
+    var f = block_font_embed();
+    var b3 = bench_new("text_fit x100 (12 glyphs)");
     bench_batch_start(b3);
     i = 0;
-    while (i < 100000) { bench_fit_chars_hot(); i = i + 1; }
+    while (i < 100000) { bench_text_fit_hot(f); i = i + 1; }
     bench_batch_stop(b3, 100000);
     bench_report(b3);
 
-    var f = block_font_embed();
     _b4_row("render_layout natural (AGNOS)", f, "AGNOS", 5, 0, ALIGN_LEFT, 2000);
     _b4_row("render_layout width 4096 center (AGNOS)", f, "AGNOS", 5, 4096, ALIGN_CENTER, 2000);
     _b4_row("render_layout width 4096 right (A)", f, "A", 1, 4096, ALIGN_RIGHT, 2000);

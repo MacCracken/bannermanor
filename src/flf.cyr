@@ -8,10 +8,15 @@
 #   - Uniform-width fit: every glyph row is right-padded with spaces
 #     to the max width observed across all 95 glyphs; gap=0. Diverges
 #     from real figlet output for narrow glyphs (narrow chars get
-#     trailing whitespace). Variable-width storage in Font* is a
-#     post-v0.6 question.
+#     trailing whitespace). Since 1.10.0 each glyph's own width is kept
+#     in the Font (font_glyph_width), but nothing renders from it in 1.x:
+#     CHANGELOG 1.0.0 freezes the uniform-width fit (roadmap, Deferred
+#     to 2.0).
 #   - No smushing / kerning. Hardblanks render as literal spaces,
 #     which is exactly what figlet does when smushing is disabled.
+#     Since 1.10.0 the Font also marks which cells were hardblanks
+#     (font_is_hardblank), which smushing needs; the cells themselves
+#     still hold spaces.
 #   - ASCII 32..126 only. The 7 "German" required chars and any
 #     code-tagged extras are skipped (not failed on). v1.0 is ASCII.
 #
@@ -207,10 +212,16 @@ fn _flf_parse(buf, total): i64 {
     }
 
     # --- scratch for 95 glyphs × HH rows, FLF_MAX_WIDTH cols each ---
+    # A hardblank cell is held as NUL here and becomes a space plus a
+    # hardmask mark at assembly (1.10.0). NUL cannot arrive any other way:
+    # every control byte, NUL included, is scrubbed to a space first.
     var scratch_bytes = FLF_GLYPHS * height * FLF_MAX_WIDTH;
     var rows_scratch = alloc(scratch_bytes);
     if (rows_scratch == 0) { return 0; }
     memset(rows_scratch, 32, scratch_bytes);      # default-fill with space (32)
+    var glyph_widths = alloc(FLF_GLYPHS);         # each glyph's longest row
+    if (glyph_widths == 0) { return 0; }
+    memset(glyph_widths, 0, FLF_GLYPHS);
 
     # --- parse 95 glyph blocks ---
     var max_width = 0;
@@ -298,16 +309,20 @@ fn _flf_parse(buf, total): i64 {
             var col = 0;
             while (col < llen) {
                 var b = load8(buf + line_start + col);
-                if (b == hardblank) { b = 32; }       # -> space
+                var hb = 0;
+                if (b == hardblank) { b = 32; hb = 1; }   # -> space
                 if (b < 32)  { b = 32; }      # C0 controls -> space
                 if (b == 127) { b = 32; }     # DEL -> space
                 if (b >= 128 && b <= 159) { b = 32; }  # C1 controls -> space
+                if (hb == 1) { b = 0; }       # held as NUL until assembly
                 store8(dst + col, b);
                 col = col + 1;
             }
-            # (Per-row lengths are intentionally not retained: every glyph
-            # row is stored space-padded to a fixed stride. Variable-width
-            # glyph output would need them back.)
+            # A glyph's own width is its longest row (1.10.0). figlet takes
+            # the first row's length; the two agree on every glyph whose
+            # rows are one length. Per-row lengths are not kept: rows are
+            # stored space-padded to the font's width.
+            if (llen > load8(glyph_widths + gi)) { store8(glyph_widths + gi, llen); }
             if (llen > max_width) { max_width = llen; }
 
             # Advance past line. _flf_eol returns `total` if no \n found,
@@ -325,16 +340,31 @@ fn _flf_parse(buf, total): i64 {
     # --- assemble Font* ---
     var f = font_new(max_width, height, 0, FLF_GLYPHS);
     if (f == 0) { return 0; }
+    var mask = font_new_hardmask(f);
+    if (mask == 0) { return 0; }
 
     var idx = 0;
     while (idx < FLF_GLYPHS) {
         var ch = FLF_FIRST_CH + idx;
         if (font_set_char(f, idx, ch) < 0) { return 0; }
+        # Cannot fail: every row was checked against max_width above.
+        font_set_glyph_width(f, idx, load8(glyph_widths + idx));
         var rr = 0;
         while (rr < height) {
             var src = rows_scratch + (idx * height + rr) * FLF_MAX_WIDTH;
             var dst = font_row(f, idx, rr);
-            memcpy(dst, src, max_width);
+            var mrow = mask + (idx * height + rr) * max_width;
+            var cc = 0;
+            while (cc < max_width) {
+                var sb = load8(src + cc);
+                if (sb == 0) {                    # a hardblank: a space, marked
+                    store8(dst + cc, 32);
+                    store8(mrow + cc, 1);
+                } else {
+                    store8(dst + cc, sb);
+                }
+                cc = cc + 1;
+            }
             rr = rr + 1;
         }
         idx = idx + 1;

@@ -10,9 +10,11 @@ The v1.0.0 freeze locked the CLI flag surface, the CYML font format
 item below is placed by what the freeze allows: 1.x when it fits, 2.0
 when it cannot.
 
-**Next**: 1.10.0 — *2.0 groundwork, byte-identical*, which has no gate.
-The rest of the AGNOS follow-through is gated on agnos and darshana and
-takes the next number when it is ready (the swap rule below).
+**Next**: no ungated 1.x release is left. The rest of the AGNOS
+follow-through waits on agnos and darshana, and 1.11.0 on a consumer's
+request; whichever is ready first takes the next number (the swap rule
+below). The next decision is the 2.0 charter,
+[ADR 0005](../adr/0005-the-2-0-charter.md), Proposed at 1.10.0.
 
 ## The rules every item is checked against
 
@@ -53,8 +55,9 @@ order.
 
 1.9.0 shipped the one item whose gate was already met: a failed write,
 checked on AGNOS. These two wait on agnos and darshana. Neither has what
-they need as of agnos 1.57.14 and darshana 1.7.0, and no agnos issue asks
-for the per-fd size yet.
+they need as of agnos 1.57.14 and darshana 1.7.0. The per-fd size is filed
+with agnos: `docs/development/issues/2026-10-30-a-terminal-channel-has-no-window-size.md`
+(after 1.9.0).
 
 - **Route the AGNOS probe through darshana.** [ADR 0004](../adr/0004-terminal-probes-ask-about-fd-1.md)
   gates inline (`sys_fd_kind(1) == FDK_CONSOLE`) because no darshana
@@ -74,27 +77,8 @@ for the per-fd size yet.
   bnrmr can ask for is the console's. When agnos and darshana expose a
   per-fd window size for a channel, count it as a terminal. This is the
   same contract reading as 1.7.0: color and the width cut on a terminal,
-  never in a pipe or file. *Gate*: the per-fd size.
-
-### 1.10.0 — 2.0 groundwork, byte-identical
-
-The two largest 2.0 items, variable-width `.flf` glyphs and smushing, are
-mostly plumbing. Do the plumbing in 1.x, where the golden suite can prove
-it changed nothing, so 2.0 becomes a render-policy change and not a
-rewrite.
-
-- **Keep each `.flf` glyph's own width, and the hardblank's identity,
-  in `Font*`.** Today the loader pads every glyph to the font's maximum
-  and folds hardblanks to spaces, so both facts are lost at load.
-- **Make layout add up per-glyph advances**, instead of the closed-form
-  `n * width + (n - 1) * gap`, while every glyph still advances by the
-  padded width.
-- **Proof**: the golden `frozen` tier unchanged, and the figlet corpus
-  byte-identical before and after (1.5.0's envelope change checked 973
-  fonts unchanged the same way).
-- **The 2.0 charter, as an ADR (Proposed)**: which of the deferred items
-  below 2.0 takes, and the decision Unicode is waiting on, namely what
-  encoding argv text is in.
+  never in a pipe or file. *Gate*: the per-fd size (the agnos issue
+  above), then darshana's AGNOS `tty_winsize` reading it.
 
 ### 1.11.0 — Library surface (on request only)
 
@@ -103,13 +87,16 @@ process. It is not a contract question, but it changes the Project
 Identity ("Type: Binary") and creates a second frozen surface. No one has
 asked: agnoshi has shipped hand-drawn box art through six releases, and
 both its builds can already spawn `bnrmr`. *Gate*: a consumer's request.
-Do not build it on spec. If none comes before the 2.0 charter is
-accepted, the charter decides whether it stays here or moves to 2.0.
+Do not build it on spec. The 2.0 charter (ADR 0005, Proposed) keeps it
+here, out of 2.0: it is additive and breaks nothing.
 
 ## Deferred to 2.0
 
 Each of these breaks the freeze. Where a 1.x release prepares the
-ground, it is named.
+ground, it is named. [ADR 0005](../adr/0005-the-2-0-charter.md)
+(Proposed at 1.10.0) decides which of them 2.0 takes: all but forcing
+color and the CYML `name` check, which it closes, with argv text read
+as UTF-8.
 
 - **Variable-width `.flf` glyphs.** Every glyph is padded to the widest,
   so an `I` advances as far as an `M`: the spacing is wrong in mid-word,
@@ -118,18 +105,21 @@ ground, it is named.
   smushing for 1.09×. *Why 2.0*: it moves rendered bytes for every
   variable-width `.flf`, and CHANGELOG 1.0.0 names "uniform-width fit" as
   frozen. The CYML half is schema 2. The parity target is `figlet -W`.
-  *Groundwork*: 1.10.0.
+  *Groundwork*: shipped in 1.10.0 (each glyph's own width, and a
+  glyph-by-glyph layout); applying it moves 681 of 1,045 corpus fonts.
 - **`.flf` smushing and kerning.** 42% of corpus fonts declare a layout
   figlet applies. *Why 2.0*: applying it moves bytes, and an opt-in
   `--layout` is a new flag. It needs variable widths, hardblank identity
-  and per-pair layout first. *Groundwork*: 1.10.0.
+  and per-pair layout first. *Groundwork*: hardblank cells shipped in
+  1.10.0; per-pair layout is still to do.
 - **Non-ASCII text.** That covers the skipped German and code-tagged
   `.flf` glyphs, the 128-byte charmap (it, not `MAX_GLYPHS`, caps a font
   at 128 entries), and per-byte blank cells (`bnrmr "Café"` renders five
   cells for four characters; golden `default-non-ascii`). *Why 2.0*: it
   is CYML schema 2, and it moves bytes for every input byte ≥ 0x80. A
   Unicode font set would also reopen the ASCII-only charter. *Groundwork*:
-  the argv-encoding decision in 1.10.0's charter ADR.
+  the argv-encoding decision, which ADR 0005 proposes as UTF-8 on both
+  targets, whatever the locale.
 - **Reading stdin.** `echo hi | bnrmr` prints the usage text, exit 0,
   where figlet renders. *Why 2.0*: that is a valid invocation today.
   AGNOS no longer blocks it: since agnos 1.57.13 `fd_kind` tells a pipe

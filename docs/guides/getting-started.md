@@ -11,7 +11,7 @@ orientation for someone who's about to read or change the source.
 cyrius deps                              # resolve stdlib + darshana + bayan-cyml + cmdit
 cyrius build src/main.cyr build/bnrmr    # compile (binary: bnrmr)
 ./build/bnrmr "AGNOS"                    # smoke render
-cyrius test                              # 3273 assertions
+cyrius test                              # 3341 assertions
 sh scripts/golden.sh                     # 346 invocations, byte for byte
 cyrius fuzz tests/bannermanor.fcyr       # font-parser regression gate
 cyrius bench tests/bannermanor.bcyr      # render path, CPU and write side
@@ -47,9 +47,10 @@ Toolchain pin: `cyrius = "6.7.18"` in `cyrius.cyml`.
   neutral options.
 - `src/layout.cyr` — layout orchestrator and the write path. Frame
   resolution, alignment, padding, color emission, TTY-aware default
-  truncation. Pure helpers for `fit_chars` / `banner_width` /
-  `align_pad` / `parse_uint` / `_usable_cols`. The stdout width and TTY
-  probes go through darshana's `tty_winsize`. Each banner row is composed
+  truncation. Glyph-by-glyph layout (`text_fit` / `text_width` /
+  `glyph_advance`, 1.10.0) and pure helpers `align_pad` /
+  `parse_uint` / `_usable_cols`. The stdout width and TTY probes go
+  through darshana's `tty_winsize`. Each banner row is composed
   in one buffer and written once through `_emit` (`lib/io.cyr`'s
   `file_write`), which checks the write and makes the exit 1 if stdout
   fails; diagnostics go to stderr through `_err_line`. `src/` uses no

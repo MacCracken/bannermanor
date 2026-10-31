@@ -28,13 +28,25 @@ include "lib/io.cyr"
 # (issue 0014). Everything that outlives the load stays on alloc().
 include "lib/freelist.cyr"
 
-# Font struct layout (48 bytes):
+# Font struct layout (64 bytes):
 #    0: width      (i64) cols per glyph
 #    8: height     (i64) rows per glyph
 #   16: gap        (i64) spaces between adjacent glyphs
 #   24: count      (i64) number of glyphs in this font
 #   32: rows_ptr   (i64) flat row buffer, count*height*width bytes
 #   40: charmap    (i64) 128-byte table: charmap[c] = glyph_idx+1, 0 = unsupported
+#   48: widths     (i64) count-byte table: each glyph's own width, 0..width
+#   56: hardmask   (i64) count*height*width bytes beside rows_ptr: 1 where
+#                        the source cell was the font's hardblank, else 0;
+#                        0 (no table) for CYML and the embedded font
+#
+# widths and hardmask are 2.0 groundwork (roadmap 1.10.0). Nothing renders
+# from them in 1.x: every glyph still advances by `width` and a hardblank
+# cell still holds a space in rows_ptr, so no rendered byte depends on
+# them. They keep the two facts the .flf loader used to throw away at load,
+# which variable-width glyphs and smushing need (roadmap "Deferred to 2.0").
+# CYML schema 1 and the embedded block font are uniform and have no
+# hardblank: every width is `width`, and hardmask is 0.
 
 enum FontField {
     F_WIDTH = 0;
@@ -43,7 +55,9 @@ enum FontField {
     F_COUNT = 24;
     F_ROWS = 32;
     F_CHARMAP = 40;
-    F_SIZE = 48;
+    F_WIDTHS = 48;
+    F_HARDMASK = 56;
+    F_SIZE = 64;
 }
 
 # The CYML schema-1 limits (ADR 0001). MAX_WIDTH / MAX_HEIGHT / MAX_GAP
@@ -143,10 +157,30 @@ fn font_row(f, idx, row): i64 {
     return load64(f + F_ROWS) + (idx * h + row) * w;
 }
 
+# Glyph idx's own width in columns, 0..width (1.10.0). For a .flf font,
+# the longest of its rows once the endmarks are stripped; its rows are
+# still stored padded with spaces to the font's `width`. For CYML and the
+# embedded font, `width`.
+fn font_glyph_width(f, idx): i64 {
+    return load8(load64(f + F_WIDTHS) + idx);
+}
+
+# 1 if cell (idx, row, col) was the font's hardblank in the source, else
+# 0 (1.10.0). rows_ptr holds a space there, as it always has.
+fn font_is_hardblank(f, idx, row, col): i64 {
+    var m = load64(f + F_HARDMASK);
+    if (m == 0) { return 0; }
+    var w = load64(f + F_WIDTH);
+    var h = load64(f + F_HEIGHT);
+    return load8(m + (idx * h + row) * w + col);
+}
+
 # ---- font construction (used by both file loader and embedded path) ----
 
 # Allocate a zero-filled Font with reserved rows + charmap storage.
-# Returns Font* or 0 on OOM.
+# Every glyph's own width starts at `width` and there is no hardblank
+# mask; the .flf loader sets both (font_set_glyph_width,
+# font_new_hardmask). Returns Font* or 0 on OOM.
 fn font_new(width, height, gap, count): i64 {
     var f = alloc(F_SIZE);
     if (f == 0) { return 0; }
@@ -155,15 +189,39 @@ fn font_new(width, height, gap, count): i64 {
     if (rows == 0) { return 0; }
     var charmap = alloc(CHARMAP_SIZE);
     if (charmap == 0) { return 0; }
+    var widths = alloc(count);
+    if (widths == 0) { return 0; }
     memset(rows, 32, rows_bytes);               # 32: background is a space
     memset(charmap, 0, CHARMAP_SIZE);
+    memset(widths, width, count);               # width <= 128 fits a byte
     store64(f + F_WIDTH, width);
     store64(f + F_HEIGHT, height);
     store64(f + F_GAP, gap);
     store64(f + F_COUNT, count);
     store64(f + F_ROWS, rows);
     store64(f + F_CHARMAP, charmap);
+    store64(f + F_WIDTHS, widths);
+    store64(f + F_HARDMASK, 0);
     return f;
+}
+
+# Record glyph idx's own width (0..width). Returns 0, or -1 out of range.
+fn font_set_glyph_width(f, idx, gw): i64 {
+    if (gw < 0) { return 0 - 1; }
+    if (gw > load64(f + F_WIDTH)) { return 0 - 1; }
+    store8(load64(f + F_WIDTHS) + idx, gw);
+    return 0;
+}
+
+# Give f an all-zero hardblank mask, the shape of rows_ptr, and return
+# it (0 on OOM). The .flf loader marks hardblank cells in it.
+fn font_new_hardmask(f): i64 {
+    var n = load64(f + F_COUNT) * load64(f + F_HEIGHT) * load64(f + F_WIDTH);
+    var m = alloc(n);
+    if (m == 0) { return 0; }
+    memset(m, 0, n);
+    store64(f + F_HARDMASK, m);
+    return m;
 }
 
 # Register glyph idx for char c. Returns 0 on success, -1 if c is out

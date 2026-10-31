@@ -5,6 +5,8 @@
 
 ## Version
 
+**1.10.0** — 2026-10-30. **2.0 groundwork, byte-identical.** The `.flf` loader keeps each glyph's own width (its longest row) and which cells were hardblanks, two facts it used to throw away at load. The layout adds a banner up glyph by glyph (`text_fit`, `text_width`, `glyph_advance`) instead of the closed form `n * width + (n - 1) * gap`. Every glyph still advances by the font's width, so nothing rendered moved: golden 346/346 on x86_64 and aarch64, and all 1,051 fonts of the figlet reference corpus identical to 1.9.0 on stdout, stderr and exit status (`scripts/flf-corpus.sh`, new). A mutant that advances each glyph by its own width changes 681 of them and fails golden's `flf-modular-printable`, so both checks can see the change 2.0 will make. [ADR 0005](../adr/0005-the-2-0-charter.md) (Proposed) charters 2.0: variable-width glyphs, opt-in smushing, non-ASCII text with argv as UTF-8, stdin, and the A-05 / A-06 fixes; not color forcing or the A-11 name check. The per-channel window size is filed with agnos. Suite 3273 → 3341. See `CHANGELOG.md` [1.10.0].
+
 **1.9.0** — 2026-10-30. **A failed write, checked on AGNOS.** No code change: the binary differs from 1.8.2 only in its `--version` literal, and golden is 346/346 byte-identical on x86_64 and aarch64. `scripts/agnos-smoke.py` gains its tenth check, the one write path 1.7.0's QEMU run could not reach. No full device was needed: agnos has no SIGPIPE, and since 1.57.9 a write to a pipe whose reader has exited returns -1 once the 4,080-byte ring is full. agnsh holds no pipe end of its own since agnoshi 2.0.1, so `bnrmr -f big` with 100 glyphs (5,600 bytes) piped into `echo` fails a write, and bnrmr reports it. Run on agnos 1.57.14 with agnoshi 2.0.3: 10/10, and a mutant that ignores the failure fails that check alone (9/10). The other two 1.9.0 items, terminal-emulator windows and routing the probe through darshana, are still waiting on agnos and darshana. They stay on the roadmap as a gated release. Next is 1.10.0. See `CHANGELOG.md` [1.9.0].
 
 **1.8.2** — 2026-10-30. **Toolchain and dependency refresh; issue 0006 closed.** cyrius pin `6.7.11 → 6.7.18`, with `lib/` re-vendored (`rm -rf lib/ && cyrius deps`: still 34 files, the 31 stdlib ones byte-identical to the 6.7.18 snapshot) and `cyrius.lock` regenerated from empty. darshana `1.3.0 → 1.7.0`, bayan sublib `1.5.14 → 1.11.1` (the bayan 6.7.18 bundles), cmdit `1.4.0 → 1.5.0`; each pins 6.7.18 or bundles with it. bayan 1.6.0 carries the CYML scan fix 1.8.1 filed: B2 `font_load_file` 92–96 → 60–66 µs (0.64×), back to its pre-regression time. Golden 346/346 byte-identical on x86_64 and on aarch64 under qemu, frozen tier included. Three behavior changes outside it, each found by A/B against the 1.8.1 binary and each within ADR 0002: a CYML font with two adjacent `[[entries]]` lines no longer loads (bayan 1.7.0: an empty entry, ruling 3); a one-row CR LF font now loads and renders what its LF twin does (bayan 1.8.0, additive); a command line over 2 MiB is read whole instead of refused (stdlib 6.7.12 + cmdit 1.4.2, additive). darshana's AGNOS `tty_isatty` turned out to count a terminal emulator's channel, so roadmap 1.9.0's "route the probe through darshana" is not byte-identical as planned. Suite 3268 → 3273. See `CHANGELOG.md` [1.8.2].
@@ -200,8 +202,13 @@ Single-shot CLI: text in, banner bytes out, exit.
     `_winsize_describes_stdout`, ADR 0004), else `$COLUMNS`, else 80.
     Every source caps at 4096 (`WIDTH_CAP` rejects, `WS_COL_CAP`
     clamps).
-  - **Pure helpers**: `banner_width`, `fit_chars`, `align_pad`,
-    `parse_uint` (F-002 cap), `_usable_cols`.
+  - **Glyph-by-glyph layout** (1.10.0): `text_fit` (how many glyphs fit
+    a frame) and `text_width` (columns they take) add up `glyph_advance`
+    plus the gap for each glyph `glyph_for` picks; `render_layout` copies
+    each glyph by the same advance. `glyph_advance` is the font's width
+    for every glyph in 1.x, so the sums equal 1.9.0's closed form.
+  - **Pure helpers**: `align_pad`, `parse_uint` (F-002 cap),
+    `_usable_cols`.
   - **`stdout_is_tty`**: `term_width_ioctl() > 0` on both targets, so
     a 0-column terminal is not a TTY (F-020) and color cannot disagree
     with width. On AGNOS only the console qualifies (not a file, a pipe
@@ -223,6 +230,11 @@ Single-shot CLI: text in, banner bytes out, exit.
   darshana; no inline ANSI.
 - `src/font.cyr` — the `Font` / `FontHeader` structs and accessors, the
   schema-1 limits (`FontLimits`), and the readers:
+  - Since 1.10.0 a `Font` also carries each glyph's own width
+    (`font_glyph_width`) and, for `.flf` fonts, which cells were
+    hardblanks (`font_is_hardblank`). Nothing renders from either in 1.x;
+    they are 2.0 groundwork. CYML and the embedded font are uniform, with
+    no hardblanks.
   - `_slurp(path, cap, out_len)` is the one file read: `S_IFREG` gate,
     `lib/io.cyr` open / read / close, an `fl_alloc`'d buffer the caller
     frees.
@@ -243,7 +255,9 @@ Single-shot CLI: text in, banner bytes out, exit.
   schema 1's; 64×32 through 1.4.2). Trims trailing whitespace before endmark detection
   (figlet's rule; covers CRLF, issue 0003). Hardblank → space, then
   C0 / DEL / C1 → space (F-001). Uniform-width `Font*`, `gap = 0`,
-  ASCII 32–126.
+  ASCII 32–126. Since 1.10.0 it records each glyph's longest row as its
+  own width and marks hardblank cells in a mask beside the rows; the rows
+  still hold spaces there.
 - `src/font_block.cyr` — the embedded block font, the default when no
   `--font` is given. Mirrors `fonts/block.cyml` byte for byte; a test
   checks it. Split in two functions to stay under cycc's 256-return
@@ -277,7 +291,7 @@ font is imported. A fifth font is not planned.
 
 ## Tests
 
-- `tests/bannermanor.tcyr` — **3273 assertions**, run on x86_64 and on
+- `tests/bannermanor.tcyr` — **3341 assertions**, run on x86_64 and on
   aarch64 under qemu (both in CI since 1.7.0). In outline:
   - **Fonts**: embedded-font geometry, glyph lookup and the lowercase
     fold, and row shape. The four CYML fonts load, and `block.cyml`
@@ -292,11 +306,18 @@ font is imported. A fifth font is not planned.
     lines are rejected, and CR LF lines load only in a one-row font.
   - **`.flf` adapter**: happy path, CRLF, the control-byte scrub, the
     hardblank rules, the envelope (64 / 65 columns, 32 / 33 rows,
-    1024 / 1025 comments) and the 1 MB gate.
+    1024 / 1025 comments) and the 1 MB gate. Since 1.10.0, each glyph's
+    own width (0 to the font's, the longest row) and the hardblank cells,
+    for `$`, C1 0x85 and DEL hardblanks; CYML fonts uniform.
   - **Readers**: a directory, an empty file and a FIFO, each rejected
     without blocking; and a FIFO where `--list-fonts` expects a
     directory (1.7.0).
-  - **Layout math and color parsing.**
+  - **Layout math and color parsing.** Since 1.10.0 the glyph-by-glyph
+    sums: 1.9.0's `fit_chars` / `banner_width` cases with the same
+    expected values, and `text_fit` / `text_width` equal to the closed
+    form for six geometries over frames 0..300 and texts of 0..12 bytes.
+    `glyph_advance` is the font's width for every glyph of every in-tree
+    font, `tiny.flf` and a varied-width `.flf`.
   - **The CLI** (`src/cli.cyr`): the cmdit flag table on synthetic argv
     (values, repeats, `--`, help over version, no `-V`, no prefix
     matching, bundling, the error codes), the parse-error lines on
@@ -314,7 +335,7 @@ font is imported. A fifth font is not planned.
   - **Checked writes**: fd 1 on `/dev/full` (the failure is recorded,
     later writes are skipped, `render_layout` returns -4), the
     write-error reasons, and the stdout / stderr line writers.
-  - **Reference coverage**: 50/50 public functions
+  - **Reference coverage**: 56/56 public functions
     (`cyrius coverage --min 100` in CI).
 - `tests/golden/` + `scripts/golden.sh` — the frozen-output contract,
   byte for byte: 346 invocations (236 frozen renders, 80 error paths, 30
@@ -332,16 +353,28 @@ font is imported. A fifth font is not planned.
   pipe's ring, piped into `echo`, which never reads. Needs the agnos
   tree's kernel and rootfs (agnos >= 1.57.13, agnoshi >= 2.0.1), gnoboot
   and OVMF.
+- `scripts/flf-corpus.sh` — two bnrmr binaries over a figlet font corpus
+  (1.10.0, manual): three invocations per font (all of printable ASCII,
+  a right-aligned cut, a centered cut), each compared on stdout, stderr
+  and exit status. The reference corpus is cmatsuoka/figlet-fonts and
+  xero/figlet-fonts, 1,051 files once the one symlink is skipped. 1.10.0
+  against 1.9.0: all 1,051 identical (1,045 load). A mutant that advances
+  each glyph by its own width: 681 differ.
 - `tests/bannermanor.fcyr` — the fuzz gate: 27 seeds × 1,000 mutants
   (`clean.cyml` joined at 1.8.0) through all three parsers (81,003
   parses), with scrub, geometry and
   charmap oracles and a guard page after every input. A no-op stub until
-  1.4.1 (issue 0010).
+  1.4.1 (issue 0010). Since 1.10.0 it also checks each glyph's own width
+  (0 to the font's, the font's for CYML, one `.flf` glyph as wide as the
+  font) and the hardblank mask (only on cells holding a space, inside the
+  glyph's width; none in CYML), and its self-test proves four such fonts
+  are rejected.
 - `tests/bannermanor.bcyr` — B0 `_calibration`, B1 `block_font_embed`,
-  B2 `font_load_file`, B3 `fit_chars`, and the B4 write path (three
+  B2 `font_load_file`, B3 `text_fit` (`fit_chars` through 1.9.0), and the B4 write path (three
   `render_layout` rows, fd 1 on `/dev/null`). The trend is in
   [`docs/benchmarks.md`](../benchmarks.md), seven points from 0.7.0 to
-  1.4.1, Point 8 at 1.8.1 and Point 9 at 1.8.2. Point 4 records bayan
+  1.4.1, Point 8 at 1.8.1, Point 9 at 1.8.2 and Point 10 at 1.10.0 (an
+  A/B under load, no history rows). Point 4 records bayan
   1.5.2's ~45% B2 regression (issue 0006); Point 9 records its fix,
   adopted with bayan 1.11.1 at 1.8.2 (B2 back to ~60 µs). Runs are
   recorded with `scripts/bench-history.sh` into
@@ -414,10 +447,12 @@ bnrmr is end-user-facing; nothing links it. Known uses of its output:
 
 ## Next
 
-[`roadmap.md`](roadmap.md) is the forward plan, pinned through 1.11.0,
-with what cannot be 1.x deferred to 2.0, and its issue register is
-current (no open issues). Next is 1.10.0, the 2.0 groundwork, which has
-no gate. The two AGNOS items 1.9.0 left are gated: terminal-emulator
-windows need a per-fd window size from agnos and darshana, and routing
-the probe through darshana is decided once that lands. Shipped
+[`roadmap.md`](roadmap.md) is the forward plan, with what cannot be 1.x
+deferred to 2.0, and its issue register is current (no open issues).
+No ungated 1.x release is left. The two AGNOS items 1.9.0 left wait on
+agnos and darshana: terminal-emulator windows need a per-fd window size
+(filed with agnos after 1.9.0), and routing the probe through darshana
+is decided once that lands. 1.11.0, the library surface, waits for a
+consumer to ask. The next decision is the 2.0 charter,
+[ADR 0005](../adr/0005-the-2-0-charter.md), Proposed at 1.10.0. Shipped
 milestones are in [`CHANGELOG.md`](../../CHANGELOG.md).
