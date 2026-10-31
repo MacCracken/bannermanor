@@ -10,8 +10,9 @@ The v1.0.0 freeze locked the CLI flag surface, the CYML font format
 item below is placed by what the freeze allows: 1.x when it fits, 2.0
 when it cannot.
 
-**Next**: 1.9.0 — *AGNOS follow-through*, item by item as each gate is
-met.
+**Next**: 1.10.0 — *2.0 groundwork, byte-identical*, which has no gate.
+The rest of the AGNOS follow-through is gated on agnos and darshana and
+takes the next number when it is ready (the swap rule below).
 
 ## The rules every item is checked against
 
@@ -48,10 +49,12 @@ dependency, then by value. A gated release whose gate is not met does not
 hold up the next one; the two swap numbers, so versions stay in shipping
 order.
 
-### 1.9.0 — AGNOS follow-through
+### AGNOS follow-through, continued (gated)
 
-Gated on agnos and darshana. Each item ships when its gate is met;
-whatever is not ready moves to a later 1.9.x.
+1.9.0 shipped the one item whose gate was already met: a failed write,
+checked on AGNOS. These two wait on agnos and darshana. Neither has what
+they need as of agnos 1.57.14 and darshana 1.7.0, and no agnos issue asks
+for the per-fd size yet.
 
 - **Route the AGNOS probe through darshana.** [ADR 0004](../adr/0004-terminal-probes-ask-about-fd-1.md)
   gates inline (`sys_fd_kind(1) == FDK_CONSOLE`) because no darshana
@@ -72,11 +75,6 @@ whatever is not ready moves to a later 1.9.x.
   per-fd window size for a channel, count it as a terminal. This is the
   same contract reading as 1.7.0: color and the width cut on a terminal,
   never in a pipe or file. *Gate*: the per-fd size.
-- **A failed write on AGNOS.** 1.7.0's QEMU run verified every write path
-  except failure, because nothing could make an AGNOS write fail on
-  demand. Add that check to `scripts/agnos-smoke.py` once agnos offers a
-  way (a full device, or a closed fd 1 from agnsh). *Gate*: that agnos
-  facility.
 
 ### 1.10.0 — 2.0 groundwork, byte-identical
 

@@ -5,6 +5,8 @@
 
 ## Version
 
+**1.9.0** — 2026-10-30. **A failed write, checked on AGNOS.** No code change: the binary differs from 1.8.2 only in its `--version` literal, and golden is 346/346 byte-identical on x86_64 and aarch64. `scripts/agnos-smoke.py` gains its tenth check, the one write path 1.7.0's QEMU run could not reach. No full device was needed: agnos has no SIGPIPE, and since 1.57.9 a write to a pipe whose reader has exited returns -1 once the 4,080-byte ring is full. agnsh holds no pipe end of its own since agnoshi 2.0.1, so `bnrmr -f big` with 100 glyphs (5,600 bytes) piped into `echo` fails a write, and bnrmr reports it. Run on agnos 1.57.14 with agnoshi 2.0.3: 10/10, and a mutant that ignores the failure fails that check alone (9/10). The other two 1.9.0 items, terminal-emulator windows and routing the probe through darshana, are still waiting on agnos and darshana. They stay on the roadmap as a gated release. Next is 1.10.0. See `CHANGELOG.md` [1.9.0].
+
 **1.8.2** — 2026-10-30. **Toolchain and dependency refresh; issue 0006 closed.** cyrius pin `6.7.11 → 6.7.18`, with `lib/` re-vendored (`rm -rf lib/ && cyrius deps`: still 34 files, the 31 stdlib ones byte-identical to the 6.7.18 snapshot) and `cyrius.lock` regenerated from empty. darshana `1.3.0 → 1.7.0`, bayan sublib `1.5.14 → 1.11.1` (the bayan 6.7.18 bundles), cmdit `1.4.0 → 1.5.0`; each pins 6.7.18 or bundles with it. bayan 1.6.0 carries the CYML scan fix 1.8.1 filed: B2 `font_load_file` 92–96 → 60–66 µs (0.64×), back to its pre-regression time. Golden 346/346 byte-identical on x86_64 and on aarch64 under qemu, frozen tier included. Three behavior changes outside it, each found by A/B against the 1.8.1 binary and each within ADR 0002: a CYML font with two adjacent `[[entries]]` lines no longer loads (bayan 1.7.0: an empty entry, ruling 3); a one-row CR LF font now loads and renders what its LF twin does (bayan 1.8.0, additive); a command line over 2 MiB is read whole instead of refused (stdlib 6.7.12 + cmdit 1.4.2, additive). darshana's AGNOS `tty_isatty` turned out to count a terminal emulator's channel, so roadmap 1.9.0's "route the probe through darshana" is not byte-identical as planned. Suite 3268 → 3273. See `CHANGELOG.md` [1.8.2].
 
 **1.8.1** — 2026-10-15. **Measurement debts.** No code change. Issue 0006 is diagnosed: bayan 1.5.1's two-pass `[[entries]]` scan calls `_cyml_is_entries` once per byte in each pass, which is the whole ~45% B2 regression. A parser-only A/B shows a newline-driven scan, with the two-pass design kept, at 0.33–0.43× of today's parse with identical results. It is filed with bayan with a repro and the fix; 0006 closes when `[deps.bayan]` moves to that release (roadmap 1.8.2). Architecture note 003 explains the aarch64 binary's 1.5.0 jump: 64 KiB alignment padding, not code. See `CHANGELOG.md` [1.8.1].
@@ -325,9 +327,11 @@ font is imported. A fifth font is not planned.
 - `scripts/agnos-smoke.py` — bnrmr on a real agnos kernel in QEMU
   (1.7.0, manual): console color, plain and uncut bytes in a file and
   a pipe (measured with agnos's `wc -c` against the host binary), the
-  installed fonts through `argv[0]`, a `.flf` font, `--list-fonts`, and
-  a diagnostic. Needs the agnos tree's kernel and rootfs, gnoboot and
-  OVMF.
+  installed fonts through `argv[0]`, a `.flf` font, `--list-fonts`, a
+  diagnostic, and (since 1.9.0) a failed write: a banner bigger than the
+  pipe's ring, piped into `echo`, which never reads. Needs the agnos
+  tree's kernel and rootfs (agnos >= 1.57.13, agnoshi >= 2.0.1), gnoboot
+  and OVMF.
 - `tests/bannermanor.fcyr` — the fuzz gate: 27 seeds × 1,000 mutants
   (`clean.cyml` joined at 1.8.0) through all three parsers (81,003
   parses), with scrub, geometry and
@@ -412,7 +416,8 @@ bnrmr is end-user-facing; nothing links it. Known uses of its output:
 
 [`roadmap.md`](roadmap.md) is the forward plan, pinned through 1.11.0,
 with what cannot be 1.x deferred to 2.0, and its issue register is
-current (no open issues). Next is 1.9.0, AGNOS follow-through, item by
-item as each gate is met. Its first item, routing the probe through
-darshana, now waits on a decision rather than a darshana release.
-Shipped milestones are in [`CHANGELOG.md`](../../CHANGELOG.md).
+current (no open issues). Next is 1.10.0, the 2.0 groundwork, which has
+no gate. The two AGNOS items 1.9.0 left are gated: terminal-emulator
+windows need a per-fd window size from agnos and darshana, and routing
+the probe through darshana is decided once that lands. Shipped
+milestones are in [`CHANGELOG.md`](../../CHANGELOG.md).

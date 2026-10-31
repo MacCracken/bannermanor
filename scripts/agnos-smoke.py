@@ -36,6 +36,14 @@
 #   list         --list-fonts names the install directory
 #   error        a missing font is reported (the stderr route) and the
 #                shell gets its prompt back
+#   write error  a write that fails is reported (1.9.0): a banner bigger
+#                than the pipe's ring, piped into `echo`, which never
+#                reads. agnos has no SIGPIPE: once the reader has exited
+#                and the ring is full, write returns -1 (EPIPE, agnos
+#                >= 1.57.9), and agnsh holds no pipe end of its own
+#                (agnoshi >= 2.0.1). The pipeline's status is echo's,
+#                so this reads bnrmr's diagnostic, which main() prints
+#                on the same branch that returns 1.
 # file / pipe / width / fonts / flf are measured with `wc -c` on AGNOS
 # against the host binary's byte count for the same command, so they do
 # not depend on how the console renders escapes.
@@ -101,6 +109,18 @@ EXPECT = {
     "slim": host_len(["-f", "slim", "HI"]),
     "flf": host_len(["-f", "tests/fixtures/tiny.flf", "AGNOS"]),
 }
+
+# The banner for the write-error check must overflow the pipe's ring, or
+# every write fits before anyone notices the reader is gone, and its
+# stage must fit agnsh's launch line (`/bin/<cmd> [args]`, 127 bytes).
+PIPE_RING = 4080
+SPAWN_LINE_MAX = 127
+OVERFLOW = "bnrmr -f big " + "AGNOS" * 20
+EXPECT["overflow"] = host_len(OVERFLOW.split()[1:])
+if EXPECT["overflow"] <= PIPE_RING:
+    die(f"the write-error banner is {EXPECT['overflow']} bytes, which fits the {PIPE_RING}-byte ring")
+if len("/bin/" + OVERFLOW) > SPAWN_LINE_MAX:
+    die(f"the write-error stage is over agnsh's {SPAWN_LINE_MAX}-byte launch line")
 
 WORK = tempfile.mkdtemp(prefix="bnrmr-agnos-")
 SEED = os.path.join(WORK, "seed")
@@ -260,6 +280,13 @@ try:
 
     out = run("bnrmr -f nosuch HI")
     check("error", "font 'nosuch' not found" in out, repr(out.strip()[:120]))
+
+    out = run(OVERFLOW + " | echo pipegone")
+    ok = "bnrmr: write error" in out and "pipegone" in out
+    errs = [l for l in out.splitlines() if "bnrmr:" in l]
+    check("write error", ok,
+          f"{EXPECT['overflow']} bytes into a pipe nobody reads: "
+          + (repr(errs[0].strip()[:80]) if errs else "no diagnostic: " + repr(out.strip()[:80])))
 
     p("serial log:", SER)
     rc = 0 if all(ok for _, ok in results) else 1

@@ -4,6 +4,57 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.9.0] — 2026-10-30 (a failed write, checked on AGNOS)
+
+The one roadmap 1.9.0 item whose gate turned out to be met already.
+**No code change**: the binary differs from 1.8.2 only in its
+`--version` literal (the same size on all three targets), and the golden
+suite is byte-identical, 346/346, on x86_64 and on aarch64 under qemu.
+The other two 1.9.0 items are still waiting on agnos and darshana, and
+stay on the roadmap as a gated release.
+
+### Tests
+
+- **`scripts/agnos-smoke.py` checks a failed write** (9 → 10 checks): the
+  one write path 1.7.0's QEMU run could not reach. The roadmap waited for
+  a full device, or a closed fd 1 from agnsh. Neither exists, but a pipe
+  whose reader has exited already fails a write:
+  - agnos has no SIGPIPE. Since agnos 1.57.9 a write to a pipe with no
+    reader left returns -1 (EPIPE) once the 4,080-byte ring is full.
+    Until then the bytes are taken.
+  - Since agnoshi 2.0.1, agnsh holds no end of a pipeline's pipe once the
+    stage that uses it exists. A consumer that exits is the last reader.
+
+  The check pipes `bnrmr -f big` with 100 glyphs (5,600 bytes) into
+  `echo pipegone`, which never reads, and looks for `bnrmr: write error`
+  on the console. A pipeline's exit status is its second stage's, so the
+  check reads the diagnostic, which `main()` prints on the branch that
+  returns 1. The harness refuses to run if the banner would fit the ring,
+  or if its stage would overrun agnsh's 127-byte launch line, so the
+  check cannot pass by never failing a write. The message is the generic
+  one: agnos's -1 is not an errno bnrmr names. On Linux the same pipeline
+  ends bnrmr with SIGPIPE before any message.
+- **Run on agnos 1.57.14** (kernel source unchanged since the tag, agnsh
+  from agnoshi 2.0.3, the staged rootfs):
+  - **1.9.0**: 10/10. The console shows `pipegone`, then
+    `bnrmr: write error`, then the prompt.
+  - **Mutant**, `main()` never acting on a failed write (`out_failed()`
+    compared with 99): 9/10, failing only the new check. The console
+    shows `pipegone`, then the prompt, with no diagnostic. On Linux
+    the same mutant exits 0 on `> /dev/full`, where 1.9.0 exits 1.
+- The other gates: tests 3273/3273 on x86_64 and on aarch64,
+  `deps --locked`, strict lint, doc-pin check, fuzz, 100% reference
+  coverage, groff.
+
+### Documentation
+
+- **Roadmap**: the failed-write item is done. The two items left
+  (terminal-emulator windows, and routing the probe through darshana)
+  are a gated release that takes the next number when it ships. Next is
+  1.10.0, the 2.0 groundwork, which has no gate.
+- The [1.7.0] note "Not verified: a failed write on AGNOS" points here.
+- `state.md`: the smoke's checks and the kernel and agnsh it needs.
+
 ## [1.8.2] — 2026-10-30 (toolchain and dependency refresh)
 
 cyrius 6.7.11 → 6.7.18, and each git dependency moves to its latest tag.
@@ -408,7 +459,9 @@ It was also checked on AGNOS before release, with a new QEMU harness,
 
   agnsh passes the absolute `/bin/bnrmr` as `argv[0]`, so 1.6.0's install
   directory works on AGNOS. **Not verified**: a failed write on AGNOS,
-  since there is no full device to point fd 1 at.
+  since there is no full device to point fd 1 at. (Verified at 1.9.0,
+  through a pipe whose reader has exited, which this kernel already
+  failed: see [1.9.0].)
 - **Fonts on AGNOS**: agnos's `stage-tools.sh` now stages
   `fonts/*.cyml` at `/share/bannermanor/fonts` beside `/bin/bnrmr` (an
   agnos change, after its 1.57.14; through 1.57.14 it staged the binary

@@ -82,7 +82,7 @@ fn _run(): i64 {
         return 0;
     }
     if (pr == CMDIT_VERSION) {
-        _emit_line("bnrmr 1.8.2");
+        _emit_line("bnrmr 1.9.0");
         return 0;
     }
     if (cmdit_get_bool(fs, CF_LIST) == 1) {
