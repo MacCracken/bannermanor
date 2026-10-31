@@ -427,7 +427,7 @@ cyrius 6.7.9 → 6.7.11 toolchain left it flat. 1.8.1 diagnosed the
 regression: bayan 1.5.1's two-pass `[[entries]]` scan, at one function
 call per byte. The parser-only A/B is in issue 0006, and the fix is
 filed with bayan. B2 should fall below its pre-regression 59 µs when
-1.8.2 adopts that fix. This point is the "before".
+1.8.2 adopts that fix.
 
 Verdict: **no regression worth acting on.** B4's natural and centered
 renders are several times cheaper than at 1.4.1. B2 waits on bayan.

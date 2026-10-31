@@ -61,9 +61,8 @@ identical results.
   the same checks as any dependency move: `rm -rf lib/ && cyrius deps`,
   the lock, and golden on both architectures. Confirm the sublib's diff
   is the parser change and nothing else.
-- Record B2 after with `scripts/bench-history.sh` on a quiet host (the
-  1.8.1 run in `docs/benchmarks/history.csv` is the before: 91.8 µs), and
-  add the point to `docs/benchmarks.md`.
+- Record B2 with `scripts/bench-history.sh` on a quiet host, and add the
+  point to `docs/benchmarks.md`.
 - Close issue 0006.
 
 *Gate*: that bayan release.
